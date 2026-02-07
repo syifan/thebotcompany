@@ -1,12 +1,10 @@
 {
-  "name": "ml-perf-survey-monitor",
+  "name": "thebotcompany-monitor",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "client": "vite",
-    "server": "node server/index.js",
+    "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -16,9 +14,6 @@
     "@tailwindcss/typography": "^0.5.19",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "js-yaml": "^4.1.0",
     "lucide-react": "^0.309.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -31,7 +26,6 @@
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
-    "concurrently": "^8.2.2",
     "postcss": "^8.4.33",
     "tailwindcss": "^3.4.1",
     "vite": "^7.3.1"

@@ -2,14 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-
-const ORCHESTRATOR_API = '/api/orchestrator'
 
 function SleepCountdown({ sleepUntil }) {
   const [remaining, setRemaining] = useState('')
@@ -34,7 +32,12 @@ function SleepCountdown({ sleepUntil }) {
 }
 
 function App() {
-  const [state, setState] = useState({ cycleCount: 0, currentAgentIndex: 0 })
+  // Multi-project state
+  const [projects, setProjects] = useState([])
+  const [selectedProject, setSelectedProject] = useState(null)
+  const [globalStatus, setGlobalStatus] = useState({ uptime: 0, projectCount: 0 })
+  
+  // Project-specific state
   const [logs, setLogs] = useState([])
   const [agents, setAgents] = useState({ workers: [], managers: [] })
   const [config, setConfig] = useState({ config: null, raw: '' })
@@ -43,12 +46,10 @@ function App() {
     trackerIssue: 1, athenaCycleInterval: 1, apolloCycleInterval: 1
   })
   const [configDirty, setConfigDirty] = useState(false)
-  const configDirtyRef = useRef(false) // Sync ref for immediate dirty check
+  const configDirtyRef = useRef(false)
   const [configError, setConfigError] = useState(null)
   const [configSaving, setConfigSaving] = useState(false)
-  const [orchestratorStatus, setOrchestratorStatus] = useState(null)
   const [repoUrl, setRepoUrl] = useState(null)
-  const [bootstrapDialog, setBootstrapDialog] = useState({ open: false, loading: false, result: null })
   const [lastUpdate, setLastUpdate] = useState(null)
   const [error, setError] = useState(null)
   const [comments, setComments] = useState([])
@@ -64,18 +65,48 @@ function App() {
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
 
-  const fetchData = async () => {
+  const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
+
+  const fetchGlobalStatus = async () => {
     try {
-      const [stateRes, logsRes, agentsRes, configRes, prsRes, issuesRes] = await Promise.all([
-        fetch('/api/state'), fetch('/api/logs?lines=100'), fetch('/api/agents'), fetch('/api/config'),
-        fetch('/api/prs'), fetch('/api/issues')
+      const res = await fetch('/api/status')
+      const data = await res.json()
+      setGlobalStatus({ uptime: data.uptime, projectCount: data.projectCount })
+      setProjects(data.projects)
+      
+      // Auto-select first project if none selected
+      if (!selectedProject && data.projects.length > 0) {
+        const saved = localStorage.getItem('selectedProjectId')
+        const found = data.projects.find(p => p.id === saved)
+        setSelectedProject(found || data.projects[0])
+      } else if (selectedProject) {
+        // Update selected project data
+        const updated = data.projects.find(p => p.id === selectedProject.id)
+        if (updated) setSelectedProject(updated)
+      }
+      
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const fetchProjectData = async () => {
+    if (!selectedProject) return
+    
+    try {
+      const [logsRes, agentsRes, configRes, prsRes, issuesRes, repoRes] = await Promise.all([
+        fetch(projectApi('/logs?lines=100')),
+        fetch(projectApi('/agents')),
+        fetch(projectApi('/config')),
+        fetch(projectApi('/prs')),
+        fetch(projectApi('/issues')),
+        fetch(projectApi('/repo'))
       ])
-      if (!stateRes.ok || !logsRes.ok || !agentsRes.ok || !configRes.ok) throw new Error('Failed to fetch')
-      setPrs((await prsRes.json()).prs || [])
-      setIssues((await issuesRes.json()).issues || [])
-      setState(await stateRes.json())
-      setLogs((await logsRes.json()).logs)
+      
+      setLogs((await logsRes.json()).logs || [])
       setAgents(await agentsRes.json())
+      
       const configData = await configRes.json()
       setConfig(configData)
       if (!configDirtyRef.current && configData.config) {
@@ -88,33 +119,31 @@ function App() {
           apolloCycleInterval: configData.config.apolloCycleInterval ?? 1
         })
       }
+      
+      setPrs((await prsRes.json()).prs || [])
+      setIssues((await issuesRes.json()).issues || [])
+      setRepoUrl((await repoRes.json()).url)
+      
       setLastUpdate(new Date())
-      setError(null)
-      try {
-        const statusRes = await fetch(`${ORCHESTRATOR_API}/status`)
-        const statusData = await statusRes.json()
-        setOrchestratorStatus(statusData.offline ? null : statusData)
-      } catch { setOrchestratorStatus(null) }
-      try {
-        const repoRes = await fetch('/api/repo')
-        const repoData = await repoRes.json()
-        setRepoUrl(repoData.url)
-      } catch { /* ignore */ }
-    } catch (err) { setError(err.message) }
+    } catch (err) {
+      console.error('Failed to fetch project data:', err)
+    }
   }
   
   const controlAction = async (action) => {
+    if (!selectedProject) return
     try {
-      const res = await fetch(`${ORCHESTRATOR_API}/${action}`, { method: 'POST' })
-      if (res.ok) await fetchData()
+      const res = await fetch(projectApi(`/${action}`), { method: 'POST' })
+      if (res.ok) await fetchGlobalStatus()
     } catch (err) { console.error(`Control action ${action} failed:`, err) }
   }
   
   const saveConfig = async () => {
+    if (!selectedProject) return
     setConfigSaving(true)
     setConfigError(null)
     try {
-      const yaml = `# ML Performance Survey - Orchestrator Configuration
+      const yaml = `# ${selectedProject.id} - Orchestrator Configuration
 cycleIntervalMs: ${configForm.cycleIntervalMs}
 agentTimeoutMs: ${configForm.agentTimeoutMs}
 model: ${configForm.model}
@@ -122,7 +151,7 @@ trackerIssue: ${configForm.trackerIssue}
 athenaCycleInterval: ${configForm.athenaCycleInterval}
 apolloCycleInterval: ${configForm.apolloCycleInterval}
 `
-      const res = await fetch('/api/config', {
+      const res = await fetch(projectApi('/config'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: yaml })
       })
@@ -130,32 +159,16 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
       if (!res.ok) throw new Error(data.error || 'Failed to save')
       configDirtyRef.current = false
       setConfigDirty(false)
-      await fetchData()
+      await fetchProjectData()
     } catch (err) { setConfigError(err.message) }
     finally { setConfigSaving(false) }
   }
   
   const updateConfigField = (field, value) => {
-    configDirtyRef.current = true // Immediate sync update
+    configDirtyRef.current = true
     setConfigForm(prev => ({ ...prev, [field]: value }))
     setConfigDirty(true)
     setConfigError(null)
-  }
-  
-  const runBootstrap = async () => {
-    setBootstrapDialog(prev => ({ ...prev, loading: true, result: null }))
-    try {
-      const res = await fetch('/api/bootstrap', { method: 'POST' })
-      const data = await res.json()
-      if (res.ok) {
-        setBootstrapDialog({ open: true, loading: false, result: { success: true, output: data.output } })
-        await fetchData()
-      } else {
-        setBootstrapDialog({ open: true, loading: false, result: { success: false, error: data.error } })
-      }
-    } catch (err) {
-      setBootstrapDialog({ open: true, loading: false, result: { success: false, error: err.message } })
-    }
   }
 
   const resetConfig = () => {
@@ -175,14 +188,15 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
   }
   
   const fetchComments = async (page = 1, agent = null, append = false) => {
+    if (!selectedProject) return
     setCommentsLoading(true)
     try {
       const params = new URLSearchParams({ page, per_page: 10 })
       if (agent) params.set('author', agent)
-      const res = await fetch(`/api/comments?${params}`)
+      const res = await fetch(projectApi(`/comments?${params}`))
       const data = await res.json()
       if (append) setComments(prev => [...prev, ...data.comments])
-      else setComments(data.comments)
+      else setComments(data.comments || [])
       setCommentsHasMore(data.hasMore)
       setCommentsPage(page)
     } catch (err) { console.error('Failed to fetch comments:', err) }
@@ -208,48 +222,43 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
   }
   
   const openAgentModal = async (agentName) => {
+    if (!selectedProject) return
     setAgentModal({ open: true, agent: agentName, data: null, loading: true })
     try {
-      const res = await fetch(`/api/agents/${agentName}`)
+      const res = await fetch(projectApi(`/agents/${agentName}`))
       const data = await res.json()
       setAgentModal({ open: true, agent: agentName, data, loading: false })
     } catch (err) {
       setAgentModal({ open: true, agent: agentName, data: null, loading: false })
     }
   }
-  
-  const createIssue = async () => {
-    if (!newIssueText.trim() || creatingIssue) return
-    setCreatingIssue(true)
-    try {
-      const res = await fetch('/api/issues/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: newIssueText })
-      })
-      const data = await res.json()
-      if (data.success) {
-        setNewIssueText('')
-        await fetchData()
-      } else {
-        alert(data.error || 'Failed to create issue')
-      }
-    } catch (err) {
-      alert('Failed to create issue: ' + err.message)
-    } finally {
-      setCreatingIssue(false)
-    }
+
+  const selectProject = (project) => {
+    setSelectedProject(project)
+    localStorage.setItem('selectedProjectId', project.id)
+    // Reset project-specific state
+    setLogs([])
+    setAgents({ workers: [], managers: [] })
+    setComments([])
+    setCommentsPage(1)
+    setPrs([])
+    setIssues([])
   }
 
   useEffect(() => {
-    fetchData()
-    const savedAgent = localStorage.getItem('selectedAgent')
-    fetchComments(1, savedAgent, false)
-    const interval = setInterval(fetchData, 5000)
+    fetchGlobalStatus()
+    const interval = setInterval(fetchGlobalStatus, 5000)
     return () => clearInterval(interval)
   }, [])
 
-  // Auto-scroll logs to bottom when new logs arrive
+  useEffect(() => {
+    if (selectedProject) {
+      fetchProjectData()
+      const savedAgent = localStorage.getItem('selectedAgent')
+      fetchComments(1, savedAgent, false)
+    }
+  }, [selectedProject?.id])
+
   useEffect(() => {
     if (logsAutoFollow && logsRef.current) {
       logsRef.current.scrollTop = logsRef.current.scrollHeight
@@ -266,16 +275,13 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
   }
 
   const AgentItem = ({ agent, isManager = false }) => {
-    const isActive = orchestratorStatus?.currentAgent === agent.name
+    const isActive = selectedProject?.currentAgent === agent.name
     const isSelected = selectedAgent === agent.name
-    const runtime = isActive ? orchestratorStatus?.currentAgentRuntime : null
+    const runtime = isActive ? selectedProject?.currentAgentRuntime : null
     
     const handleClick = () => {
-      if (isSelected) {
-        clearAgentFilter()
-      } else {
-        selectAgent(agent.name)
-      }
+      if (isSelected) clearAgentFilter()
+      else selectAgent(agent.name)
     }
     
     return (
@@ -298,428 +304,320 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
           )}
           {isSelected && <Badge variant="secondary">Filter</Badge>}
           {isActive && <Badge variant="success">Active</Badge>}
-          <button
-            onClick={(e) => { e.stopPropagation(); openAgentModal(agent.name) }}
-            className="p-1 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600"
-            title="View skill"
-          >
+          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openAgentModal(agent.name) }}>
             <Info className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-neutral-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-2">
-          <div>
-            <h1 className="text-2xl font-bold text-neutral-800">Agent Monitor</h1>
-            <p className="text-sm text-neutral-500">Orchestrator Dashboard</p>
-          </div>
-          <div className="flex flex-col gap-2 text-sm text-neutral-500">
-            <div className="flex items-center gap-3">
-              <RefreshCw className="w-4 h-4" />
-              <span>Last update: {formatTime(lastUpdate)}</span>
-              {error && <Badge variant="warning">Error: {error}</Badge>}
-            </div>
-            <div className="flex items-center gap-2">
-              {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 rounded text-neutral-700 font-medium">
-                  GitHub
-                </a>
-              )}
-              <button 
-                onClick={() => setBootstrapDialog({ open: true, loading: false, result: null })}
-                className="px-3 py-1 bg-red-200 hover:bg-red-300 border border-red-300 rounded text-red-700 font-medium"
-              >
-                Bootstrap
-              </button>
-            </div>
-          </div>
-        </div>
+  const getProjectStatusBadge = (project) => {
+    if (project.paused) return <Badge variant="secondary">Paused</Badge>
+    if (project.currentAgent) return <Badge variant="success">Running</Badge>
+    if (project.sleeping) return <Badge variant="outline">Sleeping</Badge>
+    return <Badge variant="destructive">Stopped</Badge>
+  }
 
-        {/* Row 1: State, Config */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* State */}
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" />Orchestrator State</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-600">Status</span>
-                  {orchestratorStatus ? (
-                    <Badge variant={orchestratorStatus.paused ? 'warning' : 'success'}>
-                      {orchestratorStatus.paused && orchestratorStatus.currentAgent ? '⏳ Pausing...' : orchestratorStatus.paused ? '⏸️ Paused' : '▶️ Running'}
-                    </Badge>
-                  ) : <Badge variant="destructive">Offline</Badge>}
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-600">Cycle</span>
-                  <span className="text-2xl font-mono font-bold">{orchestratorStatus?.cycleCount ?? state.cycleCount}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-600">Agent</span>
-                  {orchestratorStatus?.sleeping ? (
-                    <Badge variant="secondary" className="flex items-center gap-1">
-                      💤 Sleeping
-                      <button onClick={(e) => { e.stopPropagation(); controlAction('skip') }} className="ml-1 hover:text-red-500 cursor-pointer" title="Skip sleep">✕</button>
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">{orchestratorStatus?.currentAgent || 'None'}</Badge>
-                  )}
-                </div>
-                {orchestratorStatus?.sleeping && orchestratorStatus.sleepUntil && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-600">Next cycle</span>
-                    <SleepCountdown sleepUntil={orchestratorStatus.sleepUntil} />
-                  </div>
-                )}
-                {orchestratorStatus && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-neutral-600">Uptime</span>
-                    <span className="text-sm font-mono">{Math.floor(orchestratorStatus.uptime / 3600)}h {Math.floor((orchestratorStatus.uptime % 3600) / 60)}m</span>
-                  </div>
-                )}
-                {orchestratorStatus && (
-                  <div className="pt-3 border-t flex flex-wrap gap-2">
-                    {orchestratorStatus.paused ? (
-                      <Button size="sm" onClick={() => controlAction('resume')} className="flex-1"><Play className="w-3 h-3 mr-1" />Resume</Button>
-                    ) : (
-                      <Button size="sm" variant="outline" onClick={() => controlAction('pause')} className="flex-1"><Pause className="w-3 h-3 mr-1" />Pause</Button>
-                    )}
-                    <Button size="sm" variant="outline" onClick={() => controlAction('skip')} className="flex-1"><SkipForward className="w-3 h-3 mr-1" />Skip</Button>
-                    <Button size="sm" variant="outline" onClick={() => controlAction('reload')}><RotateCcw className="w-3 h-3" /></Button>
-                    <Button size="sm" variant="destructive" onClick={() => confirm('Stop?') && controlAction('stop')}><Square className="w-3 h-3" /></Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Config */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><Settings className="w-4 h-4" />Configuration</span>
-                <div className="flex items-center gap-2">
-                  {configDirty && <Badge variant="warning">Unsaved</Badge>}
-                  {configDirty && <Button size="sm" variant="ghost" onClick={resetConfig}>Reset</Button>}
-                  <Button size="sm" onClick={saveConfig} disabled={!configDirty || configSaving}>
-                    <Save className="w-3 h-3 mr-1" />{configSaving ? '...' : 'Save'}
-                  </Button>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {configError && <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{configError}</div>}
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <label className="text-neutral-600">Interval</label>
-                  <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.cycleIntervalMs} onChange={(e) => updateConfigField('cycleIntervalMs', Number(e.target.value))}>
-                    <option value={0}>No delay</option><option value={300000}>5m</option><option value={600000}>10m</option><option value={1200000}>20m</option><option value={1800000}>30m</option><option value={3600000}>1h</option>
-                  </select>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="text-neutral-600">Timeout</label>
-                  <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.agentTimeoutMs} onChange={(e) => updateConfigField('agentTimeoutMs', Number(e.target.value))}>
-                    <option value={300000}>5m</option><option value={600000}>10m</option><option value={900000}>15m</option><option value={1800000}>30m</option><option value={3600000}>1h</option><option value={7200000}>2h</option><option value={14400000}>4h</option><option value={0}>Never</option>
-                  </select>
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="text-neutral-600">Model</label>
-                  <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.model} onChange={(e) => updateConfigField('model', e.target.value)}>
-                    <option value="claude-sonnet-4-20250514">Sonnet 4</option><option value="claude-opus-4-5">Opus 4.5</option><option value="claude-opus-4-6">Opus 4.6</option>
-                  </select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-        </div>
-
-        {/* Row 2: Agents, PRs */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-          {/* Workers */}
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-4 h-4" />Workers ({agents.workers.length})</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {agents.workers.map((agent) => <AgentItem key={agent.name} agent={agent} />)}
-                {agents.workers.length === 0 && <p className="text-sm text-neutral-400">No workers</p>}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Managers */}
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {agents.managers.map((agent) => <AgentItem key={agent.name} agent={agent} isManager />)}
-                {agents.managers.length === 0 && <p className="text-sm text-neutral-400">No managers</p>}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* PRs */}
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><GitPullRequest className="w-4 h-4" />Open PRs ({prs.length})</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {prs.map((pr) => (
-                  <a key={pr.number} href={`${repoUrl}/pull/${pr.number}`} target="_blank" rel="noopener noreferrer"
-                    className="block p-2 bg-neutral-50 hover:bg-neutral-100 rounded cursor-pointer transition-colors">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-neutral-400">#{pr.number}</span>
-                      <span className="text-sm font-medium text-neutral-800 truncate">{pr.shortTitle || pr.title}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500">
-                      {pr.agent && <span className="flex items-center gap-1"><User className="w-3 h-3" />{pr.agent}</span>}
-                      <span className="truncate">{pr.headRefName}</span>
-                    </div>
-                  </a>
-                ))}
-                {prs.length === 0 && <p className="text-sm text-neutral-400">No open PRs</p>}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Row 3: Agent Reports + Issues */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-          {/* Agent Reports */}
-          <Card className="order-2 lg:order-1">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4" />Agent Reports
-                {selectedAgent && (
-                  <Badge variant="secondary" className="ml-2 capitalize">
-                    {selectedAgent}
-                    <button onClick={clearAgentFilter} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
-                  </Badge>
-                )}
-              </span>
-              <span className="text-sm font-normal text-neutral-500">{comments.length} loaded</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="max-h-[600px] overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
-              const { scrollTop, scrollHeight, clientHeight } = e.target
-              if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
-            }}>
-              {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 text-center py-8">No reports found</p>}
-              {comments.map((comment, idx) => (
-                <div key={comment.id}>
-                  {idx > 0 && <Separator className="my-4" />}
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Avatar className="w-6 h-6 sm:w-8 sm:h-8">
-                        <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
-                          {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm font-semibold text-neutral-800 capitalize">{comment.agent || comment.author}</span>
-                      <span className="text-xs text-neutral-400">{new Date(comment.created_at).toLocaleString()}</span>
-                    </div>
-                    <div className="text-sm text-neutral-700 prose prose-sm prose-neutral max-w-none prose-headings:mt-3 prose-headings:mb-2 prose-p:my-1 prose-ul:list-disc prose-ul:pl-4 prose-ol:list-decimal prose-ol:pl-4 prose-code:bg-neutral-100 prose-code:px-1 prose-code:rounded prose-pre:bg-neutral-900 prose-pre:text-neutral-100">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {commentsLoading && (
-                <div className="flex items-center justify-center py-4 gap-2 text-neutral-400">
-                  <RefreshCw className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span>
-                </div>
-              )}
-              {!commentsLoading && commentsHasMore && (
-                <div className="pt-4"><Separator className="mb-4" /><Button variant="outline" onClick={loadMoreComments} className="w-full">Load more</Button></div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-          {/* Issues */}
-          <Card className="order-1 lg:order-2">
-            <CardHeader><CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Open Issues ({issues.length})</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-[500px] overflow-y-auto mb-4">
-                {issues.map((issue) => (
-                  <a key={issue.number} href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer"
-                    className="block p-2 bg-neutral-50 hover:bg-neutral-100 rounded cursor-pointer transition-colors">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-neutral-400">#{issue.number}</span>
-                      <span className="text-sm font-medium text-neutral-800 truncate">{issue.shortTitle || issue.title}</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-neutral-500">
-                      {issue.creator && (
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {issue.creator}
-                        </span>
-                      )}
-                      {issue.assignee && (
-                        <span className="flex items-center gap-1 text-green-600">
-                          <UserCheck className="w-3 h-3" />
-                          {issue.assignee}
-                        </span>
-                      )}
-                    </div>
-                    {issue.labels?.length > 0 && (
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {issue.labels.slice(0, 3).map((label) => (
-                          <span key={label.name} className="text-xs px-1 rounded" style={{backgroundColor: `#${label.color}20`, color: `#${label.color}`}}>{label.name}</span>
-                        ))}
-                      </div>
-                    )}
-                  </a>
-                ))}
-                {issues.length === 0 && <p className="text-sm text-neutral-400">No open issues</p>}
-              </div>
-              <Separator className="my-4" />
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  placeholder="Describe a new issue..."
-                  className="w-full px-3 py-2 border rounded text-sm"
-                  value={newIssueText}
-                  onChange={(e) => setNewIssueText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && createIssue()}
-                  disabled={creatingIssue}
-                />
-                <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="w-full">
-                  {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Row 4: Logs */}
-        <Card className="mt-4">
-          <CardHeader><CardTitle className="flex items-center gap-2"><ScrollText className="w-4 h-4" />Orchestrator Logs</CardTitle></CardHeader>
-          <CardContent>
-            <div 
-              ref={logsRef}
-              className="bg-neutral-900 rounded-lg p-3 h-80 overflow-y-auto font-mono text-xs"
-              onScroll={(e) => {
-                const { scrollTop, scrollHeight, clientHeight } = e.target
-                // Disable auto-follow if user scrolled up (not at bottom)
-                const atBottom = scrollHeight - scrollTop - clientHeight < 50
-                if (!atBottom && logsAutoFollow) setLogsAutoFollow(false)
-                if (atBottom && !logsAutoFollow) setLogsAutoFollow(true)
-              }}
-            >
-              {logs.length === 0 ? <p className="text-neutral-500">No logs</p> : logs.map((line, idx) => (
-                <div key={idx} className="text-neutral-300 whitespace-pre-wrap break-all">{line}</div>
-              ))}
+  if (projects.length === 0) {
+    return (
+      <div className="min-h-screen bg-neutral-100 flex items-center justify-center">
+        <Card className="w-96">
+          <CardContent className="pt-6">
+            <div className="text-center text-neutral-500">
+              <Folder className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">No projects configured</p>
+              <p className="text-sm mt-2">Add projects with: <code className="bg-neutral-200 px-1 rounded">tbc add</code></p>
             </div>
           </CardContent>
         </Card>
       </div>
+    )
+  }
 
-      {/* Agent Details Modal */}
-      <Modal open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
-        <ModalHeader onClose={() => setAgentModal({ ...agentModal, open: false })}>
-          <span className="capitalize">{agentModal.agent}</span>
-          {agentModal.data?.isManager && <Badge variant="secondary" className="ml-2">Manager</Badge>}
-        </ModalHeader>
+  return (
+    <div className="min-h-screen bg-neutral-100">
+      {/* Project Tabs */}
+      <div className="bg-white border-b sticky top-0 z-10">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-4 py-2">
+            <span className="text-sm font-medium text-neutral-500">Projects:</span>
+            <div className="flex gap-2 flex-wrap">
+              {projects.map(project => (
+                <button
+                  key={project.id}
+                  onClick={() => selectProject(project)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                    selectedProject?.id === project.id 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                  }`}
+                >
+                  {project.id}
+                  {getProjectStatusBadge(project)}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto text-xs text-neutral-400">
+              Uptime: {Math.floor(globalStatus.uptime / 60)}m
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {selectedProject && (
+        <div className="container mx-auto px-4 py-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-neutral-800 flex items-center gap-2">
+                <Activity className="w-6 h-6" />
+                {selectedProject.id}
+              </h1>
+              <p className="text-neutral-500 text-sm mt-1">
+                Cycle {selectedProject.cycleCount} • {repoUrl && <a href={repoUrl} target="_blank" className="text-blue-600 hover:underline">GitHub</a>}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedProject.sleeping && selectedProject.sleepUntil && (
+                <div className="flex items-center gap-2 mr-4">
+                  <span className="text-sm text-neutral-500">Next cycle:</span>
+                  <SleepCountdown sleepUntil={selectedProject.sleepUntil} />
+                </div>
+              )}
+              <Button variant="outline" size="sm" onClick={() => controlAction('skip')} title="Skip current agent or sleep">
+                <SkipForward className="w-4 h-4" />
+              </Button>
+              {selectedProject.paused ? (
+                <Button variant="outline" size="sm" onClick={() => controlAction('resume')} title="Resume">
+                  <Play className="w-4 h-4" />
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => controlAction('pause')} title="Pause">
+                  <Pause className="w-4 h-4" />
+                </Button>
+              )}
+              <span className="text-xs text-neutral-400">Updated: {formatTime(lastUpdate)}</span>
+            </div>
+          </div>
+          
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded mb-4">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-12 gap-4">
+            {/* Left Column: Agents + Config */}
+            <div className="col-span-3 space-y-4">
+              {/* Managers */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" /> Managers
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {agents.managers.map(agent => (
+                    <AgentItem key={agent.name} agent={agent} isManager />
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Workers */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Users className="w-4 h-4" /> Workers
+                    {selectedAgent && (
+                      <Button variant="ghost" size="sm" onClick={clearAgentFilter} className="ml-auto">
+                        <X className="w-3 h-3 mr-1" /> Clear filter
+                      </Button>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {agents.workers.length === 0 ? (
+                    <p className="text-neutral-400 text-sm">No workers yet</p>
+                  ) : (
+                    agents.workers.map(agent => <AgentItem key={agent.name} agent={agent} />)
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Config */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Settings className="w-4 h-4" /> Config
+                    {configDirty && <Badge variant="warning">Modified</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <label className="text-xs text-neutral-500">Cycle Interval (ms)</label>
+                    <input type="number" value={configForm.cycleIntervalMs}
+                      onChange={e => updateConfigField('cycleIntervalMs', parseInt(e.target.value) || 0)}
+                      className="w-full px-2 py-1 border rounded text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-neutral-500">Agent Timeout (ms)</label>
+                    <input type="number" value={configForm.agentTimeoutMs}
+                      onChange={e => updateConfigField('agentTimeoutMs', parseInt(e.target.value) || 0)}
+                      className="w-full px-2 py-1 border rounded text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-neutral-500">Model</label>
+                    <input type="text" value={configForm.model}
+                      onChange={e => updateConfigField('model', e.target.value)}
+                      className="w-full px-2 py-1 border rounded text-sm" />
+                  </div>
+                  {configError && <p className="text-red-500 text-xs">{configError}</p>}
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={saveConfig} disabled={!configDirty || configSaving}>
+                      <Save className="w-3 h-3 mr-1" /> Save
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={resetConfig} disabled={!configDirty}>
+                      <RotateCcw className="w-3 h-3 mr-1" /> Reset
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Middle Column: Logs */}
+            <div className="col-span-5">
+              <Card className="h-full">
+                <CardHeader className="py-3 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <ScrollText className="w-4 h-4" /> Logs
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => setLogsAutoFollow(!logsAutoFollow)}>
+                    {logsAutoFollow ? 'Auto-scroll ON' : 'Auto-scroll OFF'}
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div ref={logsRef} className="h-[600px] overflow-y-auto font-mono text-xs bg-neutral-900 text-neutral-100 p-2 rounded">
+                    {logs.map((line, i) => (
+                      <div key={i} className="whitespace-pre-wrap">{line}</div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right Column: Comments + PRs/Issues */}
+            <div className="col-span-4 space-y-4">
+              {/* Comments */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" /> 
+                    Comments
+                    {selectedAgent && <Badge>{selectedAgent}</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {comments.length === 0 ? (
+                      <p className="text-neutral-400 text-sm">No comments yet</p>
+                    ) : (
+                      comments.map(comment => (
+                        <div key={comment.id} className="border-b pb-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Avatar className="w-6 h-6">
+                              <AvatarFallback className="text-xs">{comment.agent?.[0]?.toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span className="font-medium text-sm">{comment.agent}</span>
+                            <span className="text-xs text-neutral-400">
+                              {new Date(comment.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="prose prose-sm max-w-none text-neutral-700">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {comment.body?.slice(0, 500) + (comment.body?.length > 500 ? '...' : '')}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    {commentsHasMore && (
+                      <Button variant="outline" size="sm" onClick={loadMoreComments} disabled={commentsLoading} className="w-full">
+                        {commentsLoading ? 'Loading...' : 'Load more'}
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* PRs & Issues */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <GitPullRequest className="w-4 h-4" /> PRs & Issues
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {prs.map(pr => (
+                      <a key={pr.number} href={`${repoUrl}/pull/${pr.number}`} target="_blank"
+                        className="flex items-center gap-2 text-sm hover:bg-neutral-50 p-1 rounded">
+                        <GitPullRequest className="w-4 h-4 text-green-600" />
+                        <span className="truncate">{pr.shortTitle || pr.title}</span>
+                        {pr.agent && <Badge variant="outline" className="text-xs">{pr.agent}</Badge>}
+                      </a>
+                    ))}
+                    {issues.map(issue => (
+                      <a key={issue.number} href={`${repoUrl}/issues/${issue.number}`} target="_blank"
+                        className="flex items-center gap-2 text-sm hover:bg-neutral-50 p-1 rounded">
+                        <CircleDot className="w-4 h-4 text-purple-600" />
+                        <span className="truncate">{issue.shortTitle || issue.title}</span>
+                        {issue.assignee && <Badge variant="outline" className="text-xs">{issue.assignee}</Badge>}
+                      </a>
+                    ))}
+                    {prs.length === 0 && issues.length === 0 && (
+                      <p className="text-neutral-400 text-sm">No open PRs or issues</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agent Modal */}
+      <Modal open={agentModal.open} onClose={() => setAgentModal({ open: false, agent: null, data: null, loading: false })}>
+        <ModalHeader>{agentModal.agent}</ModalHeader>
         <ModalContent>
           {agentModal.loading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
-            </div>
+            <p>Loading...</p>
           ) : agentModal.data ? (
             <div className="space-y-4">
               <div>
-                <h3 className="font-semibold text-sm text-neutral-600 mb-2">Skill Definition</h3>
-                <div className="bg-neutral-50 rounded p-3 text-sm prose prose-sm max-w-none max-h-64 overflow-y-auto">
+                <h4 className="font-medium mb-2">Skill</h4>
+                <div className="prose prose-sm max-w-none bg-neutral-50 p-3 rounded max-h-[400px] overflow-y-auto">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
                 </div>
               </div>
               {agentModal.data.workspaceFiles?.length > 0 && (
                 <div>
-                  <h3 className="font-semibold text-sm text-neutral-600 mb-2">Workspace Files</h3>
+                  <h4 className="font-medium mb-2">Workspace Files</h4>
                   <div className="space-y-2">
-                    {agentModal.data.workspaceFiles.map((file) => (
-                      <div key={file.name} className="bg-neutral-50 rounded p-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-sm">{file.name}</span>
-                          <span className="text-xs text-neutral-400">{new Date(file.modified).toLocaleString()}</span>
-                        </div>
+                    {agentModal.data.workspaceFiles.map(file => (
+                      <details key={file.name} className="border rounded">
+                        <summary className="p-2 cursor-pointer hover:bg-neutral-50">{file.name}</summary>
                         {file.content && (
-                          <pre className="text-xs text-neutral-600 whitespace-pre-wrap max-h-32 overflow-y-auto">{file.content}</pre>
+                          <pre className="p-2 bg-neutral-100 text-xs overflow-x-auto">{file.content}</pre>
                         )}
-                      </div>
+                      </details>
                     ))}
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <p className="text-neutral-400 text-center py-8">Failed to load agent details</p>
-          )}
-        </ModalContent>
-      </Modal>
-
-      {/* Bootstrap Confirmation Dialog */}
-      <Modal open={bootstrapDialog.open} onClose={() => setBootstrapDialog({ open: false, loading: false, result: null })}>
-        <ModalHeader onClose={() => setBootstrapDialog({ open: false, loading: false, result: null })}>
-          Bootstrap Agent System
-        </ModalHeader>
-        <ModalContent>
-          {bootstrapDialog.result ? (
-            <div className="space-y-4">
-              {bootstrapDialog.result.success ? (
-                <>
-                  <p className="text-green-600 font-semibold">✓ Bootstrap completed successfully</p>
-                  <pre className="bg-neutral-100 p-3 rounded text-xs overflow-x-auto max-h-64 overflow-y-auto">{bootstrapDialog.result.output}</pre>
-                </>
-              ) : (
-                <>
-                  <p className="text-red-600 font-semibold">✗ Bootstrap failed</p>
-                  <pre className="bg-red-50 p-3 rounded text-xs text-red-800">{bootstrapDialog.result.error}</pre>
-                </>
-              )}
-              <button 
-                onClick={() => setBootstrapDialog({ open: false, loading: false, result: null })}
-                className="w-full py-2 bg-neutral-200 hover:bg-neutral-300 rounded font-medium"
-              >
-                Close
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-neutral-600">This will reset the agent system:</p>
-              <ul className="list-disc list-inside text-sm text-neutral-500 space-y-1">
-                <li>Stop orchestrator and monitor processes</li>
-                <li>Remove temporary files (state.json, logs)</li>
-                <li>Clear all workers</li>
-                <li>Remove workspace</li>
-                <li>Create new tracker issue</li>
-              </ul>
-              <p className="text-red-600 font-semibold text-sm">⚠️ This action cannot be undone!</p>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setBootstrapDialog({ open: false, loading: false, result: null })}
-                  className="flex-1 py-2 bg-neutral-200 hover:bg-neutral-300 rounded font-medium"
-                  disabled={bootstrapDialog.loading}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={runBootstrap}
-                  disabled={bootstrapDialog.loading}
-                  className="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded font-medium disabled:opacity-50"
-                >
-                  {bootstrapDialog.loading ? 'Running...' : 'Confirm Bootstrap'}
-                </button>
-              </div>
-            </div>
+            <p>Agent not found</p>
           )}
         </ModalContent>
       </Modal>
