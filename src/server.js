@@ -306,9 +306,45 @@ class ProjectRunner {
     if (this.running) return;
     // Ensure project directory exists in TBC_HOME
     fs.mkdirSync(this.agentDir, { recursive: true });
+    // Bootstrap workspace from repo's agent/ folder if workspace is empty
+    this.bootstrapFromRepo();
     this.running = true;
     log(`Starting project runner (data: ${this.agentDir})`, this.id);
     this.runLoop();
+  }
+
+  bootstrapFromRepo() {
+    const repoAgentDir = path.join(this.path, 'agent');
+    if (!fs.existsSync(repoAgentDir)) return;
+
+    const dirs = ['managers', 'workers'];
+    for (const dir of dirs) {
+      const src = path.join(repoAgentDir, dir);
+      const dest = path.join(this.agentDir, dir);
+      if (!fs.existsSync(dest) && fs.existsSync(src)) {
+        fs.mkdirSync(dest, { recursive: true });
+        for (const file of fs.readdirSync(src)) {
+          fs.copyFileSync(path.join(src, file), path.join(dest, file));
+        }
+        log(`Bootstrapped ${dir}/ from repo agent/ folder`, this.id);
+      }
+    }
+
+    // Copy everyone.md if not present
+    const everyoneSrc = path.join(repoAgentDir, 'everyone.md');
+    const everyoneDest = path.join(this.agentDir, 'everyone.md');
+    if (!fs.existsSync(everyoneDest) && fs.existsSync(everyoneSrc)) {
+      fs.copyFileSync(everyoneSrc, everyoneDest);
+      log(`Bootstrapped everyone.md from repo`, this.id);
+    }
+
+    // Copy config.yaml if not present
+    const configSrc = path.join(repoAgentDir, 'config.yaml');
+    const configDest = path.join(this.agentDir, 'config.yaml');
+    if (!fs.existsSync(configDest) && fs.existsSync(configSrc)) {
+      fs.copyFileSync(configSrc, configDest);
+      log(`Bootstrapped config.yaml from repo`, this.id);
+    }
   }
 
   stop() {
