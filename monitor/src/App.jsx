@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -36,6 +36,11 @@ function App() {
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState(null)
   const [globalUptime, setGlobalUptime] = useState(0)
+  const [showAddProject, setShowAddProject] = useState(false)
+  const [newProjectId, setNewProjectId] = useState('')
+  const [newProjectPath, setNewProjectPath] = useState('')
+  const [addingProject, setAddingProject] = useState(false)
+  const [addProjectError, setAddProjectError] = useState(null)
   
   // Project-specific state
   const [logs, setLogs] = useState([])
@@ -72,11 +77,7 @@ function App() {
       setGlobalUptime(data.uptime)
       setProjects(data.projects)
       
-      if (!selectedProject && data.projects.length > 0) {
-        const saved = localStorage.getItem('selectedProjectId')
-        const found = data.projects.find(p => p.id === saved)
-        setSelectedProject(found || data.projects[0])
-      } else if (selectedProject) {
+      if (selectedProject) {
         const updated = data.projects.find(p => p.id === selectedProject.id)
         if (updated) setSelectedProject(updated)
       }
@@ -239,6 +240,49 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
     setIssues([])
   }
 
+  const goToProjectList = () => {
+    setSelectedProject(null)
+    localStorage.removeItem('selectedProjectId')
+  }
+
+  const addProject = async () => {
+    if (!newProjectId.trim() || !newProjectPath.trim()) return
+    setAddingProject(true)
+    setAddProjectError(null)
+    try {
+      const res = await fetch('/api/projects/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: newProjectId.trim(), path: newProjectPath.trim() })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setNewProjectId('')
+      setNewProjectPath('')
+      setShowAddProject(false)
+      await fetchGlobalStatus()
+    } catch (err) {
+      setAddProjectError(err.message)
+    } finally {
+      setAddingProject(false)
+    }
+  }
+
+  const removeProject = async (projectId) => {
+    if (!confirm(`Remove project "${projectId}"?`)) return
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+      if (res.ok) {
+        if (selectedProject?.id === projectId) {
+          setSelectedProject(null)
+        }
+        await fetchGlobalStatus()
+      }
+    } catch (err) {
+      console.error('Failed to remove project:', err)
+    }
+  }
+
   useEffect(() => {
     fetchGlobalStatus()
     const interval = setInterval(fetchGlobalStatus, 5000)
@@ -310,18 +354,121 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
     )
   }
 
-  if (projects.length === 0) {
+  // Project listing page (when no project is selected)
+  if (!selectedProject) {
     return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <Card className="w-96">
-          <CardContent className="pt-6">
-            <div className="text-center text-neutral-500">
-              <Folder className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No projects configured</p>
-              <p className="text-sm mt-2">Add projects with: <code className="bg-neutral-200 px-1 rounded">tbc add</code></p>
+      <div className="min-h-screen bg-neutral-50 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-neutral-800">TheBotCompany</h1>
+              <p className="text-neutral-500 mt-1">Multi-project AI Agent Orchestrator</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="text-sm text-neutral-400">
+              Uptime: {Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m
+            </div>
+          </div>
+
+          {/* Project List */}
+          <div className="space-y-4">
+            {projects.map(project => (
+              <Card key={project.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => selectProject(project)}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center">
+                        <Folder className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-neutral-800">{project.id}</h3>
+                        <p className="text-sm text-neutral-500 truncate max-w-md">{project.path}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <Badge variant={project.paused ? 'warning' : project.running ? 'success' : project.sleeping ? 'secondary' : 'destructive'}>
+                          {project.paused ? 'Paused' : project.running ? (project.currentAgent || 'Running') : project.sleeping ? 'Sleeping' : 'Stopped'}
+                        </Badge>
+                        <p className="text-xs text-neutral-400 mt-1">Cycle {project.cycleCount}</p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={(e) => { e.stopPropagation(); removeProject(project.id) }}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {projects.length === 0 && !showAddProject && (
+              <Card>
+                <CardContent className="py-12">
+                  <div className="text-center text-neutral-500">
+                    <Folder className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                    <p className="text-lg font-medium">No projects configured</p>
+                    <p className="text-sm mt-2">Add a project to get started</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Add Project Form */}
+            {showAddProject ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Plus className="w-4 h-4" /> Add Project
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {addProjectError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                      {addProjectError}
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">Project ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., m2sim"
+                      className="w-full px-3 py-2 border rounded-md"
+                      value={newProjectId}
+                      onChange={(e) => setNewProjectId(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">Path</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., ~/dev/src/github.com/sarchlab/m2sim"
+                      className="w-full px-3 py-2 border rounded-md"
+                      value={newProjectPath}
+                      onChange={(e) => setNewProjectPath(e.target.value)}
+                    />
+                    <p className="text-xs text-neutral-500 mt-1">Path to repo with agent/ folder</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={addProject} disabled={addingProject || !newProjectId.trim() || !newProjectPath.trim()}>
+                      {addingProject ? 'Adding...' : 'Add Project'}
+                    </Button>
+                    <Button variant="outline" onClick={() => { setShowAddProject(false); setAddProjectError(null) }}>
+                      Cancel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Button onClick={() => setShowAddProject(true)} className="w-full" variant="outline">
+                <Plus className="w-4 h-4 mr-2" /> Add Project
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     )
   }
@@ -329,10 +476,15 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
   return (
     <div className="min-h-screen bg-neutral-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header with Project Tabs */}
+        {/* Header with Back Button and Project Tabs */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-2">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-800">TheBotCompany</h1>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500">
+                <ArrowLeft className="w-4 h-4 mr-1" /> All Projects
+              </Button>
+              <h1 className="text-2xl font-bold text-neutral-800">{selectedProject.id}</h1>
+            </div>
             <div className="flex items-center gap-2 mt-2">
               {projects.map(project => (
                 <button

@@ -542,6 +542,70 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // POST /api/projects/add - Add a new project
+  if (req.method === 'POST' && url.pathname === '/api/projects/add') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { id, path: projectPath } = JSON.parse(body);
+        if (!id || !projectPath) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing id or path' }));
+          return;
+        }
+        
+        const projectsPath = path.join(TBC_HOME, 'projects.yaml');
+        const raw = fs.readFileSync(projectsPath, 'utf-8');
+        const config = yaml.load(raw) || {};
+        if (!config.projects) config.projects = {};
+        
+        const resolvedPath = projectPath.replace(/^~/, process.env.HOME);
+        config.projects[id] = { path: resolvedPath, enabled: true };
+        
+        fs.writeFileSync(projectsPath, yaml.dump(config, { lineWidth: -1 }));
+        syncProjects();
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, id, path: resolvedPath }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // DELETE /api/projects/:id - Remove a project
+  if (req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
+    const projectId = pathParts[2];
+    try {
+      const projectsPath = path.join(TBC_HOME, 'projects.yaml');
+      const raw = fs.readFileSync(projectsPath, 'utf-8');
+      const config = yaml.load(raw) || {};
+      
+      if (config.projects && config.projects[projectId]) {
+        // Stop the runner if running
+        const runner = projects.get(projectId);
+        if (runner) runner.stop();
+        projects.delete(projectId);
+        
+        delete config.projects[projectId];
+        fs.writeFileSync(projectsPath, yaml.dump(config, { lineWidth: -1 }));
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, id: projectId }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Project not found' }));
+      }
+    } catch (e) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // --- Project-scoped API ---
   
   if (pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
