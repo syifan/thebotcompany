@@ -683,9 +683,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // DELETE /api/projects/:owner/:repo - Remove a project
-  if (req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2] && pathParts[3]) {
-    const projectId = `${pathParts[2]}/${pathParts[3]}`;
+  // DELETE /api/projects/:id - Remove a project
+  if (req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
+    // Support both single-segment (m2sim) and two-segment (sarchlab/m2sim) IDs
+    const twoSegId = pathParts[3] ? `${pathParts[2]}/${pathParts[3]}` : null;
+    const projectId = (twoSegId && projects.has(twoSegId)) ? twoSegId : pathParts[2];
     try {
       const projectsPath = path.join(TBC_HOME, 'projects.yaml');
       const raw = fs.readFileSync(projectsPath, 'utf-8');
@@ -714,10 +716,18 @@ const server = http.createServer(async (req, res) => {
   }
 
   // --- Project-scoped API ---
-  // Project IDs are owner/repo (two path segments)
+  // Support both single-segment (m2sim) and two-segment (sarchlab/m2sim) IDs
 
-  if (pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2] && pathParts[3]) {
-    const projectId = `${pathParts[2]}/${pathParts[3]}`;
+  if (pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
+    const twoSegId = pathParts[3] ? `${pathParts[2]}/${pathParts[3]}` : null;
+    let projectId, subPathStart;
+    if (twoSegId && projects.has(twoSegId)) {
+      projectId = twoSegId;
+      subPathStart = 4;
+    } else {
+      projectId = pathParts[2];
+      subPathStart = 3;
+    }
     const runner = projects.get(projectId);
 
     if (!runner) {
@@ -726,7 +736,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const subPath = pathParts.slice(4).join('/');
+    const subPath = pathParts.slice(subPathStart).join('/');
 
     // GET /api/projects/:id/status
     if (req.method === 'GET' && subPath === 'status') {
@@ -750,9 +760,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // GET /api/projects/:owner/:repo/agents/:name
-    if (req.method === 'GET' && pathParts[4] === 'agents' && pathParts[5]) {
-      const agentName = pathParts[5];
+    // GET /api/projects/:id/agents/:name
+    if (req.method === 'GET' && subPath.startsWith('agents/') && subPath.split('/')[1]) {
+      const agentName = subPath.split('/')[1];
       const details = runner.getAgentDetails(agentName);
       if (!details) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
