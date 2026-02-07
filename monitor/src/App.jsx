@@ -366,7 +366,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
       </div>
 
       {selectedProject && (
-        <div className="container mx-auto px-4 py-6">
+        <div className="max-w-[1600px] mx-auto px-4 py-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -409,7 +409,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
 
           <div className="grid grid-cols-12 gap-4">
             {/* Left Column: Agents + Config */}
-            <div className="col-span-3 space-y-4">
+            <div className="col-span-12 lg:col-span-3 space-y-4">
               {/* Managers */}
               <Card>
                 <CardHeader className="py-3">
@@ -486,7 +486,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
             </div>
 
             {/* Middle Column: Logs */}
-            <div className="col-span-5">
+            <div className="col-span-12 lg:col-span-5">
               <Card className="h-full">
                 <CardHeader className="py-3 flex flex-row items-center justify-between">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -507,7 +507,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
             </div>
 
             {/* Right Column: Comments + PRs/Issues */}
-            <div className="col-span-4 space-y-4">
+            <div className="col-span-12 lg:col-span-4 space-y-4">
               {/* Comments */}
               <Card>
                 <CardHeader className="py-3">
