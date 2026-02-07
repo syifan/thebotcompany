@@ -362,13 +362,15 @@ class ProjectRunner {
         await this.runAgent(agent, config);
       }
 
-      if (config.cycleIntervalMs > 0 && this.running) {
-        log(`Sleeping ${config.cycleIntervalMs / 1000}s...`, this.id);
+      // Always sleep between cycles (minimum 10s to avoid blocking the event loop)
+      const sleepMs = Math.max(config.cycleIntervalMs || 0, 10000);
+      if (this.running) {
+        log(`Sleeping ${sleepMs / 1000}s...`, this.id);
         this.wakeNow = false;
-        this.sleepUntil = Date.now() + config.cycleIntervalMs;
-        
+        this.sleepUntil = Date.now() + sleepMs;
+
         let sleptMs = 0;
-        while (sleptMs < config.cycleIntervalMs && !this.wakeNow && this.running) {
+        while (sleptMs < sleepMs && !this.wakeNow && this.running) {
           await sleep(5000);
           sleptMs += 5000;
           while (this.isPaused && !this.wakeNow && this.running) {
