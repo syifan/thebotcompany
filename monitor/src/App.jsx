@@ -414,7 +414,13 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
                       </div>
                       <div>
                         <h3 className="text-lg font-semibold text-neutral-800">{project.id}</h3>
-                        <p className="text-sm text-neutral-500 truncate max-w-md">{project.path}</p>
+                        {project.repo && (
+                          <a href={`https://github.com/${project.repo}`} target="_blank" rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-sm text-blue-500 hover:underline">
+                            github.com/{project.repo}
+                          </a>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
