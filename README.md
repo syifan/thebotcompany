@@ -13,18 +13,43 @@ Multi-project AI agent orchestrator. Run autonomous AI agent teams across multip
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
+# Install globally
+npm install -g .
 
-# Configure projects
-cp projects.yaml.example projects.yaml
-# Edit projects.yaml to add your repos
+# Initialize config directory
+tbc init
+
+# Add your projects
+tbc add m2sim ~/dev/src/github.com/sarchlab/m2sim
+tbc add ml-perf-survey ~/dev/src/github.com/syifan/ml-perf-survey
 
 # Start the service
-npm start
+tbc start
 ```
 
-## Project Structure
+## Configuration
+
+Config lives in `~/.thebotcompany/`:
+
+```
+~/.thebotcompany/
+├── projects.yaml    # Project registry
+└── logs/            # Aggregated logs
+```
+
+### projects.yaml
+
+```yaml
+projects:
+  m2sim:
+    path: ~/dev/src/github.com/sarchlab/m2sim
+    enabled: true
+  ml-perf-survey:
+    path: ~/dev/src/github.com/syifan/ml-perf-survey
+    enabled: true
+```
+
+### Project Structure
 
 Each managed repository should have an `agent/` folder:
 
@@ -37,17 +62,6 @@ your-repo/
     └── workspace/       # Shared workspace
 ```
 
-## Configuration
-
-### projects.yaml
-
-```yaml
-projects:
-  my-project:
-    path: ~/dev/my-project
-    enabled: true
-```
-
 ### Per-project config.yaml
 
 ```yaml
@@ -55,6 +69,17 @@ cycleIntervalMs: 1800000    # 30 min between cycles
 agentTimeoutMs: 900000      # 15 min max per agent
 model: claude-opus-4-6
 trackerIssue: 1
+```
+
+## CLI
+
+```bash
+tbc init               # Initialize ~/.thebotcompany
+tbc start              # Start the orchestrator service
+tbc status             # Show running status
+tbc projects           # List configured projects
+tbc add <id> <path>    # Add a project
+tbc remove <id>        # Remove a project
 ```
 
 ## API
@@ -66,6 +91,18 @@ trackerIssue: 1
 - `POST /api/projects/:id/resume` - Resume project
 - `POST /api/projects/:id/skip` - Skip current agent/sleep
 - `POST /api/reload` - Reload projects.yaml
+
+## Monitor
+
+The dashboard runs separately:
+
+```bash
+cd monitor
+npm install
+npm run dev
+```
+
+Then open http://localhost:5173
 
 ## License
 

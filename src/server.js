@@ -15,9 +15,18 @@ import yaml from 'js-yaml';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
+const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 
 // --- Configuration ---
 const PORT = process.env.TBC_PORT || 3100;
+
+// Ensure TBC_HOME exists
+if (!fs.existsSync(TBC_HOME)) {
+  fs.mkdirSync(TBC_HOME, { recursive: true });
+}
+if (!fs.existsSync(path.join(TBC_HOME, 'logs'))) {
+  fs.mkdirSync(path.join(TBC_HOME, 'logs'), { recursive: true });
+}
 
 // --- State ---
 const projects = new Map(); // projectId -> ProjectRunner
@@ -251,8 +260,24 @@ class ProjectRunner {
 
 // --- Load Projects ---
 function loadProjects() {
+  const projectsPath = path.join(TBC_HOME, 'projects.yaml');
   try {
-    const raw = fs.readFileSync(path.join(ROOT, 'projects.yaml'), 'utf-8');
+    if (!fs.existsSync(projectsPath)) {
+      // Create default projects.yaml if it doesn't exist
+      const defaultConfig = `# TheBotCompany - Project Registry
+# Each project runs independently with its own cycle timer
+
+projects:
+  # Example:
+  # m2sim:
+  #   path: ~/dev/src/github.com/sarchlab/m2sim
+  #   enabled: true
+`;
+      fs.writeFileSync(projectsPath, defaultConfig);
+      log(`Created ${projectsPath}`);
+      return {};
+    }
+    const raw = fs.readFileSync(projectsPath, 'utf-8');
     const config = yaml.load(raw) || {};
     return config.projects || {};
   } catch (e) {
