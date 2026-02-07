@@ -41,6 +41,18 @@ function log(msg, projectId = null) {
   console.log(`${ts} ${prefix} ${msg}`);
 }
 
+// --- GitHub URL Parser ---
+function parseGithubUrl(url) {
+  const match = url.match(/github\.com\/([^\/]+)\/([^\/\s.]+)/);
+  if (!match) return null;
+  const [, username, reponame] = match;
+  const id = `${username}/${reponame}`;
+  const projectDir = path.join(TBC_HOME, 'dev', 'src', 'github.com', username, reponame);
+  const repoDir = path.join(projectDir, 'repo');
+  const cloneUrl = `https://github.com/${username}/${reponame}.git`;
+  return { id, username, reponame, projectDir, repoDir, cloneUrl };
+}
+
 // --- MIME Types ---
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -73,7 +85,12 @@ class ProjectRunner {
   }
 
   get agentDir() {
-    return path.join(this.path, 'agent');
+    const repo = this.repo;
+    if (repo) {
+      return path.join(TBC_HOME, 'dev', 'src', 'github.com', ...repo.split('/'), 'workspace');
+    }
+    // Fallback for non-GitHub repos
+    return path.join(TBC_HOME, 'local', this.id, 'workspace');
   }
 
   get repo() {
@@ -104,16 +121,9 @@ class ProjectRunner {
 
   saveConfig(content) {
     const configPath = path.join(this.agentDir, 'config.yaml');
+    fs.mkdirSync(this.agentDir, { recursive: true });
     yaml.load(content); // Validate YAML
     fs.writeFileSync(configPath, content);
-    // Try to commit and push
-    try {
-      execSync('git add agent/config.yaml && git commit -m "[TBC] Update config.yaml" && git push', {
-        cwd: this.path,
-        encoding: 'utf-8',
-        stdio: 'pipe'
-      });
-    } catch {}
   }
 
   loadAgents() {
@@ -294,8 +304,10 @@ class ProjectRunner {
 
   async start() {
     if (this.running) return;
+    // Ensure project directory exists in TBC_HOME
+    fs.mkdirSync(this.agentDir, { recursive: true });
     this.running = true;
-    log(`Starting project runner`, this.id);
+    log(`Starting project runner (data: ${this.agentDir})`, this.id);
     this.runLoop();
   }
 
@@ -379,9 +391,17 @@ class ProjectRunner {
       `${agent.name}.md`
     );
 
+    // Ensure workspace directory exists for this agent
+    const workspaceDir = path.join(this.agentDir, 'workspace', agent.name);
+    fs.mkdirSync(workspaceDir, { recursive: true });
+
     return new Promise((resolve) => {
+      // Replace {project_dir} placeholder with actual path
+      let skillContent = fs.readFileSync(skillPath, 'utf-8');
+      skillContent = skillContent.replaceAll('{project_dir}', this.agentDir);
+
       const args = [
-        '-p', fs.readFileSync(skillPath, 'utf-8'),
+        '-p', skillContent,
         '--model', config.model || 'claude-sonnet-4-20250514',
         '--dangerously-skip-permissions',
         '--output-format', 'json'
@@ -542,30 +562,117 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // POST /api/projects/clone - Clone a GitHub repo and check for spec.md
+  if (req.method === 'POST' && url.pathname === '/api/projects/clone') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { url: repoUrl } = JSON.parse(body);
+        if (!repoUrl) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing url' }));
+          return;
+        }
+
+        const parsed = parseGithubUrl(repoUrl);
+        if (!parsed) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid GitHub URL. Expected format: https://github.com/username/reponame' }));
+          return;
+        }
+
+        if (projects.has(parsed.id)) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Project "${parsed.id}" is already registered` }));
+          return;
+        }
+
+        fs.mkdirSync(parsed.projectDir, { recursive: true });
+
+        if (fs.existsSync(path.join(parsed.repoDir, '.git'))) {
+          try {
+            execSync('git pull', { cwd: parsed.repoDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
+            log(`Pulled latest for ${parsed.id}`);
+          } catch (e) {
+            log(`Git pull failed for ${parsed.id}: ${e.message}`);
+          }
+        } else {
+          try {
+            execSync(`git clone ${parsed.cloneUrl} repo`, {
+              cwd: parsed.projectDir,
+              encoding: 'utf-8',
+              timeout: 120000,
+              stdio: 'pipe'
+            });
+            log(`Cloned ${parsed.id}`);
+          } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Failed to clone repository: ${e.message}` }));
+            return;
+          }
+        }
+
+        const specPath = path.join(parsed.repoDir, 'spec.md');
+        const hasSpec = fs.existsSync(specPath);
+        let specContent = null;
+        if (hasSpec) {
+          specContent = fs.readFileSync(specPath, 'utf-8');
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          id: parsed.id,
+          path: parsed.repoDir,
+          hasSpec,
+          specContent,
+        }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // POST /api/projects/add - Add a new project
   if (req.method === 'POST' && url.pathname === '/api/projects/add') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { id, path: projectPath } = JSON.parse(body);
+        const { id, path: projectPath, spec } = JSON.parse(body);
         if (!id || !projectPath) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Missing id or path' }));
           return;
         }
-        
+
+        const resolvedPath = projectPath.replace(/^~/, process.env.HOME);
+
+        // Write spec.md if spec data provided
+        if (spec && (spec.whatToBuild || spec.successCriteria)) {
+          const specPath = path.join(resolvedPath, 'spec.md');
+          const specContent = `# Project Specification\n\n## What do you want to build?\n\n${spec.whatToBuild || ''}\n\n## How do you consider the project is success?\n\n${spec.successCriteria || ''}\n`;
+          fs.writeFileSync(specPath, specContent);
+          try {
+            execSync('git add spec.md && git commit -m "[TBC] Add project specification" && git push', {
+              cwd: resolvedPath, encoding: 'utf-8', stdio: 'pipe'
+            });
+          } catch {} // Best effort
+        }
+
         const projectsPath = path.join(TBC_HOME, 'projects.yaml');
         const raw = fs.readFileSync(projectsPath, 'utf-8');
         const config = yaml.load(raw) || {};
         if (!config.projects) config.projects = {};
-        
-        const resolvedPath = projectPath.replace(/^~/, process.env.HOME);
+
         config.projects[id] = { path: resolvedPath, enabled: true };
-        
+
         fs.writeFileSync(projectsPath, yaml.dump(config, { lineWidth: -1 }));
         syncProjects();
-        
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, id, path: resolvedPath }));
       } catch (e) {
@@ -578,7 +685,7 @@ const server = http.createServer(async (req, res) => {
 
   // DELETE /api/projects/:id - Remove a project
   if (req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
-    const projectId = pathParts[2];
+    const projectId = decodeURIComponent(pathParts[2]);
     try {
       const projectsPath = path.join(TBC_HOME, 'projects.yaml');
       const raw = fs.readFileSync(projectsPath, 'utf-8');
@@ -607,9 +714,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   // --- Project-scoped API ---
-  
+
   if (pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
-    const projectId = pathParts[2];
+    const projectId = decodeURIComponent(pathParts[2]);
     const runner = projects.get(projectId);
     
     if (!runner) {

@@ -29,12 +29,21 @@ tbc start
 
 ## Configuration
 
-Config lives in `~/.thebotcompany/`:
+Config and project data live in `~/.thebotcompany/`:
 
 ```
 ~/.thebotcompany/
 ├── projects.yaml    # Project registry
-└── logs/            # Aggregated logs
+├── logs/            # Aggregated logs
+└── dev/src/github.com/  # Per-project data (derived from git remote)
+    └── <org>/<repo>/
+        ├── repo/                # Cloned repository
+        └── workspace/           # Agent data
+            ├── config.yaml
+            ├── managers/
+            ├── workers/
+            ├── workspace/   # Per-agent workspaces
+            └── orchestrator.log
 ```
 
 ### projects.yaml
@@ -47,19 +56,6 @@ projects:
   ml-perf-survey:
     path: ~/dev/src/github.com/syifan/ml-perf-survey
     enabled: true
-```
-
-### Project Structure
-
-Each managed repository should have an `agent/` folder:
-
-```
-your-repo/
-└── agent/
-    ├── config.yaml      # Project-specific config
-    ├── managers/        # Manager agent skills
-    ├── workers/         # Worker agent skills  
-    └── workspace/       # Shared workspace
 ```
 
 ### Per-project config.yaml

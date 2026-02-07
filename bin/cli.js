@@ -119,7 +119,7 @@ async function main() {
       const devOut = fs.openSync(devLogFile, 'a');
       const devErr = fs.openSync(devLogFile, 'a');
       
-      const server = spawn('node', [path.join(ROOT, 'src', 'server.js')], {
+      const server = spawn('node', ['--watch', path.join(ROOT, 'src', 'server.js')], {
         stdio: ['ignore', devOut, devErr],
         env: { ...process.env, TBC_SERVE_STATIC: 'false' }
       });
@@ -192,11 +192,6 @@ async function main() {
         addPath = addPath.replace(/^~/, process.env.HOME);
       }
       addPath = path.resolve(addPath);
-      const agentDir = path.join(addPath, 'agent');
-      if (!fs.existsSync(agentDir)) {
-        console.log(`Warning: ${agentDir} does not exist`);
-        console.log('Projects need an agent/ folder with config.yaml and managers/workers');
-      }
       {
         const cfg = loadProjectsYaml();
         if (!cfg.projects) cfg.projects = {};

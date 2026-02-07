@@ -36,11 +36,11 @@ function App() {
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState(null)
   const [globalUptime, setGlobalUptime] = useState(0)
-  const [showAddProject, setShowAddProject] = useState(false)
-  const [newProjectId, setNewProjectId] = useState('')
-  const [newProjectPath, setNewProjectPath] = useState('')
-  const [addingProject, setAddingProject] = useState(false)
-  const [addProjectError, setAddProjectError] = useState(null)
+  const [addProjectModal, setAddProjectModal] = useState({
+    step: null, githubUrl: '', projectId: null, projectPath: null,
+    hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
+    updateSpec: false, error: null,
+  })
   
   // Project-specific state
   const [logs, setLogs] = useState([])
@@ -68,7 +68,7 @@ function App() {
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
 
-  const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
+  const projectApi = (path) => selectedProject ? `/api/projects/${encodeURIComponent(selectedProject.id)}${path}` : null
 
   const fetchGlobalStatus = async () => {
     try {
@@ -245,33 +245,66 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
     localStorage.removeItem('selectedProjectId')
   }
 
-  const addProject = async () => {
-    if (!newProjectId.trim() || !newProjectPath.trim()) return
-    setAddingProject(true)
-    setAddProjectError(null)
+  const resetAddProjectModal = () => {
+    setAddProjectModal({
+      step: null, githubUrl: '', projectId: null, projectPath: null,
+      hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
+      updateSpec: false, error: null,
+    })
+  }
+
+  const openAddProjectModal = () => {
+    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null }))
+  }
+
+  const cloneProject = async () => {
+    const url = addProjectModal.githubUrl.trim()
+    if (!url) return
+    setAddProjectModal(prev => ({ ...prev, step: 'cloning', error: null }))
     try {
-      const res = await fetch('/api/projects/add', {
+      const res = await fetch('/api/projects/clone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: newProjectId.trim(), path: newProjectPath.trim() })
+        body: JSON.stringify({ url })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setNewProjectId('')
-      setNewProjectPath('')
-      setShowAddProject(false)
+      setAddProjectModal(prev => ({
+        ...prev, step: 'spec', projectId: data.id, projectPath: data.path,
+        hasSpec: data.hasSpec, specContent: data.specContent, error: null,
+      }))
+    } catch (err) {
+      setAddProjectModal(prev => ({ ...prev, step: 'url', error: err.message }))
+    }
+  }
+
+  const finalizeAddProject = async () => {
+    const { projectId, projectPath, hasSpec, updateSpec, whatToBuild, successCriteria } = addProjectModal
+    if (!projectId || !projectPath) return
+    setAddProjectModal(prev => ({ ...prev, step: 'adding', error: null }))
+    try {
+      const body = { id: projectId, path: projectPath }
+      if (!hasSpec || updateSpec) {
+        body.spec = { whatToBuild: whatToBuild.trim(), successCriteria: successCriteria.trim() }
+      }
+      const res = await fetch('/api/projects/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      resetAddProjectModal()
       await fetchGlobalStatus()
     } catch (err) {
-      setAddProjectError(err.message)
-    } finally {
-      setAddingProject(false)
+      setAddProjectModal(prev => ({ ...prev, step: 'spec', error: err.message }))
     }
   }
 
   const removeProject = async (projectId) => {
     if (!confirm(`Remove project "${projectId}"?`)) return
     try {
-      const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' })
       if (res.ok) {
         if (selectedProject?.id === projectId) {
           setSelectedProject(null)
@@ -405,7 +438,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
               </Card>
             ))}
 
-            {projects.length === 0 && !showAddProject && (
+            {projects.length === 0 && (
               <Card>
                 <CardContent className="py-12">
                   <div className="text-center text-neutral-500">
@@ -417,58 +450,149 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
               </Card>
             )}
 
-            {/* Add Project Form */}
-            {showAddProject ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Plus className="w-4 h-4" /> Add Project
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {addProjectError && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-                      {addProjectError}
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">Project ID</label>
-                    <input
-                      type="text"
-                      placeholder="e.g., m2sim"
-                      className="w-full px-3 py-2 border rounded-md"
-                      value={newProjectId}
-                      onChange={(e) => setNewProjectId(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">Path</label>
-                    <input
-                      type="text"
-                      placeholder="e.g., ~/dev/src/github.com/sarchlab/m2sim"
-                      className="w-full px-3 py-2 border rounded-md"
-                      value={newProjectPath}
-                      onChange={(e) => setNewProjectPath(e.target.value)}
-                    />
-                    <p className="text-xs text-neutral-500 mt-1">Path to repo with agent/ folder</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button onClick={addProject} disabled={addingProject || !newProjectId.trim() || !newProjectPath.trim()}>
-                      {addingProject ? 'Adding...' : 'Add Project'}
-                    </Button>
-                    <Button variant="outline" onClick={() => { setShowAddProject(false); setAddProjectError(null) }}>
-                      Cancel
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Button onClick={() => setShowAddProject(true)} className="w-full" variant="outline">
-                <Plus className="w-4 h-4 mr-2" /> Add Project
-              </Button>
-            )}
+            <Button onClick={openAddProjectModal} className="w-full" variant="outline">
+              <Plus className="w-4 h-4 mr-2" /> Add Project
+            </Button>
           </div>
         </div>
+
+        {/* Add Project Modal */}
+        <Modal open={addProjectModal.step !== null} onClose={resetAddProjectModal}>
+          <ModalHeader onClose={resetAddProjectModal}>
+            Add Project
+          </ModalHeader>
+          <ModalContent>
+            {addProjectModal.error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm mb-4">
+                {addProjectModal.error}
+              </div>
+            )}
+
+            {/* Step: URL Input */}
+            {(addProjectModal.step === 'url' || addProjectModal.step === 'cloning') && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">GitHub Repository URL</label>
+                  <input
+                    type="text"
+                    placeholder="https://github.com/username/reponame"
+                    className="w-full px-3 py-2 border rounded-md"
+                    value={addProjectModal.githubUrl}
+                    onChange={(e) => setAddProjectModal(prev => ({ ...prev, githubUrl: e.target.value, error: null }))}
+                    disabled={addProjectModal.step === 'cloning'}
+                    onKeyDown={(e) => { if (e.key === 'Enter') cloneProject() }}
+                  />
+                  <p className="text-xs text-neutral-500 mt-1">
+                    The repo will be cloned to ~/.thebotcompany/dev/src/github.com/org/repo/
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={resetAddProjectModal}>Cancel</Button>
+                  <Button
+                    onClick={cloneProject}
+                    disabled={addProjectModal.step === 'cloning' || !addProjectModal.githubUrl.trim()}
+                  >
+                    {addProjectModal.step === 'cloning' ? (
+                      <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Cloning...</>
+                    ) : (
+                      'Next'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step: Spec */}
+            {addProjectModal.step === 'spec' && (
+              <div className="space-y-4">
+                <div className="p-3 bg-green-50 border border-green-200 rounded text-green-700 text-sm">
+                  Repository cloned: <span className="font-mono font-bold">{addProjectModal.projectId}</span>
+                </div>
+
+                {addProjectModal.hasSpec ? (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                      <p className="text-sm font-medium text-blue-800 mb-1">spec.md already exists</p>
+                      <p className="text-xs text-blue-600">This project already has a specification file.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="updateSpec"
+                        checked={addProjectModal.updateSpec}
+                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, updateSpec: e.target.checked }))}
+                      />
+                      <label htmlFor="updateSpec" className="text-sm text-neutral-700">Update the spec</label>
+                    </div>
+                    {addProjectModal.updateSpec && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-neutral-700 mb-1">What do you want to build?</label>
+                          <textarea
+                            className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                            placeholder="Describe what you want to build..."
+                            value={addProjectModal.whatToBuild}
+                            onChange={(e) => setAddProjectModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-neutral-700 mb-1">How do you consider the project is success?</label>
+                          <textarea
+                            className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                            placeholder="Define the success criteria..."
+                            value={addProjectModal.successCriteria}
+                            onChange={(e) => setAddProjectModal(prev => ({ ...prev, successCriteria: e.target.value }))}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-neutral-600">
+                      No spec.md found. Describe your project so the AI agents know what to work on.
+                    </p>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 mb-1">What do you want to build?</label>
+                      <textarea
+                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                        placeholder="Describe what you want to build..."
+                        value={addProjectModal.whatToBuild}
+                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 mb-1">How do you consider the project is success?</label>
+                      <textarea
+                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                        placeholder="Define the success criteria..."
+                        value={addProjectModal.successCriteria}
+                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, successCriteria: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between gap-2">
+                  <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'url', error: null }))}>
+                    <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  </Button>
+                  <Button onClick={finalizeAddProject}>
+                    Add Project
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step: Adding */}
+            {addProjectModal.step === 'adding' && (
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
+                <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+                <p className="text-sm text-neutral-600">Adding project...</p>
+              </div>
+            )}
+          </ModalContent>
+        </Modal>
       </div>
     )
   }
