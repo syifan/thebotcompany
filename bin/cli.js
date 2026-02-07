@@ -81,11 +81,27 @@ async function main() {
       ensureHome();
       // Build monitor first
       buildMonitor();
-      console.log('\nStarting TheBotCompany...');
-      spawn('node', [path.join(ROOT, 'src', 'server.js')], {
-        stdio: 'inherit',
+      
+      // Start server as background process with logs to file
+      const logFile = path.join(TBC_HOME, 'logs', 'server.log');
+      const out = fs.openSync(logFile, 'a');
+      const err = fs.openSync(logFile, 'a');
+      
+      const child = spawn('node', [path.join(ROOT, 'src', 'server.js')], {
+        detached: true,
+        stdio: ['ignore', out, err],
         env: { ...process.env, TBC_SERVE_STATIC: 'true' }
       });
+      
+      child.unref();
+      
+      // Save PID for later
+      fs.writeFileSync(path.join(TBC_HOME, 'server.pid'), String(child.pid));
+      
+      console.log(`TheBotCompany started (PID: ${child.pid})`);
+      console.log(`  Dashboard: http://localhost:3100`);
+      console.log(`  Logs: ${logFile}`);
+      console.log(`\nRun 'tbc stop' to stop, 'tbc logs' to tail logs`);
       break;
 
     case 'dev':
@@ -204,6 +220,44 @@ async function main() {
       }
       break;
 
+    case 'stop':
+      {
+        const pidFile = path.join(TBC_HOME, 'server.pid');
+        if (!fs.existsSync(pidFile)) {
+          console.log('TheBotCompany is not running (no PID file)');
+          break;
+        }
+        const pid = parseInt(fs.readFileSync(pidFile, 'utf-8').trim());
+        try {
+          process.kill(pid, 'SIGTERM');
+          fs.unlinkSync(pidFile);
+          console.log(`Stopped TheBotCompany (PID: ${pid})`);
+        } catch (e) {
+          if (e.code === 'ESRCH') {
+            fs.unlinkSync(pidFile);
+            console.log('TheBotCompany was not running (stale PID)');
+          } else {
+            console.error('Failed to stop:', e.message);
+          }
+        }
+      }
+      break;
+
+    case 'logs':
+      {
+        const logFile = path.join(TBC_HOME, 'logs', 'server.log');
+        if (!fs.existsSync(logFile)) {
+          console.log('No logs yet');
+          break;
+        }
+        // Tail the log file
+        const lines = args[1] ? parseInt(args[1]) : 50;
+        const content = fs.readFileSync(logFile, 'utf-8');
+        const allLines = content.split('\n');
+        console.log(allLines.slice(-lines).join('\n'));
+      }
+      break;
+
     case 'build':
       // Hidden command to just build the monitor
       buildMonitor();
@@ -213,9 +267,12 @@ async function main() {
       console.log(`TheBotCompany - Multi-project AI Agent Orchestrator
 
 Usage:
-  tbc start              Start production server (builds monitor, runs all-in-one)
-  tbc dev                Start development mode (orchestrator + vite HMR)
+  tbc start              Start server (background, logs to file)
+  tbc stop               Stop the server
+  tbc logs [n]           Show last n lines of logs (default 50)
   tbc status             Show running status
+  tbc dev                Start development mode (foreground + vite HMR)
+  
   tbc projects           List configured projects
   tbc add <id> <path>    Add a project
   tbc remove <id>        Remove a project
