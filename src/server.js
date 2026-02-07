@@ -130,7 +130,7 @@ class ProjectRunner {
     const managers = [];
     const workers = [];
     
-    const managersDir = path.join(this.agentDir, 'managers');
+    const managersDir = path.join(ROOT, 'agent', 'managers');
     const workersDir = path.join(this.agentDir, 'workers');
     
     const parseRole = (content) => {
@@ -163,7 +163,7 @@ class ProjectRunner {
 
   getAgentDetails(agentName) {
     const workersDir = path.join(this.agentDir, 'workers');
-    const managersDir = path.join(this.agentDir, 'managers');
+    const managersDir = path.join(ROOT, 'agent', 'managers');
     const workspaceDir = path.join(this.agentDir, 'workspace', agentName);
     
     let skillPath = path.join(workersDir, `${agentName}.md`);
@@ -306,45 +306,9 @@ class ProjectRunner {
     if (this.running) return;
     // Ensure project directory exists in TBC_HOME
     fs.mkdirSync(this.agentDir, { recursive: true });
-    // Bootstrap workspace from repo's agent/ folder if workspace is empty
-    this.bootstrapFromRepo();
     this.running = true;
     log(`Starting project runner (data: ${this.agentDir})`, this.id);
     this.runLoop();
-  }
-
-  bootstrapFromRepo() {
-    const repoAgentDir = path.join(this.path, 'agent');
-    if (!fs.existsSync(repoAgentDir)) return;
-
-    const dirs = ['managers', 'workers'];
-    for (const dir of dirs) {
-      const src = path.join(repoAgentDir, dir);
-      const dest = path.join(this.agentDir, dir);
-      if (!fs.existsSync(dest) && fs.existsSync(src)) {
-        fs.mkdirSync(dest, { recursive: true });
-        for (const file of fs.readdirSync(src)) {
-          fs.copyFileSync(path.join(src, file), path.join(dest, file));
-        }
-        log(`Bootstrapped ${dir}/ from repo agent/ folder`, this.id);
-      }
-    }
-
-    // Copy everyone.md if not present
-    const everyoneSrc = path.join(repoAgentDir, 'everyone.md');
-    const everyoneDest = path.join(this.agentDir, 'everyone.md');
-    if (!fs.existsSync(everyoneDest) && fs.existsSync(everyoneSrc)) {
-      fs.copyFileSync(everyoneSrc, everyoneDest);
-      log(`Bootstrapped everyone.md from repo`, this.id);
-    }
-
-    // Copy config.yaml if not present
-    const configSrc = path.join(repoAgentDir, 'config.yaml');
-    const configDest = path.join(this.agentDir, 'config.yaml');
-    if (!fs.existsSync(configDest) && fs.existsSync(configSrc)) {
-      fs.copyFileSync(configSrc, configDest);
-      log(`Bootstrapped config.yaml from repo`, this.id);
-    }
   }
 
   stop() {
@@ -423,20 +387,22 @@ class ProjectRunner {
     this.currentAgentStartTime = Date.now();
     log(`Running: ${agent.name}${agent.isManager ? ' (manager)' : ''}`, this.id);
 
-    const skillPath = path.join(
-      this.agentDir,
-      agent.isManager ? 'managers' : 'workers',
-      `${agent.name}.md`
-    );
+    // Managers come from the TBC repo, workers from the project workspace
+    const skillPath = agent.isManager
+      ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
+      : path.join(this.agentDir, 'workers', `${agent.name}.md`);
 
     // Ensure workspace directory exists for this agent
     const workspaceDir = path.join(this.agentDir, 'workspace', agent.name);
     fs.mkdirSync(workspaceDir, { recursive: true });
 
     return new Promise((resolve) => {
-      // Replace {project_dir} placeholder with actual path
+      // Build prompt: everyone.md + skill file, with {project_dir} replaced
       let skillContent = fs.readFileSync(skillPath, 'utf-8');
-      skillContent = skillContent.replaceAll('{project_dir}', this.agentDir);
+      const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
+      let everyone = '';
+      try { everyone = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n'; } catch {}
+      skillContent = (everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
 
       const args = [
         '-p', skillContent,
