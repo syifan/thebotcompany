@@ -683,9 +683,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // DELETE /api/projects/:id - Remove a project
-  if (req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
-    const projectId = decodeURIComponent(pathParts[2]);
+  // DELETE /api/projects/:owner/:repo - Remove a project
+  if (req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2] && pathParts[3]) {
+    const projectId = `${pathParts[2]}/${pathParts[3]}`;
     try {
       const projectsPath = path.join(TBC_HOME, 'projects.yaml');
       const raw = fs.readFileSync(projectsPath, 'utf-8');
@@ -714,18 +714,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   // --- Project-scoped API ---
+  // Project IDs are owner/repo (two path segments)
 
-  if (pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
-    const projectId = decodeURIComponent(pathParts[2]);
+  if (pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2] && pathParts[3]) {
+    const projectId = `${pathParts[2]}/${pathParts[3]}`;
     const runner = projects.get(projectId);
-    
+
     if (!runner) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Project not found' }));
       return;
     }
 
-    const subPath = pathParts.slice(3).join('/');
+    const subPath = pathParts.slice(4).join('/');
 
     // GET /api/projects/:id/status
     if (req.method === 'GET' && subPath === 'status') {
@@ -749,9 +750,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // GET /api/projects/:id/agents/:name
-    if (req.method === 'GET' && pathParts[3] === 'agents' && pathParts[4]) {
-      const agentName = pathParts[4];
+    // GET /api/projects/:owner/:repo/agents/:name
+    if (req.method === 'GET' && pathParts[4] === 'agents' && pathParts[5]) {
+      const agentName = pathParts[5];
       const details = runner.getAgentDetails(agentName);
       if (!details) {
         res.writeHead(404, { 'Content-Type': 'application/json' });

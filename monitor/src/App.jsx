@@ -68,7 +68,7 @@ function App() {
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
 
-  const projectApi = (path) => selectedProject ? `/api/projects/${encodeURIComponent(selectedProject.id)}${path}` : null
+  const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
 
   const fetchGlobalStatus = async () => {
     try {
@@ -304,7 +304,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
   const removeProject = async (projectId) => {
     if (!confirm(`Remove project "${projectId}"?`)) return
     try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' })
+      const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
       if (res.ok) {
         if (selectedProject?.id === projectId) {
           setSelectedProject(null)
