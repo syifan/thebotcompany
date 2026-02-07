@@ -38,7 +38,15 @@ const startTime = Date.now();
 function log(msg, projectId = null) {
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const prefix = projectId ? `[${projectId}]` : '[tbc]';
-  console.log(`${ts} ${prefix} ${msg}`);
+  const line = `${ts} ${prefix} ${msg}`;
+  console.log(line);
+  if (projectId) {
+    const runner = projects.get(projectId);
+    if (runner) {
+      const logPath = path.join(runner.agentDir, 'orchestrator.log');
+      try { fs.appendFileSync(logPath, line + '\n'); } catch {}
+    }
+  }
 }
 
 // --- GitHub URL Parser ---
@@ -84,13 +92,16 @@ class ProjectRunner {
     this._repo = null;
   }
 
-  get agentDir() {
+  get projectDir() {
     const repo = this.repo;
     if (repo) {
-      return path.join(TBC_HOME, 'dev', 'src', 'github.com', ...repo.split('/'), 'workspace');
+      return path.join(TBC_HOME, 'dev', 'src', 'github.com', ...repo.split('/'));
     }
-    // Fallback for non-GitHub repos
-    return path.join(TBC_HOME, 'local', this.id, 'workspace');
+    return path.join(TBC_HOME, 'local', this.id);
+  }
+
+  get agentDir() {
+    return path.join(this.projectDir, 'workspace');
   }
 
   get repo() {
@@ -109,10 +120,13 @@ class ProjectRunner {
     return this._repo;
   }
 
+  get configPath() {
+    return path.join(this.projectDir, 'config.yaml');
+  }
+
   loadConfig() {
     try {
-      const configPath = path.join(this.agentDir, 'config.yaml');
-      const raw = fs.readFileSync(configPath, 'utf-8');
+      const raw = fs.readFileSync(this.configPath, 'utf-8');
       return yaml.load(raw) || {};
     } catch (e) {
       return { cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-sonnet-4-20250514' };
@@ -120,10 +134,9 @@ class ProjectRunner {
   }
 
   saveConfig(content) {
-    const configPath = path.join(this.agentDir, 'config.yaml');
-    fs.mkdirSync(this.agentDir, { recursive: true });
+    fs.mkdirSync(this.projectDir, { recursive: true });
     yaml.load(content); // Validate YAML
-    fs.writeFileSync(configPath, content);
+    fs.writeFileSync(this.configPath, content);
   }
 
   loadAgents() {
@@ -300,6 +313,52 @@ class ProjectRunner {
       config: this.loadConfig(),
       agents: this.loadAgents()
     };
+  }
+
+  bootstrapPreview() {
+    const workspaceExists = fs.existsSync(this.agentDir);
+    let workspaceContents = [];
+    if (workspaceExists) {
+      workspaceContents = fs.readdirSync(this.agentDir);
+    }
+    return { available: true, workspaceEmpty: workspaceContents.length === 0, repo: this.repo };
+  }
+
+  bootstrap() {
+    // 1. Wipe the entire workspace folder
+    if (fs.existsSync(this.agentDir)) {
+      fs.rmSync(this.agentDir, { recursive: true });
+      log(`Cleared workspace folder`, this.id);
+    }
+    fs.mkdirSync(this.agentDir, { recursive: true });
+
+    // 2. Create a new tracker issue on GitHub and update config
+    let trackerIssue = null;
+    if (this.repo) {
+      try {
+        const issueBody = `# Agent Tracker\n\n## 📋 Task Queues\n\n(No tasks yet)\n\n## 📊 Status\n- **Action count:** 0\n- **Last cycle:** N/A\n`;
+        const output = execSync(
+          `gh issue create --title "Agent Tracker" --body ${JSON.stringify(issueBody)}`,
+          { cwd: this.path, encoding: 'utf-8', timeout: 30000, stdio: 'pipe' }
+        );
+        const match = output.match(/\/issues\/(\d+)/);
+        if (match) {
+          trackerIssue = parseInt(match[1]);
+          const config = this.loadConfig();
+          config.trackerIssue = trackerIssue;
+          fs.writeFileSync(this.configPath, yaml.dump(config, { lineWidth: -1 }));
+          log(`Created tracker issue #${trackerIssue}`, this.id);
+        }
+      } catch (e) {
+        log(`Failed to create tracker issue: ${e.message}`, this.id);
+      }
+    }
+
+    // 3. Reset cycle count
+    this.cycleCount = 0;
+    log(`Reset cycle count`, this.id);
+
+    return { bootstrapped: true, trackerIssue };
   }
 
   async start() {
@@ -780,8 +839,7 @@ const server = http.createServer(async (req, res) => {
 
     // GET /api/projects/:id/config
     if (req.method === 'GET' && subPath === 'config') {
-      const configPath = path.join(runner.agentDir, 'config.yaml');
-      const raw = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : '';
+      const raw = fs.existsSync(runner.configPath) ? fs.readFileSync(runner.configPath, 'utf-8') : '';
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ config: runner.loadConfig(), raw }));
       return;
@@ -839,6 +897,33 @@ const server = http.createServer(async (req, res) => {
         repo: runner.repo, 
         url: runner.repo ? `https://github.com/${runner.repo}` : null 
       }));
+      return;
+    }
+
+    // GET /api/projects/:id/bootstrap - preview what bootstrap will do
+    if (req.method === 'GET' && subPath === 'bootstrap') {
+      try {
+        const result = runner.bootstrapPreview();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
+    // POST /api/projects/:id/bootstrap - execute bootstrap
+    if (req.method === 'POST' && subPath === 'bootstrap') {
+      try {
+        fs.mkdirSync(runner.agentDir, { recursive: true });
+        const result = runner.bootstrap();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...result }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 

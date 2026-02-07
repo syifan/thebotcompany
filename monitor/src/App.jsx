@@ -65,6 +65,7 @@ function App() {
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false })
+  const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
 
@@ -229,6 +230,34 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
     }
   }
 
+  const openBootstrapModal = async () => {
+    if (!selectedProject) return
+    setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false })
+    try {
+      const res = await fetch(projectApi('/bootstrap'))
+      const data = await res.json()
+      setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false })
+    } catch (err) {
+      setBootstrapModal({ open: true, loading: false, preview: null, error: err.message, executing: false })
+    }
+  }
+
+  const executeBootstrap = async () => {
+    if (!selectedProject) return
+    setBootstrapModal(prev => ({ ...prev, executing: true, error: null }))
+    try {
+      const res = await fetch(projectApi('/bootstrap'), { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false })
+      await fetchGlobalStatus()
+      await fetchProjectData()
+      fetchComments(1, selectedAgent, false)
+    } catch (err) {
+      setBootstrapModal(prev => ({ ...prev, executing: false, error: err.message }))
+    }
+  }
+
   const projectToPath = (project) => {
     if (project.repo) return `/github.com/${project.repo}`
     return `/${project.id}`
@@ -299,6 +328,10 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      // Bootstrap workspace from repo's agent/ folder
+      try {
+        await fetch(`/api/projects/${projectId}/bootstrap`, { method: 'POST' })
+      } catch {} // Best effort
       resetAddProjectModal()
       await fetchGlobalStatus()
     } catch (err) {
@@ -656,45 +689,45 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
   return (
     <div className="min-h-screen bg-neutral-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header with Back Button and Project Tabs */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-2">
-          <div>
+        {/* Header */}
+        <div className="mb-6 space-y-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500">
                 <ArrowLeft className="w-4 h-4 mr-1" /> All Projects
               </Button>
               <h1 className="text-2xl font-bold text-neutral-800">{selectedProject.id}</h1>
+              {error && <Badge variant="warning">Error: {error}</Badge>}
             </div>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-neutral-400">{formatTime(lastUpdate)}</span>
+              {repoUrl && (
+                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium">
+                  GitHub
+                </a>
+              )}
+              <Button size="sm" variant="warning" onClick={openBootstrapModal}>
+                <RotateCcw className="w-3 h-3 mr-1" />Bootstrap
+              </Button>
+            </div>
+          </div>
+          {projects.length > 1 && (
+            <div className="flex items-center gap-1.5">
               {projects.map(project => (
                 <button
                   key={project.id}
                   onClick={() => selectProject(project)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    selectedProject?.id === project.id 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-neutral-200 text-neutral-700 hover:bg-neutral-300'
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    selectedProject?.id === project.id
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
                   }`}
                 >
                   {project.id}
                 </button>
               ))}
             </div>
-          </div>
-          <div className="flex flex-col gap-2 text-sm text-neutral-500">
-            <div className="flex items-center gap-3">
-              <RefreshCw className="w-4 h-4" />
-              <span>Last update: {formatTime(lastUpdate)}</span>
-              {error && <Badge variant="warning">Error: {error}</Badge>}
-            </div>
-            <div className="flex items-center gap-2">
-              {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 rounded text-neutral-700 font-medium">
-                  GitHub
-                </a>
-              )}
-            </div>
-          </div>
+          )}
         </div>
 
         {selectedProject && (
@@ -977,6 +1010,94 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
             </div>
           ) : (
             <p className="text-neutral-400 text-center py-8">Failed to load agent details</p>
+          )}
+        </ModalContent>
+      </Modal>
+
+      {/* Bootstrap Modal */}
+      <Modal open={bootstrapModal.open} onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
+        <ModalHeader onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
+          Bootstrap Workspace
+        </ModalHeader>
+        <ModalContent>
+          {bootstrapModal.loading ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
+            </div>
+          ) : bootstrapModal.preview && !bootstrapModal.preview.available ? (
+            <div className="space-y-4">
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-sm">
+                {bootstrapModal.preview.reason || 'Bootstrap is not available for this project.'}
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setBootstrapModal({ ...bootstrapModal, open: false })}>Close</Button>
+              </div>
+            </div>
+          ) : bootstrapModal.preview ? (
+            <div className="space-y-4">
+              <p className="text-sm text-neutral-600">
+                Bootstrap clears the workspace and creates a fresh tracker issue so agents start from a clean slate.
+              </p>
+
+              <div className="p-3 bg-red-50 border border-red-200 rounded">
+                <p className="text-sm font-medium text-red-800 mb-1">What will be lost</p>
+                <ul className="text-sm text-red-700 space-y-1 list-disc list-inside">
+                  <li>The entire workspace folder will be emptied — all worker skills, agent notes, and workspace files will be deleted</li>
+                  <li>The cycle count will be reset to 1</li>
+                </ul>
+              </div>
+
+              <div className="p-3 bg-green-50 border border-green-200 rounded">
+                <p className="text-sm font-medium text-green-800 mb-1">What will happen</p>
+                <ul className="text-sm text-green-700 space-y-1 list-disc list-inside">
+                  {bootstrapModal.preview.repo && (
+                    <li>A new GitHub tracker issue will be created and set in config</li>
+                  )}
+                  <li>Agents will start fresh — managers will re-hire workers and plan from scratch</li>
+                </ul>
+              </div>
+
+              <div className="p-3 bg-neutral-50 border border-neutral-200 rounded">
+                <p className="text-sm font-medium text-neutral-600 mb-1">What will be kept</p>
+                <ul className="text-sm text-neutral-500 space-y-1 list-disc list-inside">
+                  <li>Project configuration (config.yaml) is preserved</li>
+                  <li>All repository files, PRs, and issues remain untouched</li>
+                  <li>The old tracker issue will not be closed</li>
+                </ul>
+              </div>
+
+              {bootstrapModal.error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                  {bootstrapModal.error}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setBootstrapModal({ ...bootstrapModal, open: false })}>Cancel</Button>
+                <Button
+                  onClick={executeBootstrap}
+                  disabled={bootstrapModal.executing}
+                  variant="destructive"
+                >
+                  {bootstrapModal.executing ? (
+                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Bootstrapping...</>
+                  ) : (
+                    'Confirm Bootstrap'
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {bootstrapModal.error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                  {bootstrapModal.error}
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setBootstrapModal({ ...bootstrapModal, open: false })}>Close</Button>
+              </div>
+            </div>
           )}
         </ModalContent>
       </Modal>

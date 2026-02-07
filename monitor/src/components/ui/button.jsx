@@ -13,6 +13,7 @@ function Button({
     default: "bg-neutral-900 text-neutral-50 hover:bg-neutral-800",
     outline: "border border-neutral-200 bg-white hover:bg-neutral-100 text-neutral-900",
     destructive: "bg-red-500 text-white hover:bg-red-600",
+    warning: "bg-amber-500 text-white hover:bg-amber-600",
     ghost: "hover:bg-neutral-100 text-neutral-900",
   }
   
