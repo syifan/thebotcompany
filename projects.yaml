@@ -1,0 +1,12 @@
+# TheBotCompany - Project Registry
+# Each project runs independently with its own cycle timer
+
+projects:
+  # Example project configuration:
+  # m2sim:
+  #   path: ~/dev/src/github.com/sarchlab/m2sim
+  #   enabled: true
+  #
+  # ml-perf-survey:
+  #   path: ~/dev/src/github.com/syifan/ml-perf-survey
+  #   enabled: true
