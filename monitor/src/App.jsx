@@ -229,9 +229,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
     }
   }
 
+  const projectToPath = (project) => {
+    if (project.repo) return `/github.com/${project.repo}`
+    return `/${project.id}`
+  }
+
   const selectProject = (project) => {
     setSelectedProject(project)
-    localStorage.setItem('selectedProjectId', project.id)
+    history.pushState(null, '', projectToPath(project))
     setLogs([])
     setAgents({ workers: [], managers: [] })
     setComments([])
@@ -242,7 +247,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
 
   const goToProjectList = () => {
     setSelectedProject(null)
-    localStorage.removeItem('selectedProjectId')
+    history.pushState(null, '', '/')
   }
 
   const resetAddProjectModal = () => {
@@ -316,11 +321,56 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
     }
   }
 
+  // Restore project from URL path on initial load
+  const selectProjectFromPath = (projectList) => {
+    const path = window.location.pathname
+    if (path === '/' || !path) return
+    // Match /github.com/owner/repo
+    const match = path.match(/^\/github\.com\/([^/]+\/[^/]+)/)
+    if (match) {
+      const repo = match[1]
+      const project = projectList.find(p => p.repo === repo || p.id === repo)
+      if (project) {
+        setSelectedProject(project)
+        return
+      }
+    }
+    // Match /projectId
+    const id = path.slice(1)
+    const project = projectList.find(p => p.id === id)
+    if (project) setSelectedProject(project)
+  }
+
   useEffect(() => {
-    fetchGlobalStatus()
+    const init = async () => {
+      try {
+        const res = await fetch('/api/status')
+        const data = await res.json()
+        setGlobalUptime(data.uptime)
+        setProjects(data.projects)
+        setLastUpdate(new Date())
+        selectProjectFromPath(data.projects)
+      } catch (err) {
+        setError(err.message)
+      }
+    }
+    init()
     const interval = setInterval(fetchGlobalStatus, 5000)
     return () => clearInterval(interval)
   }, [])
+
+  // Handle browser back/forward
+  useEffect(() => {
+    const onPopState = () => {
+      if (window.location.pathname === '/') {
+        setSelectedProject(null)
+      } else {
+        selectProjectFromPath(projects)
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [projects])
 
   useEffect(() => {
     if (selectedProject) {
