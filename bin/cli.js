@@ -114,17 +114,23 @@ async function main() {
         execSync('npm install', { cwd: MONITOR_DIR, stdio: 'inherit' });
       }
       
-      // Start orchestrator (without static serving)
+      // Start orchestrator with logs to file (not terminal)
+      const devLogFile = path.join(TBC_HOME, 'logs', 'server.log');
+      const devOut = fs.openSync(devLogFile, 'a');
+      const devErr = fs.openSync(devLogFile, 'a');
+      
       const server = spawn('node', [path.join(ROOT, 'src', 'server.js')], {
-        stdio: 'inherit',
+        stdio: ['ignore', devOut, devErr],
         env: { ...process.env, TBC_SERVE_STATIC: 'false' }
       });
       
-      // Give server a moment to start
-      await new Promise(r => setTimeout(r, 1000));
+      console.log(`API server started on http://localhost:3100`);
+      console.log(`Server logs: ${devLogFile}\n`);
       
-      // Start vite dev server
-      console.log('\nStarting Vite dev server...');
+      // Give server a moment to start
+      await new Promise(r => setTimeout(r, 500));
+      
+      // Start vite dev server (this one shows output)
       const vite = spawn('npm', ['run', 'dev'], {
         cwd: MONITOR_DIR,
         stdio: 'inherit',
