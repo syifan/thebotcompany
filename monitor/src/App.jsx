@@ -47,7 +47,7 @@ function App() {
   const [agents, setAgents] = useState({ workers: [], managers: [] })
   const [config, setConfig] = useState({ config: null, raw: '' })
   const [configForm, setConfigForm] = useState({
-    cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-opus-4-5',
+    cycleIntervalMs: 1800000, agentTimeoutMs: 900000,
     trackerIssue: 1, athenaCycleInterval: 1, apolloCycleInterval: 1, budgetPer24h: 0
   })
   const [configDirty, setConfigDirty] = useState(false)
@@ -112,7 +112,6 @@ function App() {
         setConfigForm({
           cycleIntervalMs: configData.config.cycleIntervalMs ?? 1800000,
           agentTimeoutMs: configData.config.agentTimeoutMs ?? 900000,
-          model: configData.config.model || 'claude-opus-4-5',
           trackerIssue: configData.config.trackerIssue ?? 1,
           athenaCycleInterval: configData.config.athenaCycleInterval ?? 1,
           apolloCycleInterval: configData.config.apolloCycleInterval ?? 1,
@@ -145,7 +144,6 @@ function App() {
       const yaml = `# ${selectedProject.id} - Orchestrator Configuration
 cycleIntervalMs: ${configForm.cycleIntervalMs}
 agentTimeoutMs: ${configForm.agentTimeoutMs}
-model: ${configForm.model}
 trackerIssue: ${configForm.trackerIssue}
 athenaCycleInterval: ${configForm.athenaCycleInterval}
 apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
@@ -175,7 +173,6 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
       setConfigForm({
         cycleIntervalMs: config.config.cycleIntervalMs ?? 1800000,
         agentTimeoutMs: config.config.agentTimeoutMs ?? 900000,
-        model: config.config.model || 'claude-opus-4-5',
         trackerIssue: config.config.trackerIssue ?? 1,
         athenaCycleInterval: config.config.athenaCycleInterval ?? 1,
         apolloCycleInterval: config.config.apolloCycleInterval ?? 1,
@@ -866,12 +863,6 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       <label className="text-neutral-600">Timeout</label>
                       <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.agentTimeoutMs} onChange={(e) => updateConfigField('agentTimeoutMs', Number(e.target.value))}>
                         <option value={300000}>5m</option><option value={600000}>10m</option><option value={900000}>15m</option><option value={1800000}>30m</option><option value={3600000}>1h</option><option value={7200000}>2h</option><option value={14400000}>4h</option><option value={0}>Never</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-neutral-600">Model</label>
-                      <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.model} onChange={(e) => updateConfigField('model', e.target.value)}>
-                        <option value="claude-sonnet-4-20250514">Sonnet 4</option><option value="claude-opus-4-5">Opus 4.5</option><option value="claude-opus-4-6">Opus 4.6</option>
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
