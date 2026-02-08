@@ -260,7 +260,11 @@ class ProjectRunner {
     lastResponse = getLastBlock(responseLogPath);
     lastRawOutput = getLastBlock(rawLogPath);
     
-    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput };
+    // Extract model from frontmatter
+    const modelMatch = skill.match(/^model:\s*(.+)$/m);
+    const model = modelMatch ? modelMatch[1].trim() : null;
+    
+    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model };
   }
 
   getLogs(lines = 50) {
@@ -1322,6 +1326,55 @@ const server = http.createServer(async (req, res) => {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(details));
+      return;
+    }
+
+    // PATCH /api/projects/:id/agents/:name - Update agent model
+    if (req.method === 'PATCH' && subPath.startsWith('agents/') && subPath.split('/')[1]) {
+      const agentName = subPath.split('/')[1];
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const { model } = JSON.parse(body);
+          if (!model) throw new Error('Missing model');
+          
+          // Find skill file
+          const workersDir = path.join(runner.agentDir, 'workers');
+          const managersDir = path.join(ROOT, 'agent', 'managers');
+          let skillPath = path.join(workersDir, `${agentName}.md`);
+          if (!fs.existsSync(skillPath)) {
+            skillPath = path.join(managersDir, `${agentName}.md`);
+          }
+          if (!fs.existsSync(skillPath)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Agent not found' }));
+            return;
+          }
+          
+          // Update model in frontmatter
+          let content = fs.readFileSync(skillPath, 'utf-8');
+          if (content.startsWith('---')) {
+            // Has frontmatter - update model line
+            content = content.replace(/^(---[\s\S]*?)model:\s*.+$/m, `$1model: ${model}`);
+            if (!content.match(/^model:/m)) {
+              // No model line, add it after ---
+              content = content.replace(/^---\n/, `---\nmodel: ${model}\n`);
+            }
+          } else {
+            // No frontmatter - add it
+            content = `---\nmodel: ${model}\n---\n${content}`;
+          }
+          
+          fs.writeFileSync(skillPath, content);
+          
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
       return;
     }
 

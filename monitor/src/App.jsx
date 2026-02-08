@@ -1245,6 +1245,35 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             </div>
           ) : agentModal.data ? (
             <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm text-neutral-600">Model</h3>
+                <select
+                  className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={agentModal.data.model || 'claude-sonnet-4-20250514'}
+                  onChange={async (e) => {
+                    const newModel = e.target.value;
+                    try {
+                      const res = await fetch(projectApi(`/agents/${agentModal.agent}`), {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: newModel })
+                      });
+                      if (res.ok) {
+                        setAgentModal(prev => ({
+                          ...prev,
+                          data: { ...prev.data, model: newModel }
+                        }));
+                      }
+                    } catch (err) {
+                      console.error('Failed to update model:', err);
+                    }
+                  }}
+                >
+                  <option value="claude-opus-4-6">claude-opus-4-6</option>
+                  <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
+                  <option value="claude-haiku-3-5-20241022">claude-haiku-3.5</option>
+                </select>
+              </div>
               <div>
                 <h3 className="font-semibold text-sm text-neutral-600 mb-2">Skill Definition</h3>
                 <div className="bg-neutral-50 rounded p-3 text-sm prose prose-sm max-w-none max-h-64 overflow-y-auto">
