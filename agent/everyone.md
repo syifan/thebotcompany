@@ -101,6 +101,7 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 - **Long-running jobs → GitHub Actions.** Don't run simulations or builds directly. Create workflows that run in CI, then check results next cycle.
 - **Incremental progress is fine.** If a task spans multiple cycles, leave clear notes for your future self.
 - **Always return a response.** Even if incomplete, document what you did and what remains in your final response.
+- **Persist reports and documents.** If you write a report or document that other agents (or your future self) should see, save it in the `reports/` folder in the repository and commit + push it.
 
 ---
 
