@@ -880,9 +880,10 @@ Do not ask questions, just create the issue based on the description provided.`;
       try { everyone = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n'; } catch {}
       skillContent = (everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
 
+      const agentModel = agent.model || config.model || 'claude-sonnet-4-20250514';
       const args = [
         '-p', skillContent,
-        '--model', config.model || 'claude-sonnet-4-20250514',
+        '--model', agentModel,
         '--dangerously-skip-permissions',
         '--output-format', 'json'
       ];
@@ -923,7 +924,11 @@ Do not ask questions, just create the issue based on the description provided.`;
               if (data.type === 'result') {
                 if (data.usage) {
                   const u = data.usage;
-                  cost = ((u.input_tokens * 15) + (u.output_tokens * 75) + (u.cache_read_input_tokens * 1.5)) / 1_000_000;
+                  // Model-aware pricing (per million tokens)
+                  let inputRate = 15, outputRate = 75, cacheRate = 1.5; // opus default
+                  if (agentModel.includes('sonnet')) { inputRate = 3; outputRate = 15; cacheRate = 0.3; }
+                  else if (agentModel.includes('haiku')) { inputRate = 0.80; outputRate = 4; cacheRate = 0.08; }
+                  cost = ((u.input_tokens * inputRate) + (u.output_tokens * outputRate) + (u.cache_read_input_tokens * cacheRate)) / 1_000_000;
                   tokenInfo = ` | tokens: in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens} | cost: $${cost.toFixed(4)}`;
                 }
                 if (data.result) {
