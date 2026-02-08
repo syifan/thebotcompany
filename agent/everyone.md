@@ -85,14 +85,26 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ---
 
-## 6. Active Label
+## 6. Tips
 
-- **Start of cycle:** Add `active:{yourname}` label to tracker issue
-- **End of cycle:** Remove `active:{yourname}` label
+- **Be concise** — get things done.
+- **Pull before working.**
+- **See something, say something** — if you find a problem, raise an issue.
 
 ---
 
-## 7. Response Format
+## 7. Timeout Awareness
+
+**You have a time limit per cycle.** Plan accordingly:
+
+- **Work step by step.** Don't try to do everything at once.
+- **Long-running jobs → GitHub Actions.** Don't run simulations or builds directly. Create workflows that run in CI, then check results next cycle.
+- **Incremental progress is fine.** If a task spans multiple cycles, leave clear notes for your future self.
+- **Always return a response.** Even if incomplete, document what you did and what remains in your final response.
+
+---
+
+## 8. Response Format
 
 At the end of your cycle, your final response should follow this format:
 
@@ -105,22 +117,3 @@ At the end of your cycle, your final response should follow this format:
 ```
 
 The orchestrator will automatically post this to the tracker issue.
-
----
-
-## 8. Tips
-
-- **Be concise** — get things done.
-- **Pull before working.**
-- **See something, say something** — if you find a problem, raise an issue.
-
----
-
-## 9. Timeout Awareness
-
-**You have a time limit per cycle.** Plan accordingly:
-
-- **Work step by step.** Don't try to do everything at once.
-- **Long-running jobs → GitHub Actions.** Don't run simulations or builds directly. Create workflows that run in CI, then check results next cycle.
-- **Incremental progress is fine.** If a task spans multiple cycles, leave clear notes for your future self.
-- **Always return a response.** Even if incomplete, document what you did and what remains in your final response.
