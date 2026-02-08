@@ -158,7 +158,15 @@ class ProjectRunner {
       const match = content.match(/^model:\s*(.+)$/m);
       if (!match) return null;
       const model = match[1].trim();
-      // Shorten common model names
+      // Shorten common model names, keep version
+      // e.g., "claude-opus-4-6" -> "opus 4.6", "claude-sonnet-4-20250514" -> "sonnet 4"
+      const versionMatch = model.match(/(opus|sonnet|haiku)-(\d+)(?:-(\d+))?/i);
+      if (versionMatch) {
+        const name = versionMatch[1].toLowerCase();
+        const major = versionMatch[2];
+        const minor = versionMatch[3];
+        return minor && minor.length <= 2 ? `${name} ${major}.${minor}` : `${name} ${major}`;
+      }
       if (model.includes('opus')) return 'opus';
       if (model.includes('sonnet')) return 'sonnet';
       if (model.includes('haiku')) return 'haiku';
