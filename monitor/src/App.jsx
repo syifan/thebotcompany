@@ -483,13 +483,15 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     return (
       <div className="min-h-screen bg-neutral-50 p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-neutral-800">TheBotCompany</h1>
-              <p className="text-neutral-500 mt-1">Multi-project AI Agent Orchestrator</p>
-            </div>
-            <div className="text-sm text-neutral-400">
-              Uptime: {Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m
+          <div className="mb-6 sm:mb-8">
+            <div className="flex items-start sm:items-center justify-between gap-2">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800">TheBotCompany</h1>
+                <p className="text-neutral-500 text-sm mt-1 hidden sm:block">Multi-project AI Agent Orchestrator</p>
+              </div>
+              <div className="text-xs sm:text-sm text-neutral-400 shrink-0">
+                {Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m
+              </div>
             </div>
           </div>
 
@@ -498,37 +500,41 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             {projects.map(project => (
               <Card key={project.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => selectProject(project)}>
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center">
-                        <Folder className="w-6 h-6 text-white" />
+                  {/* Mobile: Stack vertically. Desktop: Row */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    {/* Left: Icon + Title */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center shrink-0">
+                        <Folder className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                       </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-neutral-800">{project.id}</h3>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-base sm:text-lg font-semibold text-neutral-800 truncate">{project.id}</h3>
                         {project.repo && (
                           <a href={`https://github.com/${project.repo}`} target="_blank" rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="text-sm text-blue-500 hover:underline">
-                            github.com/{project.repo}
+                            className="text-xs sm:text-sm text-blue-500 hover:underline truncate block">
+                            {project.repo}
                           </a>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
+                    
+                    {/* Right: Status + Actions */}
+                    <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
+                      <div className="text-left sm:text-right">
                         <Badge variant={project.paused ? 'warning' : project.running ? 'success' : project.sleeping ? 'secondary' : 'destructive'}>
                           {project.paused ? 'Paused' : project.running ? (project.currentAgent || 'Running') : project.sleeping ? 'Sleeping' : 'Stopped'}
                         </Badge>
                         <p className="text-xs text-neutral-400 mt-1">Cycle {project.cycleCount}</p>
                         {project.cost && project.cost.totalCost > 0 && (
-                          <p className="text-xs text-neutral-500 mt-0.5">${project.cost.totalCost.toFixed(2)} total · ${project.cost.last24hCost.toFixed(2)} / 24h</p>
+                          <p className="text-xs text-neutral-500 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
                         )}
                       </div>
                       <Button 
                         variant="ghost" 
                         size="sm" 
                         onClick={(e) => { e.stopPropagation(); removeProject(project.id) }}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
