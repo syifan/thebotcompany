@@ -886,6 +886,22 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </div>
                     )}
                     <div className="flex justify-between items-center">
+                      <span className="text-neutral-600">Last Cycle</span>
+                      <span className="text-sm font-mono">
+                        {selectedProject.cost?.lastCycleDuration 
+                          ? `${Math.floor(selectedProject.cost.lastCycleDuration / 60000)}m ${Math.floor((selectedProject.cost.lastCycleDuration % 60000) / 1000)}s`
+                          : '--'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-600">Avg Cycle</span>
+                      <span className="text-sm font-mono">
+                        {selectedProject.cost?.avgCycleDuration 
+                          ? `${Math.floor(selectedProject.cost.avgCycleDuration / 60000)}m ${Math.floor((selectedProject.cost.avgCycleDuration % 60000) / 1000)}s`
+                          : '--'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
                       <span className="text-neutral-600">Uptime</span>
                       <span className="text-sm font-mono">{Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m</span>
                     </div>

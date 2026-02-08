@@ -273,17 +273,17 @@ class ProjectRunner {
   getCostSummary() {
     const csvPath = path.join(this.agentDir, 'cost.csv');
     if (!fs.existsSync(csvPath)) {
-      return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, agents: {} };
+      return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, lastCycleDuration: 0, avgCycleDuration: 0, agents: {} };
     }
     try {
       const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(l => l.trim());
-      if (lines.length <= 1) return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, agents: {} };
+      if (lines.length <= 1) return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, lastCycleDuration: 0, avgCycleDuration: 0, agents: {} };
 
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
       let totalCost = 0;
       let last24hCost = 0;
       const agents = {};
-      const cycleCosts = new Map(); // cycle -> total cost
+      const cycleData = new Map(); // cycle -> { cost, duration }
 
       for (let i = 1; i < lines.length; i++) {
         const parts = lines[i].split(',');
@@ -292,13 +292,19 @@ class ProjectRunner {
         const cycle = parseInt(parts[1]);
         const agentName = parts[2];
         const cost = parseFloat(parts[3]);
+        const duration = parts.length >= 5 ? parseInt(parts[4]) : 0;
         if (isNaN(cost)) continue;
 
         totalCost += cost;
         
-        // Track cycle costs
+        // Track cycle costs and durations
         if (!isNaN(cycle)) {
-          cycleCosts.set(cycle, (cycleCosts.get(cycle) || 0) + cost);
+          if (!cycleData.has(cycle)) {
+            cycleData.set(cycle, { cost: 0, duration: 0 });
+          }
+          const data = cycleData.get(cycle);
+          data.cost += cost;
+          data.duration += duration; // Sum agent durations for cycle total
         }
         
         if (!agents[agentName]) {
@@ -321,19 +327,30 @@ class ProjectRunner {
           : 0;
       }
 
-      // Compute last cycle cost and average cycle cost
+      // Compute last/avg cycle cost and duration
       let lastCycleCost = 0;
       let avgCycleCost = 0;
-      if (cycleCosts.size > 0) {
-        const cycles = Array.from(cycleCosts.keys()).sort((a, b) => a - b);
-        lastCycleCost = cycleCosts.get(cycles[cycles.length - 1]) || 0;
-        const totalCycleCost = Array.from(cycleCosts.values()).reduce((a, b) => a + b, 0);
-        avgCycleCost = totalCycleCost / cycleCosts.size;
+      let lastCycleDuration = 0;
+      let avgCycleDuration = 0;
+      if (cycleData.size > 0) {
+        const cycles = Array.from(cycleData.keys()).sort((a, b) => a - b);
+        const lastData = cycleData.get(cycles[cycles.length - 1]);
+        lastCycleCost = lastData?.cost || 0;
+        lastCycleDuration = lastData?.duration || 0;
+        
+        let totalCycleCost = 0;
+        let totalCycleDuration = 0;
+        for (const data of cycleData.values()) {
+          totalCycleCost += data.cost;
+          totalCycleDuration += data.duration;
+        }
+        avgCycleCost = totalCycleCost / cycleData.size;
+        avgCycleDuration = totalCycleDuration / cycleData.size;
       }
 
-      return { totalCost, last24hCost, lastCycleCost, avgCycleCost, agents };
+      return { totalCost, last24hCost, lastCycleCost, avgCycleCost, lastCycleDuration, avgCycleDuration, agents };
     } catch {
-      return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, agents: {} };
+      return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, lastCycleDuration: 0, avgCycleDuration: 0, agents: {} };
     }
   }
 
