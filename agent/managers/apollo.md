@@ -26,6 +26,8 @@ For each agent in `{project_dir}/workers/`:
 - Assess their effectiveness
 - Identify areas for improvement
 
+**Important:** These are AI agents, not humans. They are not lazy. If an agent is not responding or producing output, it's almost certainly a system problem (orchestrator issue, API error, stuck process) — not the agent's fault. Do not blame agents for lack of response; instead, flag it as a potential system issue.
+
 ### 4. Write Evaluations
 
 Write **brief** evaluation to each worker's workspace: `{project_dir}/workspace/{teammate}/evaluation.md`:
