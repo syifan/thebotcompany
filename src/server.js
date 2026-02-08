@@ -178,7 +178,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
-          managers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, fast: /^fast:\s*true$/m.test(content), isManager: true });
+          managers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: true });
         }
       }
     }
@@ -188,7 +188,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
-          workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, fast: /^fast:\s*true$/m.test(content), isManager: false });
+          workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: false });
         }
       }
     }
@@ -264,8 +264,7 @@ class ProjectRunner {
     const modelMatch = skill.match(/^model:\s*(.+)$/m);
     const model = modelMatch ? modelMatch[1].trim() : null;
     
-    const fast = /^fast:\s*true$/m.test(skill);
-    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model, fast };
+    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model };
   }
 
   getLogs(lines = 50) {
@@ -901,9 +900,6 @@ Do not ask questions, just create the issue based on the description provided.`;
         '--dangerously-skip-permissions',
         '--output-format', 'json'
       ];
-      if (agent.fast) {
-        args.push('--settings', JSON.stringify({ fastMode: true }));
-      }
 
       this.currentAgentProcess = spawn('claude', args, {
         cwd: this.path,
@@ -1381,8 +1377,8 @@ const server = http.createServer(async (req, res) => {
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
         try {
-          const { model, fast } = JSON.parse(body);
-          if (!model && fast === undefined) throw new Error('Missing model or fast');
+          const { model } = JSON.parse(body);
+          if (!model) throw new Error('Missing model');
           
           // Find skill file
           const workersDir = path.join(runner.agentDir, 'workers');
@@ -1406,15 +1402,8 @@ const server = http.createServer(async (req, res) => {
                 content = content.replace(/^---\n/, `---\nmodel: ${model}\n`);
               }
             }
-            if (fast !== undefined) {
-              if (content.match(/^fast:\s*.+$/m)) {
-                content = content.replace(/^fast:\s*.+$/m, `fast: ${fast}`);
-              } else {
-                content = content.replace(/^---\n/, `---\nfast: ${fast}\n`);
-              }
-            }
           } else {
-            content = `---\n${model ? `model: ${model}\n` : ''}${fast !== undefined ? `fast: ${fast}\n` : ''}---\n${content}`;
+            content = `---\n${model ? `model: ${model}\n` : ''}---\n${content}`;
           }
           
           fs.writeFileSync(skillPath, content);

@@ -1,6 +1,5 @@
 ---
 model: claude-sonnet-4-20250514
-fast: false
 ---
 # Hermes (Project Manager)
 

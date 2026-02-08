@@ -1,6 +1,5 @@
 ---
 model: claude-opus-4-6
-fast: true
 ---
 # Apollo (HR)
 
@@ -92,7 +91,6 @@ Add options in YAML frontmatter at the top of skill files:
 ```yaml
 ---
 model: claude-opus-4-6
-fast: true
 ---
 ```
 

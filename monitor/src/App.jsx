@@ -531,7 +531,6 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           <div className="flex items-center gap-2">
             <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
             {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{agent.model}</span>}
-            {agent.fast && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">↯</span>}
           </div>
           <div className="flex items-center gap-1.5">
             {isActive && runtime !== null && (
@@ -1294,26 +1293,6 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
                   <option value="claude-haiku-3-5-20241022">claude-haiku-3.5</option>
                 </select>
-              </div>
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm text-neutral-600">Fast Mode</h3>
-                <button
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium ${agentModal.data.fast ? 'bg-amber-100 text-amber-700' : 'bg-neutral-100 text-neutral-500'}`}
-                  onClick={async () => {
-                    const newFast = !agentModal.data.fast;
-                    try {
-                      const res = await fetch(projectApi(`/agents/${agentModal.agent}`), {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ fast: newFast })
-                      });
-                      if (res.ok) {
-                        setAgentModal(prev => ({ ...prev, data: { ...prev.data, fast: newFast } }));
-                        fetchProjectData();
-                      }
-                    } catch (err) { console.error('Failed to update fast mode:', err); }
-                  }}
-                >{agentModal.data.fast ? '↯ ON' : 'OFF'}</button>
               </div>
               <div>
                 <h3 className="font-semibold text-sm text-neutral-600 mb-2">Skill Definition</h3>
