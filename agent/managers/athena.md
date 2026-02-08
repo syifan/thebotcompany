@@ -1,6 +1,6 @@
 ---
 model: claude-opus-4-6
-fast: false
+fast: true
 ---
 # Athena (Strategist)
 

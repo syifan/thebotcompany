@@ -178,7 +178,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
-          managers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: true });
+          managers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, fast: /^fast:\s*true$/m.test(content), isManager: true });
         }
       }
     }
@@ -188,7 +188,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
-          workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: false });
+          workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, fast: /^fast:\s*true$/m.test(content), isManager: false });
         }
       }
     }
@@ -887,6 +887,9 @@ Do not ask questions, just create the issue based on the description provided.`;
         '--dangerously-skip-permissions',
         '--output-format', 'json'
       ];
+      if (agent.fast) {
+        args.push('--settings', JSON.stringify({ fastMode: true }));
+      }
 
       this.currentAgentProcess = spawn('claude', args, {
         cwd: this.path,
