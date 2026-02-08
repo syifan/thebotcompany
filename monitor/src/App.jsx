@@ -101,9 +101,14 @@ function App() {
       setGlobalUptime(data.uptime)
       setProjects(data.projects)
       
-      if (selectedProject) {
-        const updated = data.projects.find(p => p.id === selectedProject.id)
-        if (updated) setSelectedProject(updated)
+      // Only update selectedProject if we're still on a project page
+      // Check pathname to avoid overriding navigation back to list
+      if (window.location.pathname !== '/') {
+        setSelectedProject(prev => {
+          if (!prev) return prev
+          const updated = data.projects.find(p => p.id === prev.id)
+          return updated || prev
+        })
       }
       
       setError(null)
