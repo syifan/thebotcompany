@@ -92,9 +92,10 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ---
 
-## 7. End of Cycle
+## 7. Response Format
 
-Comment on tracker:
+At the end of your cycle, your final response should follow this format:
+
 ```
 # [AgentName]
 
@@ -102,6 +103,8 @@ Comment on tracker:
 
 **Actions:** (what you did)
 ```
+
+The orchestrator will automatically post this to the tracker issue.
 
 ---
 
@@ -118,6 +121,6 @@ Comment on tracker:
 **You have a time limit per cycle.** Plan accordingly:
 
 - **Work step by step.** Don't try to do everything at once.
-- **Write a tracker comment before finishing.** Even if incomplete, document what you did and what remains.
 - **Long-running jobs → GitHub Actions.** Don't run simulations or builds directly. Create workflows that run in CI, then check results next cycle.
 - **Incremental progress is fine.** If a task spans multiple cycles, leave clear notes for your future self.
+- **Always return a response.** Even if incomplete, document what you did and what remains in your final response.

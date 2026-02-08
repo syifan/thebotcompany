@@ -944,19 +944,22 @@ Do not ask questions, just create the issue based on the description provided.`;
           } catch {}
         }
 
-        // Post tracker comment if agent was killed or had error
-        if (this.repo && config.trackerIssue && (killedByTimeout || code !== 0)) {
+        // Post to tracker
+        if (this.repo && config.trackerIssue) {
           try {
-            let errorType, errorMsg;
-            if (killedByTimeout) {
-              errorType = '⏰ Timeout';
-              errorMsg = `Agent **${agent.name}** was killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`;
-            } else {
-              errorType = '❌ Error';
-              errorMsg = `Agent **${agent.name}** exited with code ${code}.`;
-            }
-            
-            const comment = `## [Orchestrator] ${errorType}
+            let comment;
+            if (killedByTimeout || code !== 0) {
+              // Error/timeout message
+              let errorType, errorMsg;
+              if (killedByTimeout) {
+                errorType = '⏰ Timeout';
+                errorMsg = `Agent **${agent.name}** was killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`;
+              } else {
+                errorType = '❌ Error';
+                errorMsg = `Agent **${agent.name}** exited with code ${code}.`;
+              }
+              
+              comment = `## [Orchestrator] ${errorType}
 
 ${errorMsg}
 
@@ -965,15 +968,21 @@ ${errorMsg}
 - **Exit code:** ${code}
 
 This is an automated message from the orchestrator.`;
-
-            execSync(`gh issue comment ${config.trackerIssue} --body ${JSON.stringify(comment)}`, {
-              cwd: this.path,
-              encoding: 'utf-8',
-              timeout: 30000
-            });
-            log(`Posted error comment to tracker #${config.trackerIssue}`, this.id);
+            } else if (resultText) {
+              // Post agent's response
+              comment = resultText;
+            }
+            
+            if (comment) {
+              execSync(`gh issue comment ${config.trackerIssue} --body ${JSON.stringify(comment)}`, {
+                cwd: this.path,
+                encoding: 'utf-8',
+                timeout: 30000
+              });
+              log(`Posted comment to tracker #${config.trackerIssue}`, this.id);
+            }
           } catch (e) {
-            log(`Failed to post error comment: ${e.message}`, this.id);
+            log(`Failed to post tracker comment: ${e.message}`, this.id);
           }
         }
 
