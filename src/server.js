@@ -129,7 +129,7 @@ class ProjectRunner {
       const raw = fs.readFileSync(this.configPath, 'utf-8');
       return yaml.load(raw) || {};
     } catch (e) {
-      return { cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-sonnet-4-20250514' };
+      return { cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-sonnet-4-20250514', budgetPer24h: 0 };
     }
   }
 
@@ -171,6 +171,13 @@ class ProjectRunner {
       }
     }
     
+    const costSummary = this.getCostSummary();
+    for (const agent of [...managers, ...workers]) {
+      const agentCost = costSummary.agents[agent.name];
+      agent.totalCost = agentCost ? agentCost.totalCost : 0;
+      agent.last24hCost = agentCost ? agentCost.last24hCost : 0;
+    }
+
     return { managers, workers };
   }
 
@@ -214,6 +221,188 @@ class ProjectRunner {
     if (!fs.existsSync(logPath)) return [];
     const content = fs.readFileSync(logPath, 'utf-8');
     return content.split('\n').filter(l => l.trim()).slice(-lines);
+  }
+
+  getCostSummary() {
+    const csvPath = path.join(this.agentDir, 'cost.csv');
+    if (!fs.existsSync(csvPath)) {
+      return { totalCost: 0, last24hCost: 0, agents: {} };
+    }
+    try {
+      const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(l => l.trim());
+      if (lines.length <= 1) return { totalCost: 0, last24hCost: 0, agents: {} };
+
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      let totalCost = 0;
+      let last24hCost = 0;
+      const agents = {};
+
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',');
+        if (parts.length < 4) continue;
+        const time = new Date(parts[0]).getTime();
+        const agentName = parts[2];
+        const cost = parseFloat(parts[3]);
+        if (isNaN(cost)) continue;
+
+        totalCost += cost;
+        if (!agents[agentName]) agents[agentName] = { totalCost: 0, last24hCost: 0 };
+        agents[agentName].totalCost += cost;
+
+        if (time >= cutoff) {
+          last24hCost += cost;
+          agents[agentName].last24hCost += cost;
+        }
+      }
+
+      return { totalCost, last24hCost, agents };
+    } catch {
+      return { totalCost: 0, last24hCost: 0, agents: {} };
+    }
+  }
+
+  computeSleepInterval() {
+    const config = this.loadConfig();
+    const budgetPer24h = config.budgetPer24h || 0;
+    const MIN_SLEEP = 10000;       // 10s
+    const MAX_SLEEP = 7200000;     // 2h
+
+    // If no budget set, fall back to fixed interval
+    if (budgetPer24h <= 0) {
+      return Math.max(config.cycleIntervalMs || 0, MIN_SLEEP);
+    }
+
+    const minFloor = config.cycleIntervalMs > 0 ? config.cycleIntervalMs : MIN_SLEEP;
+
+    // Parse cost.csv to get per-cycle data
+    const csvPath = path.join(this.agentDir, 'cost.csv');
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    let cycleCosts = [];    // { cycle, totalCost, totalDuration }
+    let spent24h = 0;
+    let oldestTime24h = Infinity;
+
+    if (fs.existsSync(csvPath)) {
+      try {
+        const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(l => l.trim());
+        const cycleMap = new Map(); // cycle -> { cost, duration }
+
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(',');
+          if (parts.length < 4) continue;
+          const time = new Date(parts[0]).getTime();
+          const cycle = parseInt(parts[1]);
+          const cost = parseFloat(parts[3]);
+          const duration = parts.length >= 5 ? parseInt(parts[4]) : 0;
+          if (isNaN(cost)) continue;
+
+          // Track 24h spending (raw cost always counts)
+          if (time >= cutoff) {
+            spent24h += cost;
+            if (time < oldestTime24h) oldestTime24h = time;
+          }
+
+          // Group by cycle for EMA
+          if (!cycleMap.has(cycle)) cycleMap.set(cycle, { cost: 0, duration: 0 });
+          const entry = cycleMap.get(cycle);
+          entry.cost += cost;
+          entry.duration = Math.max(entry.duration, duration); // agents run sequentially, use max as proxy
+        }
+
+        // Sort cycles by number
+        cycleCosts = Array.from(cycleMap.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([, v]) => v);
+      } catch {}
+    }
+
+    const remaining = budgetPer24h - spent24h;
+
+    // Budget exhaustion: sleep until oldest entry rolls off
+    if (remaining <= 0) {
+      if (oldestTime24h < Infinity) {
+        const rolloffAt = oldestTime24h + 24 * 60 * 60 * 1000;
+        const waitMs = Math.max(rolloffAt - Date.now(), MIN_SLEEP);
+        log(`Budget exhausted ($${spent24h.toFixed(2)}/$${budgetPer24h}), sleeping until oldest entry rolls off`, this.id);
+        return Math.min(waitMs, MAX_SLEEP);
+      }
+      log(`Budget exhausted, sleeping max`, this.id);
+      return MAX_SLEEP;
+    }
+
+    const n = cycleCosts.length;
+
+    // Cold start: no historical data
+    if (n === 0) {
+      const { managers, workers } = this.loadAgents();
+      const agentCount = managers.length + workers.length || 3;
+      const model = (config.model || '').toLowerCase();
+      let perAgentCost;
+      if (model.includes('opus')) perAgentCost = 2.50;
+      else if (model.includes('haiku')) perAgentCost = 0.20;
+      else perAgentCost = 1.50; // sonnet default
+
+      const estimatedCycleCost = perAgentCost * agentCount;
+      const agentTimeout = config.agentTimeoutMs > 0 ? config.agentTimeoutMs : 900000;
+      const estimatedCycleDuration = (agentTimeout / 2) * agentCount;
+
+      const nAffordable = Math.floor(remaining / (estimatedCycleCost * 1.5)); // k=1.5 for cold start
+      if (nAffordable <= 0) return MAX_SLEEP;
+      const sleepMs = (86400000 / nAffordable) - estimatedCycleDuration;
+      log(`Cold start: est cycle cost $${estimatedCycleCost.toFixed(2)}, affordable=${nAffordable}, sleep=${Math.round(sleepMs / 1000)}s`, this.id);
+      return Math.max(minFloor, Math.min(sleepMs, MAX_SLEEP));
+    }
+
+    // Compute EMA of cycle costs and durations (alpha=0.3) with outlier dampening
+    const alpha = 0.3;
+    let emaCost = cycleCosts[0].cost;
+    let emaDuration = cycleCosts[0].duration;
+
+    for (let i = 1; i < n; i++) {
+      let cycleCost = cycleCosts[i].cost;
+
+      // Outlier dampening: if cost > 3x EMA and we have >= 3 data points, clamp to 2x EMA
+      if (i >= 3 && cycleCost > 3 * emaCost) {
+        cycleCost = 2 * emaCost;
+      }
+
+      emaCost = alpha * cycleCost + (1 - alpha) * emaCost;
+      emaDuration = alpha * cycleCosts[i].duration + (1 - alpha) * emaDuration;
+    }
+
+    // Conservatism factor: k = 1.0 + 0.5 / sqrt(n)
+    const k = 1.0 + 0.5 / Math.sqrt(n);
+
+    const nAffordable = Math.floor(remaining / (emaCost * k));
+    if (nAffordable <= 0) {
+      log(`Budget nearly exhausted (remaining=$${remaining.toFixed(2)}, est/cycle=$${emaCost.toFixed(2)}), sleeping max`, this.id);
+      return MAX_SLEEP;
+    }
+
+    const sleepMs = (86400000 / nAffordable) - emaDuration;
+    log(`Budget: $${spent24h.toFixed(2)}/$${budgetPer24h} spent, est/cycle=$${emaCost.toFixed(2)}, k=${k.toFixed(2)}, affordable=${nAffordable}, sleep=${Math.round(Math.max(minFloor, Math.min(sleepMs, MAX_SLEEP)) / 1000)}s`, this.id);
+    return Math.max(minFloor, Math.min(sleepMs, MAX_SLEEP));
+  }
+
+  getBudgetStatus() {
+    const config = this.loadConfig();
+    const budgetPer24h = config.budgetPer24h || 0;
+    if (budgetPer24h <= 0) return null;
+
+    const costSummary = this.getCostSummary();
+    const spent24h = costSummary.last24hCost;
+    const remaining24h = budgetPer24h - spent24h;
+    const percentUsed = budgetPer24h > 0 ? (spent24h / budgetPer24h) * 100 : 0;
+    const exhausted = remaining24h <= 0;
+    const computedSleepMs = this.computeSleepInterval();
+
+    return {
+      budgetPer24h,
+      spent24h,
+      remaining24h,
+      percentUsed,
+      computedSleepMs,
+      exhausted
+    };
   }
 
   async getComments(author, page = 1, perPage = 20) {
@@ -305,13 +494,15 @@ class ProjectRunner {
       paused: this.isPaused,
       cycleCount: this.cycleCount,
       currentAgent: this.currentAgent,
-      currentAgentRuntime: this.currentAgentStartTime 
-        ? Math.floor((Date.now() - this.currentAgentStartTime) / 1000) 
+      currentAgentRuntime: this.currentAgentStartTime
+        ? Math.floor((Date.now() - this.currentAgentStartTime) / 1000)
         : null,
       sleeping: this.sleepUntil !== null,
       sleepUntil: this.sleepUntil,
       config: this.loadConfig(),
-      agents: this.loadAgents()
+      agents: this.loadAgents(),
+      cost: this.getCostSummary(),
+      budget: this.getBudgetStatus()
     };
   }
 
@@ -421,8 +612,8 @@ class ProjectRunner {
         await this.runAgent(agent, config);
       }
 
-      // Always sleep between cycles (minimum 10s to avoid blocking the event loop)
-      const sleepMs = Math.max(config.cycleIntervalMs || 0, 10000);
+      // Compute sleep: budget-derived or fixed interval
+      const sleepMs = this.computeSleepInterval();
       if (this.running) {
         log(`Sleeping ${sleepMs / 1000}s...`, this.id);
         this.wakeNow = false;
@@ -491,6 +682,7 @@ class ProjectRunner {
         if (timeout) clearTimeout(timeout);
         
         let tokenInfo = '';
+        let cost;
         try {
           const lines = stdout.trim().split('\n');
           for (const line of lines) {
@@ -498,12 +690,24 @@ class ProjectRunner {
               const data = JSON.parse(line);
               if (data.type === 'result' && data.usage) {
                 const u = data.usage;
-                const cost = ((u.input_tokens * 15) + (u.output_tokens * 75) + (u.cache_read_input_tokens * 1.5)) / 1_000_000;
+                cost = ((u.input_tokens * 15) + (u.output_tokens * 75) + (u.cache_read_input_tokens * 1.5)) / 1_000_000;
                 tokenInfo = ` | tokens: in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens} | cost: $${cost.toFixed(4)}`;
               }
             }
           }
         } catch {}
+
+        // Append cost row to cost.csv
+        if (cost !== undefined) {
+          try {
+            const csvPath = path.join(this.agentDir, 'cost.csv');
+            if (!fs.existsSync(csvPath)) {
+              fs.writeFileSync(csvPath, 'time,cycle,agent,cost,durationMs\n');
+            }
+            const durationMs = Date.now() - this.currentAgentStartTime;
+            fs.appendFileSync(csvPath, `${new Date().toISOString()},${this.cycleCount},${agent.name},${cost.toFixed(6)},${durationMs}\n`);
+          } catch {}
+        }
 
         log(`${agent.name} done (code ${code})${tokenInfo}`, this.id);
         this.currentAgent = null;

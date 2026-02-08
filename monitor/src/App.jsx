@@ -48,7 +48,7 @@ function App() {
   const [config, setConfig] = useState({ config: null, raw: '' })
   const [configForm, setConfigForm] = useState({
     cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-opus-4-5',
-    trackerIssue: 1, athenaCycleInterval: 1, apolloCycleInterval: 1
+    trackerIssue: 1, athenaCycleInterval: 1, apolloCycleInterval: 1, budgetPer24h: 0
   })
   const [configDirty, setConfigDirty] = useState(false)
   const configDirtyRef = useRef(false)
@@ -115,7 +115,8 @@ function App() {
           model: configData.config.model || 'claude-opus-4-5',
           trackerIssue: configData.config.trackerIssue ?? 1,
           athenaCycleInterval: configData.config.athenaCycleInterval ?? 1,
-          apolloCycleInterval: configData.config.apolloCycleInterval ?? 1
+          apolloCycleInterval: configData.config.apolloCycleInterval ?? 1,
+          budgetPer24h: configData.config.budgetPer24h ?? 0
         })
       }
       
@@ -140,13 +141,14 @@ function App() {
     setConfigSaving(true)
     setConfigError(null)
     try {
+      const budgetLine = configForm.budgetPer24h > 0 ? `\nbudgetPer24h: ${configForm.budgetPer24h}` : ''
       const yaml = `# ${selectedProject.id} - Orchestrator Configuration
 cycleIntervalMs: ${configForm.cycleIntervalMs}
 agentTimeoutMs: ${configForm.agentTimeoutMs}
 model: ${configForm.model}
 trackerIssue: ${configForm.trackerIssue}
 athenaCycleInterval: ${configForm.athenaCycleInterval}
-apolloCycleInterval: ${configForm.apolloCycleInterval}
+apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
 `
       const res = await fetch(projectApi('/config'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -176,7 +178,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
         model: config.config.model || 'claude-opus-4-5',
         trackerIssue: config.config.trackerIssue ?? 1,
         athenaCycleInterval: config.config.athenaCycleInterval ?? 1,
-        apolloCycleInterval: config.config.apolloCycleInterval ?? 1
+        apolloCycleInterval: config.config.apolloCycleInterval ?? 1,
+        budgetPer24h: config.config.budgetPer24h ?? 0
       })
     }
     configDirtyRef.current = false
@@ -410,6 +413,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
       fetchProjectData()
       const savedAgent = localStorage.getItem('selectedAgent')
       fetchComments(1, savedAgent, false)
+      const interval = setInterval(() => fetchComments(1, selectedAgent, false), 30000)
+      return () => clearInterval(interval)
     }
   }, [selectedProject?.id])
 
@@ -449,6 +454,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
         <div className="min-w-0 flex-1">
           <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
           {agent.role && <p className="text-xs text-neutral-500 truncate">{agent.role}</p>}
+          {agent.totalCost > 0 && (
+            <p className="text-xs text-neutral-400">${agent.totalCost.toFixed(2)} · ${agent.last24hCost.toFixed(2)} / 24h</p>
+          )}
         </div>
         <div className="flex items-center gap-1.5 ml-2 shrink-0">
           {isActive && runtime !== null && (
@@ -512,6 +520,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
                           {project.paused ? 'Paused' : project.running ? (project.currentAgent || 'Running') : project.sleeping ? 'Sleeping' : 'Stopped'}
                         </Badge>
                         <p className="text-xs text-neutral-400 mt-1">Cycle {project.cycleCount}</p>
+                        {project.cost && project.cost.totalCost > 0 && (
+                          <p className="text-xs text-neutral-500 mt-0.5">${project.cost.totalCost.toFixed(2)} total · ${project.cost.last24hCost.toFixed(2)} / 24h</p>
+                        )}
                       </div>
                       <Button 
                         variant="ghost" 
@@ -689,35 +700,41 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
   return (
     <div className="min-h-screen bg-neutral-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500">
-                <ArrowLeft className="w-4 h-4 mr-1" /> All Projects
-              </Button>
-              <h1 className="text-2xl font-bold text-neutral-800">{selectedProject.id}</h1>
-              {error && <Badge variant="warning">Error: {error}</Badge>}
-            </div>
+          {/* Row 1: Back button + Title */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500 shrink-0 px-2">
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline ml-1">All Projects</span>
+            </Button>
+            <h1 className="text-lg sm:text-2xl font-bold text-neutral-800 truncate">{selectedProject.id}</h1>
+          </div>
+          
+          {/* Row 2: Actions */}
+          <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-neutral-400">{formatTime(lastUpdate)}</span>
               {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium">
+                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-1 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium">
                   GitHub
                 </a>
               )}
               <Button size="sm" variant="warning" onClick={openBootstrapModal}>
-                <RotateCcw className="w-3 h-3 mr-1" />Bootstrap
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden sm:inline ml-1">Bootstrap</span>
               </Button>
             </div>
+            <span className="text-xs text-neutral-400">{formatTime(lastUpdate)}</span>
           </div>
+          
+          {/* Project tabs - horizontal scroll on mobile */}
           {projects.length > 1 && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
               {projects.map(project => (
                 <button
                   key={project.id}
                   onClick={() => selectProject(project)}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
                     selectedProject?.id === project.id
                       ? 'bg-blue-500 text-white'
                       : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
@@ -728,6 +745,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
               ))}
             </div>
           )}
+          
+          {error && <Badge variant="warning">Error: {error}</Badge>}
         </div>
 
         {selectedProject && (
@@ -770,6 +789,38 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
                       <span className="text-neutral-600">Uptime</span>
                       <span className="text-sm font-mono">{Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m</span>
                     </div>
+                    {selectedProject.cost && selectedProject.cost.totalCost > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-600">Cost</span>
+                        <span className="text-sm font-mono">${selectedProject.cost.totalCost.toFixed(2)} total · ${selectedProject.cost.last24hCost.toFixed(2)} / 24h</span>
+                      </div>
+                    )}
+                    {selectedProject.budget && (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-neutral-600">Budget</span>
+                          <span className="text-sm font-mono">
+                            ${selectedProject.budget.spent24h.toFixed(2)} / ${selectedProject.budget.budgetPer24h.toFixed(2)}
+                            <span className="text-neutral-400 ml-1">({selectedProject.budget.percentUsed.toFixed(0)}%)</span>
+                          </span>
+                        </div>
+                        {selectedProject.budget.exhausted && (
+                          <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-medium">
+                            Budget exhausted — cycle paused until spend rolls off
+                          </div>
+                        )}
+                        {!selectedProject.budget.exhausted && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-neutral-600">Computed interval</span>
+                            <span className="text-sm font-mono">
+                              {selectedProject.budget.computedSleepMs >= 60000
+                                ? `${Math.floor(selectedProject.budget.computedSleepMs / 60000)}m ${Math.floor((selectedProject.budget.computedSleepMs % 60000) / 1000)}s`
+                                : `${Math.floor(selectedProject.budget.computedSleepMs / 1000)}s`}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
                     <div className="pt-3 border-t flex flex-wrap gap-2">
                       {selectedProject.paused ? (
                         <Button size="sm" onClick={() => controlAction('resume')} className="flex-1"><Play className="w-3 h-3 mr-1" />Resume</Button>
@@ -816,6 +867,21 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}
                       <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.model} onChange={(e) => updateConfigField('model', e.target.value)}>
                         <option value="claude-sonnet-4-20250514">Sonnet 4</option><option value="claude-opus-4-5">Opus 4.5</option><option value="claude-opus-4-6">Opus 4.6</option>
                       </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-neutral-600">Budget / 24h</label>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-neutral-400">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="w-20 px-2 py-1 bg-neutral-100 border rounded text-sm text-right"
+                          value={configForm.budgetPer24h || ''}
+                          placeholder="off"
+                          onChange={(e) => updateConfigField('budgetPer24h', Number(e.target.value) || 0)}
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardContent>
