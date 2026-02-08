@@ -1038,6 +1038,26 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         </button>
                       </div>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-neutral-600 text-sm">Athena Interval</label>
+                      <select 
+                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        value={configForm.athenaCycleInterval} 
+                        onChange={(e) => updateConfigField('athenaCycleInterval', Number(e.target.value))}
+                      >
+                        <option value={1}>Every cycle</option><option value={2}>Every 2</option><option value={3}>Every 3</option><option value={5}>Every 5</option><option value={10}>Every 10</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-neutral-600 text-sm">Apollo Interval</label>
+                      <select 
+                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        value={configForm.apolloCycleInterval} 
+                        onChange={(e) => updateConfigField('apolloCycleInterval', Number(e.target.value))}
+                      >
+                        <option value={1}>Every cycle</option><option value={2}>Every 2</option><option value={3}>Every 3</option><option value={5}>Every 5</option><option value={10}>Every 10</option>
+                      </select>
+                    </div>
                   </div>
                   {configDirty && (
                     <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100">

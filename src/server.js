@@ -778,7 +778,20 @@ Do not ask questions, just create the issue based on the description provided.`;
 
       const config = this.loadConfig();
       const { managers, workers } = this.loadAgents();
-      const allAgents = [...managers, ...workers];
+      const nextCycle = (this.cycleCount || 0) + 1;
+      
+      // Filter managers by their cycle interval
+      const activeManagers = managers.filter(m => {
+        const interval = config[`${m.name}CycleInterval`] || 1;
+        if (interval <= 1) return true;
+        return nextCycle % interval === 0;
+      });
+      if (activeManagers.length < managers.length) {
+        const skipped = managers.filter(m => !activeManagers.includes(m)).map(m => m.name);
+        log(`Skipping managers this cycle: ${skipped.join(', ')}`, this.id);
+      }
+      
+      const allAgents = [...activeManagers, ...workers];
 
       // Generate a cycle ID based on agent list to detect if agents changed
       const cycleId = allAgents.map(a => a.name).sort().join(',');
