@@ -264,7 +264,8 @@ class ProjectRunner {
     const modelMatch = skill.match(/^model:\s*(.+)$/m);
     const model = modelMatch ? modelMatch[1].trim() : null;
     
-    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model };
+    const fast = /^fast:\s*true$/m.test(skill);
+    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model, fast };
   }
 
   getLogs(lines = 50) {
@@ -1380,8 +1381,8 @@ const server = http.createServer(async (req, res) => {
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
         try {
-          const { model } = JSON.parse(body);
-          if (!model) throw new Error('Missing model');
+          const { model, fast } = JSON.parse(body);
+          if (!model && fast === undefined) throw new Error('Missing model or fast');
           
           // Find skill file
           const workersDir = path.join(runner.agentDir, 'workers');
@@ -1396,18 +1397,24 @@ const server = http.createServer(async (req, res) => {
             return;
           }
           
-          // Update model in frontmatter
+          // Update frontmatter
           let content = fs.readFileSync(skillPath, 'utf-8');
           if (content.startsWith('---')) {
-            // Has frontmatter - update model line
-            content = content.replace(/^(---[\s\S]*?)model:\s*.+$/m, `$1model: ${model}`);
-            if (!content.match(/^model:/m)) {
-              // No model line, add it after ---
-              content = content.replace(/^---\n/, `---\nmodel: ${model}\n`);
+            if (model) {
+              content = content.replace(/^(---[\s\S]*?)model:\s*.+$/m, `$1model: ${model}`);
+              if (!content.match(/^model:/m)) {
+                content = content.replace(/^---\n/, `---\nmodel: ${model}\n`);
+              }
+            }
+            if (fast !== undefined) {
+              if (content.match(/^fast:\s*.+$/m)) {
+                content = content.replace(/^fast:\s*.+$/m, `fast: ${fast}`);
+              } else {
+                content = content.replace(/^---\n/, `---\nfast: ${fast}\n`);
+              }
             }
           } else {
-            // No frontmatter - add it
-            content = `---\nmodel: ${model}\n---\n${content}`;
+            content = `---\n${model ? `model: ${model}\n` : ''}${fast !== undefined ? `fast: ${fast}\n` : ''}---\n${content}`;
           }
           
           fs.writeFileSync(skillPath, content);
