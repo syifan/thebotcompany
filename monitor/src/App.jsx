@@ -1000,17 +1000,22 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     </div>
                     <div className="flex items-center justify-between">
                       <label className="text-neutral-600">Budget / 24h</label>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm text-neutral-400">$</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          className="w-20 px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          value={configForm.budgetPer24h || ''}
-                          placeholder="off"
-                          onChange={(e) => updateConfigField('budgetPer24h', Number(e.target.value) || 0)}
-                        />
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => updateConfigField('budgetPer24h', Math.max(0, (configForm.budgetPer24h || 0) - 20))}
+                          className="px-2 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded-l-md text-sm font-medium text-neutral-600"
+                        >
+                          −
+                        </button>
+                        <div className="px-3 py-1.5 bg-white border-y border-neutral-300 text-sm text-center min-w-[60px]">
+                          {configForm.budgetPer24h ? `$${configForm.budgetPer24h}` : 'off'}
+                        </div>
+                        <button
+                          onClick={() => updateConfigField('budgetPer24h', (configForm.budgetPer24h || 0) + 20)}
+                          className="px-2 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded-r-md text-sm font-medium text-neutral-600"
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                   </div>
