@@ -530,10 +530,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
-            {agent.model && (
-              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{agent.model}</span>
-              {agent.fast && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">↯</span>}
-            )}
+            {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{agent.model}</span>}
+            {agent.fast && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">↯</span>}
           </div>
           <div className="flex items-center gap-1.5">
             {isActive && runtime !== null && (
