@@ -177,6 +177,9 @@ class ProjectRunner {
       const agentCost = costSummary.agents[agent.name];
       agent.totalCost = agentCost ? agentCost.totalCost : 0;
       agent.last24hCost = agentCost ? agentCost.last24hCost : 0;
+      agent.lastCallCost = agentCost ? agentCost.lastCallCost : 0;
+      agent.avgCallCost = agentCost ? agentCost.avgCallCost : 0;
+      agent.callCount = agentCost ? agentCost.callCount : 0;
     }
 
     return { managers, workers };
@@ -247,13 +250,24 @@ class ProjectRunner {
         if (isNaN(cost)) continue;
 
         totalCost += cost;
-        if (!agents[agentName]) agents[agentName] = { totalCost: 0, last24hCost: 0 };
+        if (!agents[agentName]) {
+          agents[agentName] = { totalCost: 0, last24hCost: 0, callCount: 0, lastCallCost: 0 };
+        }
         agents[agentName].totalCost += cost;
+        agents[agentName].callCount += 1;
+        agents[agentName].lastCallCost = cost; // Overwrite with latest
 
         if (time >= cutoff) {
           last24hCost += cost;
           agents[agentName].last24hCost += cost;
         }
+      }
+
+      // Compute average cost per agent
+      for (const name of Object.keys(agents)) {
+        agents[name].avgCallCost = agents[name].callCount > 0 
+          ? agents[name].totalCost / agents[name].callCount 
+          : 0;
       }
 
       return { totalCost, last24hCost, agents };

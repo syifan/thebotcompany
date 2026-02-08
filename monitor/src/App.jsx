@@ -511,10 +511,18 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
         title="Click to toggle filter"
       >
         <div className="min-w-0 flex-1">
-          <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
-          {agent.role && <p className="text-xs text-neutral-500 truncate">{agent.role}</p>}
-          {agent.totalCost > 0 && (
-            <p className="text-xs text-neutral-400">${agent.totalCost.toFixed(2)} · ${agent.last24hCost.toFixed(2)} / 24h</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
+            {agent.role && (
+              <span className="px-1.5 py-0.5 bg-neutral-200 text-neutral-600 text-xs rounded-full truncate max-w-[120px]" title={agent.role}>
+                {agent.role}
+              </span>
+            )}
+          </div>
+          {(agent.lastCallCost > 0 || agent.avgCallCost > 0) && (
+            <p className="text-xs text-neutral-400 mt-0.5">
+              Last: ${agent.lastCallCost.toFixed(2)} · Avg: ${agent.avgCallCost.toFixed(2)}
+            </p>
           )}
         </div>
         <div className="flex items-center gap-1.5 ml-2 shrink-0">
