@@ -106,14 +106,16 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ## 8. Response Format
 
-At the end of your cycle, your final response should follow this format:
+At the end of your cycle, your final response **must** follow this exact format and nothing else:
 
 ```
 # [AgentName]
 
-**Input:** (what you saw)
+## Input
+(what you saw)
 
-**Actions:** (what you did)
+## Actions
+(what you did)
 ```
 
-The orchestrator will automatically post this to the tracker issue.
+**Do not write anything outside this format.** No extra commentary, no preamble, no sign-offs. Start with `# [AgentName]` and end after the Actions section. The orchestrator will automatically post this to the tracker issue.
