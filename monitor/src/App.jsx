@@ -883,12 +883,20 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Total Cost</span>
-                      <span className="text-sm font-mono">${(selectedProject.cost?.totalCost || 0).toFixed(2)}</span>
+                      <span className="text-neutral-600">Last Cycle</span>
+                      <span className="text-sm font-mono">${(selectedProject.cost?.lastCycleCost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-600">Avg Cycle</span>
+                      <span className="text-sm font-mono">${(selectedProject.cost?.avgCycleCost || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-neutral-600">Last 24h</span>
                       <span className="text-sm font-mono">${(selectedProject.cost?.last24hCost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-600">Total</span>
+                      <span className="text-sm font-mono">${(selectedProject.cost?.totalCost || 0).toFixed(2)}</span>
                     </div>
                     {selectedProject.budget && (
                       <>
@@ -915,9 +923,6 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                           </div>
                         )}
                       </>
-                    )}
-                    {!selectedProject.budget && (
-                      <p className="text-xs text-neutral-400">No budget configured</p>
                     )}
                     <div className="pt-2 border-t">
                       <button

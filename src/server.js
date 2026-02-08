@@ -231,26 +231,34 @@ class ProjectRunner {
   getCostSummary() {
     const csvPath = path.join(this.agentDir, 'cost.csv');
     if (!fs.existsSync(csvPath)) {
-      return { totalCost: 0, last24hCost: 0, agents: {} };
+      return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, agents: {} };
     }
     try {
       const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(l => l.trim());
-      if (lines.length <= 1) return { totalCost: 0, last24hCost: 0, agents: {} };
+      if (lines.length <= 1) return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, agents: {} };
 
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
       let totalCost = 0;
       let last24hCost = 0;
       const agents = {};
+      const cycleCosts = new Map(); // cycle -> total cost
 
       for (let i = 1; i < lines.length; i++) {
         const parts = lines[i].split(',');
         if (parts.length < 4) continue;
         const time = new Date(parts[0]).getTime();
+        const cycle = parseInt(parts[1]);
         const agentName = parts[2];
         const cost = parseFloat(parts[3]);
         if (isNaN(cost)) continue;
 
         totalCost += cost;
+        
+        // Track cycle costs
+        if (!isNaN(cycle)) {
+          cycleCosts.set(cycle, (cycleCosts.get(cycle) || 0) + cost);
+        }
+        
         if (!agents[agentName]) {
           agents[agentName] = { totalCost: 0, last24hCost: 0, callCount: 0, lastCallCost: 0 };
         }
@@ -271,9 +279,19 @@ class ProjectRunner {
           : 0;
       }
 
-      return { totalCost, last24hCost, agents };
+      // Compute last cycle cost and average cycle cost
+      let lastCycleCost = 0;
+      let avgCycleCost = 0;
+      if (cycleCosts.size > 0) {
+        const cycles = Array.from(cycleCosts.keys()).sort((a, b) => a - b);
+        lastCycleCost = cycleCosts.get(cycles[cycles.length - 1]) || 0;
+        const totalCycleCost = Array.from(cycleCosts.values()).reduce((a, b) => a + b, 0);
+        avgCycleCost = totalCycleCost / cycleCosts.size;
+      }
+
+      return { totalCost, last24hCost, lastCycleCost, avgCycleCost, agents };
     } catch {
-      return { totalCost: 0, last24hCost: 0, agents: {} };
+      return { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, agents: {} };
     }
   }
 
