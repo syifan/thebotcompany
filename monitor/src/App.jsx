@@ -64,6 +64,8 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState(() => localStorage.getItem('selectedAgent') || null)
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
+  const [newIssueText, setNewIssueText] = useState('')
+  const [creatingIssue, setCreatingIssue] = useState(false)
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
@@ -255,6 +257,29 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
       fetchComments(1, selectedAgent, false)
     } catch (err) {
       setBootstrapModal(prev => ({ ...prev, executing: false, error: err.message }))
+    }
+  }
+
+  const createIssue = async () => {
+    if (!newIssueText.trim() || creatingIssue) return
+    setCreatingIssue(true)
+    try {
+      const res = await fetch(projectApi('/issues/create'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: newIssueText })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setNewIssueText('')
+        await fetchProjectData()
+      } else {
+        alert(data.error || 'Failed to create issue')
+      }
+    } catch (err) {
+      alert('Failed to create issue: ' + err.message)
+    } finally {
+      setCreatingIssue(false)
     }
   }
 
@@ -1021,6 +1046,21 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </a>
                     ))}
                     {issues.length === 0 && <p className="text-sm text-neutral-400">No open issues</p>}
+                  </div>
+                  <Separator className="my-4" />
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Describe a new issue..."
+                      className="w-full px-3 py-2 border rounded text-sm"
+                      value={newIssueText}
+                      onChange={(e) => setNewIssueText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && createIssue()}
+                      disabled={creatingIssue}
+                    />
+                    <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="w-full">
+                      {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

@@ -484,6 +484,40 @@ class ProjectRunner {
     }
   }
 
+  async createIssue(text) {
+    if (!this.repo) throw new Error('No repo configured');
+    if (!text?.trim()) throw new Error('Missing issue description');
+    
+    const config = this.loadConfig();
+    const model = config.model || 'claude-sonnet-4-20250514';
+    
+    const prompt = `You are helping create a GitHub issue. The user provided this description:
+
+"${text}"
+
+SAFETY: First verify you are in the correct repo (${this.repo}) by checking the remote URL. If not, abort.
+
+Create a well-formatted GitHub issue with:
+1. Title format: [Human] -> [Assignee] Description
+   - If the user mentions a specific agent to assign, use that agent name
+   - If no assignee is clear from the description, assign to Athena
+2. A detailed description with context in the body
+
+Use the gh CLI to create the issue. Run:
+gh issue create --title "[Human] -> [Assignee] ..." --body "..."
+
+The body should be markdown formatted. Add a "human-request" label.
+Do not ask questions, just create the issue based on the description provided.`;
+
+    execSync(`claude --model ${model} --dangerously-skip-permissions --print "${prompt.replace(/"/g, '\\"')}"`, {
+      cwd: this.path,
+      encoding: 'utf-8',
+      timeout: 120000
+    });
+    
+    return { success: true };
+  }
+
   getStatus() {
     return {
       id: this.id,
@@ -1125,6 +1159,24 @@ const server = http.createServer(async (req, res) => {
       const issues = await runner.getIssues();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ issues }));
+      return;
+    }
+
+    // POST /api/projects/:id/issues/create
+    if (req.method === 'POST' && subPath === 'issues/create') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        try {
+          const { text } = JSON.parse(body);
+          await runner.createIssue(text);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
       return;
     }
 
