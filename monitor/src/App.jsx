@@ -519,9 +519,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               </span>
             )}
           </div>
-          {(agent.lastCallCost > 0 || agent.avgCallCost > 0) && (
+          {(agent.totalCost > 0 || agent.lastCallCost > 0) && (
             <p className="text-xs text-neutral-400 mt-0.5">
-              Last: ${agent.lastCallCost.toFixed(2)} · Avg: ${agent.avgCallCost.toFixed(2)}
+              Last: ${(agent.lastCallCost || 0).toFixed(2)} · Avg: ${(agent.avgCallCost || 0).toFixed(2)} · 24h: ${(agent.last24hCost || 0).toFixed(2)} · Total: ${(agent.totalCost || 0).toFixed(2)}
             </p>
           )}
         </div>

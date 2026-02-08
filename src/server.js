@@ -148,7 +148,8 @@ class ProjectRunner {
     const workersDir = path.join(this.agentDir, 'workers');
     
     const parseRole = (content) => {
-      const match = content.match(/^#\s*\w+\s*\(([^)]+)\)/);
+      // Match "# Name (Role)" anywhere in content (after frontmatter)
+      const match = content.match(/^#\s*\w+\s*\(([^)]+)\)/m);
       return match ? match[1] : null;
     };
     
