@@ -15,6 +15,8 @@ Read the `{project_dir}/workers/` folder to discover your teammates.
 
 Check `{project_dir}/cost.csv` for per-agent cost data (columns: time, cycle, agent, cost, durationMs). Use this to evaluate efficiency — agents with high cost but low output may need skill adjustments or model changes. Factor cost into your evaluations.
 
+**If an agent consistently costs significantly more tokens than others**, consider splitting its responsibilities into two smaller, focused agents. A single agent doing too much per cycle is inefficient — it's better to have two agents each doing one thing well.
+
 ### 3. Review Recent Activity
 
 - Recent tracker comments (last 100)
