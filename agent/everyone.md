@@ -97,10 +97,10 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ## 7. Timeout Awareness
 
-**You have a time limit per cycle.** Plan accordingly:
+**You have a strict time limit per cycle — it may be as short as 5 minutes.** Plan accordingly:
 
-- **Work step by step.** Don't try to do everything at once.
-- **Long-running jobs → GitHub Actions.** Don't run simulations or builds directly. Create workflows that run in CI, then check results next cycle.
+- **Do one thing per cycle.** Do not try to complete all tasks assigned to you at once. Pick the most important one, do it well, and leave the rest for next cycle.
+- **Any job that may last more than 5 seconds → GitHub Actions.** Don't run simulations, builds, or tests directly. Create workflows that run in CI, then check results next cycle.
 - **Incremental progress is fine.** If a task spans multiple cycles, leave clear notes for your future self.
 - **Always return a response.** Even if incomplete, document what you did and what remains in your final response.
 
