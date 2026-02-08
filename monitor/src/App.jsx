@@ -777,29 +777,30 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
       <div className="max-w-7xl mx-auto">
         {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">
-          {/* Row 1: Back button + Title */}
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500 shrink-0 px-2">
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline ml-1">All Projects</span>
-            </Button>
-            <h1 className="text-lg sm:text-2xl font-bold text-neutral-800 truncate">{selectedProject.id}</h1>
-          </div>
-          
-          {/* Row 2: Actions */}
-          <div className="flex items-center justify-between gap-2">
+          {/* Desktop: single row. Mobile: two rows */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {/* Left: Back button + Title */}
             <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500 shrink-0 px-2">
+                <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline ml-1">All Projects</span>
+              </Button>
+              <h1 className="text-lg sm:text-2xl font-bold text-neutral-800 truncate">{selectedProject.id}</h1>
+            </div>
+            
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 pl-8 sm:pl-0">
               {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-1 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium">
+                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium inline-flex items-center">
+                  <Github className="w-3 h-3 mr-1.5" />
                   GitHub
                 </a>
               )}
-              <Button size="sm" variant="warning" onClick={openBootstrapModal}>
-                <RotateCcw className="w-3 h-3" />
-                <span className="hidden sm:inline ml-1">Bootstrap</span>
-              </Button>
+              <button onClick={openBootstrapModal} className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium inline-flex items-center">
+                <RotateCcw className="w-3 h-3 mr-1.5" />
+                Bootstrap
+              </button>
             </div>
-            <span className="text-xs text-neutral-400">{formatTime(lastUpdate)}</span>
           </div>
           
           {/* Project tabs - horizontal scroll on mobile */}
