@@ -976,9 +976,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             </div>
 
             {/* Row 3: Agent Reports + Issues */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4 items-stretch">
               {/* Agent Reports */}
-              <Card>
+              <Card className="flex flex-col">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
@@ -993,8 +993,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <span className="text-sm font-normal text-neutral-500">{comments.length} loaded</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="max-h-[500px] overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
+                <CardContent className="pt-0 flex-1 flex flex-col">
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
                     const { scrollTop, scrollHeight, clientHeight } = e.target
                     if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
                   }}>
