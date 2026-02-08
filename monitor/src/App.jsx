@@ -122,16 +122,17 @@ function App() {
   }
 
   const fetchProjectData = async () => {
-    if (!selectedProject) return
+    const baseApi = projectApi('')
+    if (!baseApi) return
     
     try {
       const [logsRes, agentsRes, configRes, prsRes, issuesRes, repoRes] = await Promise.all([
-        fetch(projectApi('/logs?lines=100')),
-        fetch(projectApi('/agents')),
-        fetch(projectApi('/config')),
-        fetch(projectApi('/prs')),
-        fetch(projectApi('/issues')),
-        fetch(projectApi('/repo'))
+        fetch(`${baseApi}/logs?lines=100`),
+        fetch(`${baseApi}/agents`),
+        fetch(`${baseApi}/config`),
+        fetch(`${baseApi}/prs`),
+        fetch(`${baseApi}/issues`),
+        fetch(`${baseApi}/repo`)
       ])
       
       setLogs((await logsRes.json()).logs || [])
@@ -216,12 +217,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   }
   
   const fetchComments = async (page = 1, agent = null, append = false) => {
-    if (!selectedProject) return
+    const baseApi = projectApi('')
+    if (!baseApi) return
     setCommentsLoading(true)
     try {
       const params = new URLSearchParams({ page, per_page: 10 })
       if (agent) params.set('author', agent)
-      const res = await fetch(projectApi(`/comments?${params}`))
+      const res = await fetch(`${baseApi}/comments?${params}`)
+      if (!res.ok) return
       const data = await res.json()
       if (append) setComments(prev => [...prev, ...data.comments])
       else setComments(data.comments || [])
@@ -460,9 +463,11 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   }, [projects])
 
   const fetchLogs = async () => {
-    if (!selectedProject) return
+    const api = projectApi('/logs?lines=100')
+    if (!api) return
     try {
-      const res = await fetch(projectApi('/logs?lines=100'))
+      const res = await fetch(api)
+      if (!res.ok) return
       setLogs((await res.json()).logs || [])
     } catch (err) {
       console.error('Failed to fetch logs:', err)
