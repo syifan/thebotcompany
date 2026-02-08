@@ -976,9 +976,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             </div>
 
             {/* Row 3: Agent Reports + Issues */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4 items-stretch">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
               {/* Agent Reports */}
-              <Card className="flex flex-col">
+              <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
@@ -993,8 +993,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <span className="text-sm font-normal text-neutral-500">{comments.length} loaded</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0 flex-1 flex flex-col">
-                  <div className="flex-1 overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
+                <CardContent className="pt-0">
+                  <div className="h-[400px] overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
                     const { scrollTop, scrollHeight, clientHeight } = e.target
                     if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
                   }}>
@@ -1031,7 +1031,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Open Issues ({issues.length})</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  <div className="space-y-2 h-[320px] overflow-y-auto">
                     {issues.map((issue) => (
                       <a key={issue.number} href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer"
                         className="block p-2 bg-neutral-50 hover:bg-neutral-100 rounded cursor-pointer transition-colors">
