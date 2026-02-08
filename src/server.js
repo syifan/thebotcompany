@@ -876,15 +876,20 @@ Do not ask questions, just create the issue based on the description provided.`;
       this.currentAgentProcess.stdout.on('data', (d) => stdout += d);
       this.currentAgentProcess.stderr.on('data', (d) => stdout += d);
 
+      let killedByTimeout = false;
       const timeout = config.agentTimeoutMs > 0 
         ? setTimeout(() => {
             log(`⏰ Timeout, killing ${agent.name}`, this.id);
+            killedByTimeout = true;
             this.currentAgentProcess.kill('SIGTERM');
           }, config.agentTimeoutMs)
         : null;
 
       this.currentAgentProcess.on('close', (code) => {
         if (timeout) clearTimeout(timeout);
+        
+        const durationMs = Date.now() - this.currentAgentStartTime;
+        const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
         
         let tokenInfo = '';
         let cost;
@@ -935,9 +940,41 @@ Do not ask questions, just create the issue based on the description provided.`;
             if (!fs.existsSync(csvPath)) {
               fs.writeFileSync(csvPath, 'time,cycle,agent,cost,durationMs\n');
             }
-            const durationMs = Date.now() - this.currentAgentStartTime;
             fs.appendFileSync(csvPath, `${new Date().toISOString()},${this.cycleCount},${agent.name},${cost.toFixed(6)},${durationMs}\n`);
           } catch {}
+        }
+
+        // Post tracker comment if agent was killed or had error
+        if (this.repo && config.trackerIssue && (killedByTimeout || code !== 0)) {
+          try {
+            let errorType, errorMsg;
+            if (killedByTimeout) {
+              errorType = '⏰ Timeout';
+              errorMsg = `Agent **${agent.name}** was killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`;
+            } else {
+              errorType = '❌ Error';
+              errorMsg = `Agent **${agent.name}** exited with code ${code}.`;
+            }
+            
+            const comment = `## [Orchestrator] ${errorType}
+
+${errorMsg}
+
+- **Cycle:** ${this.cycleCount}
+- **Duration:** ${durationStr}
+- **Exit code:** ${code}
+
+This is an automated message from the orchestrator.`;
+
+            execSync(`gh issue comment ${config.trackerIssue} --body ${JSON.stringify(comment)}`, {
+              cwd: this.path,
+              encoding: 'utf-8',
+              timeout: 30000
+            });
+            log(`Posted error comment to tracker #${config.trackerIssue}`, this.id);
+          } catch (e) {
+            log(`Failed to post error comment: ${e.message}`, this.id);
+          }
         }
 
         log(`${agent.name} done (code ${code})${tokenInfo}`, this.id);
