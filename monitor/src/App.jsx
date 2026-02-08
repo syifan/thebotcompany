@@ -483,10 +483,12 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
       // Separate intervals for different data
       const logsInterval = setInterval(fetchLogs, 10000) // Logs every 10s
       const commentsInterval = setInterval(() => fetchComments(1, selectedAgent, false), 30000) // Comments every 30s
+      const projectDataInterval = setInterval(fetchProjectData, 30000) // Issues/PRs/agents every 30s
       
       return () => {
         clearInterval(logsInterval)
         clearInterval(commentsInterval)
+        clearInterval(projectDataInterval)
       }
     }
   }, [selectedProject?.id])
