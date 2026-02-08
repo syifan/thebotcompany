@@ -516,9 +516,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
         }`}
         title="Click to toggle filter"
       >
-        {/* Row 1: Name, active time, badges, info button */}
+        {/* Row 1: Name, model, active time, badges, info button */}
         <div className="flex items-center justify-between">
-          <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
+            {agent.model && (
+              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{agent.model}</span>
+            )}
+          </div>
           <div className="flex items-center gap-1.5">
             {isActive && runtime !== null && (
               <span className="text-xs text-blue-600 flex items-center gap-1">

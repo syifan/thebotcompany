@@ -153,12 +153,24 @@ class ProjectRunner {
       return match ? match[1] : null;
     };
     
+    const parseModel = (content) => {
+      // Match "model: xxx" in YAML frontmatter
+      const match = content.match(/^model:\s*(.+)$/m);
+      if (!match) return null;
+      const model = match[1].trim();
+      // Shorten common model names
+      if (model.includes('opus')) return 'opus';
+      if (model.includes('sonnet')) return 'sonnet';
+      if (model.includes('haiku')) return 'haiku';
+      return model;
+    };
+    
     if (fs.existsSync(managersDir)) {
       for (const file of fs.readdirSync(managersDir)) {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
-          managers.push({ name, role: parseRole(content), isManager: true });
+          managers.push({ name, role: parseRole(content), model: parseModel(content), isManager: true });
         }
       }
     }
@@ -168,7 +180,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
-          workers.push({ name, role: parseRole(content), isManager: false });
+          workers.push({ name, role: parseRole(content), model: parseModel(content), isManager: false });
         }
       }
     }
