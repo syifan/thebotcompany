@@ -556,9 +556,39 @@ class ProjectRunner {
     if (this.running) return;
     // Ensure project directory exists in TBC_HOME
     fs.mkdirSync(this.agentDir, { recursive: true });
+    
+    // Load persisted state
+    this.loadState();
+    
     this.running = true;
-    log(`Starting project runner (data: ${this.agentDir})`, this.id);
+    log(`Starting project runner (data: ${this.agentDir}, cycle: ${this.cycleCount})`, this.id);
     this.runLoop();
+  }
+
+  loadState() {
+    const statePath = path.join(this.agentDir, 'state.json');
+    try {
+      if (fs.existsSync(statePath)) {
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+        this.cycleCount = state.cycleCount || 0;
+        log(`Loaded state: cycle ${this.cycleCount}`, this.id);
+      }
+    } catch (e) {
+      log(`Failed to load state: ${e.message}`, this.id);
+    }
+  }
+
+  saveState() {
+    const statePath = path.join(this.agentDir, 'state.json');
+    try {
+      const state = {
+        cycleCount: this.cycleCount,
+        lastUpdated: new Date().toISOString()
+      };
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+    } catch (e) {
+      log(`Failed to save state: ${e.message}`, this.id);
+    }
   }
 
   stop() {
@@ -611,6 +641,9 @@ class ProjectRunner {
         }
         await this.runAgent(agent, config);
       }
+
+      // Save state after cycle completes
+      this.saveState();
 
       // Compute sleep: budget-derived or fixed interval
       const sleepMs = this.computeSleepInterval();
