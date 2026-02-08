@@ -899,16 +899,22 @@ Do not ask questions, just create the issue based on the description provided.`;
       this.currentAgentProcess.stderr.on('data', (d) => stdout += d);
 
       let killedByTimeout = false;
-      const timeout = config.agentTimeoutMs > 0 
-        ? setTimeout(() => {
-            log(`⏰ Timeout, killing ${agent.name}`, this.id);
+      // Poll-based timeout: reload config every 60s to pick up changes
+      const timeoutInterval = setInterval(() => {
+        const freshConfig = this.loadConfig();
+        if (freshConfig.agentTimeoutMs > 0) {
+          const elapsed = Date.now() - this.currentAgentStartTime;
+          if (elapsed >= freshConfig.agentTimeoutMs) {
+            log(`⏰ Timeout (${Math.floor(elapsed / 60000)}m elapsed, limit ${Math.floor(freshConfig.agentTimeoutMs / 60000)}m), killing ${agent.name}`, this.id);
             killedByTimeout = true;
             this.currentAgentProcess.kill('SIGTERM');
-          }, config.agentTimeoutMs)
-        : null;
+            clearInterval(timeoutInterval);
+          }
+        }
+      }, 60000);
 
       this.currentAgentProcess.on('close', (code) => {
-        if (timeout) clearTimeout(timeout);
+        clearInterval(timeoutInterval);
         
         const durationMs = Date.now() - this.currentAgentStartTime;
         const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
