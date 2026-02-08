@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft, Github } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -825,8 +825,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
 
         {selectedProject && (
           <>
-            {/* Row 1: State, Config */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Row 1: State, Cost & Budget, Config */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* State */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" />Orchestrator State</CardTitle></CardHeader>
@@ -863,12 +863,31 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       <span className="text-neutral-600">Uptime</span>
                       <span className="text-sm font-mono">{Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m</span>
                     </div>
-                    {selectedProject.cost && selectedProject.cost.totalCost > 0 && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-neutral-600">Cost</span>
-                        <span className="text-sm font-mono">${selectedProject.cost.totalCost.toFixed(2)} total · ${selectedProject.cost.last24hCost.toFixed(2)} / 24h</span>
-                      </div>
-                    )}
+                    <div className="pt-3 border-t flex flex-wrap gap-2">
+                      {selectedProject.paused ? (
+                        <Button size="sm" onClick={() => controlAction('resume')} className="flex-1"><Play className="w-3 h-3 mr-1" />Resume</Button>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => controlAction('pause')} className="flex-1"><Pause className="w-3 h-3 mr-1" />Pause</Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => controlAction('skip')} className="flex-1"><SkipForward className="w-3 h-3 mr-1" />Skip</Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Cost & Budget */}
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><DollarSign className="w-4 h-4" />Cost & Budget</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-600">Total Cost</span>
+                      <span className="text-sm font-mono">${(selectedProject.cost?.totalCost || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-600">Last 24h</span>
+                      <span className="text-sm font-mono">${(selectedProject.cost?.last24hCost || 0).toFixed(2)}</span>
+                    </div>
                     {selectedProject.budget && (
                       <>
                         <div className="flex justify-between items-center">
@@ -895,14 +914,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         )}
                       </>
                     )}
-                    <div className="pt-3 border-t flex flex-wrap gap-2">
-                      {selectedProject.paused ? (
-                        <Button size="sm" onClick={() => controlAction('resume')} className="flex-1"><Play className="w-3 h-3 mr-1" />Resume</Button>
-                      ) : (
-                        <Button size="sm" variant="outline" onClick={() => controlAction('pause')} className="flex-1"><Pause className="w-3 h-3 mr-1" />Pause</Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => controlAction('skip')} className="flex-1"><SkipForward className="w-3 h-3 mr-1" />Skip</Button>
-                    </div>
+                    {!selectedProject.budget && (
+                      <p className="text-xs text-neutral-400">No budget configured</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
