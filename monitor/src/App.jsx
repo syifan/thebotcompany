@@ -796,6 +796,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   GitHub
                 </a>
               )}
+              {selectedProject.paused ? (
+                <button onClick={() => controlAction('resume')} className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium inline-flex items-center">
+                  <Play className="w-3 h-3 mr-1.5" />
+                  Resume
+                </button>
+              ) : (
+                <button onClick={() => controlAction('pause')} className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium inline-flex items-center">
+                  <Pause className="w-3 h-3 mr-1.5" />
+                  Pause
+                </button>
+              )}
               <button onClick={openBootstrapModal} className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium inline-flex items-center">
                 <RotateCcw className="w-3 h-3 mr-1.5" />
                 Bootstrap
@@ -864,14 +875,6 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <div className="flex justify-between items-center">
                       <span className="text-neutral-600">Uptime</span>
                       <span className="text-sm font-mono">{Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m</span>
-                    </div>
-                    <div className="pt-3 border-t flex flex-wrap gap-2">
-                      {selectedProject.paused ? (
-                        <Button size="sm" onClick={() => controlAction('resume')} className="flex-1"><Play className="w-3 h-3 mr-1" />Resume</Button>
-                      ) : (
-                        <Button size="sm" variant="outline" onClick={() => controlAction('pause')} className="flex-1"><Pause className="w-3 h-3 mr-1" />Pause</Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => controlAction('skip')} className="flex-1"><SkipForward className="w-3 h-3 mr-1" />Skip</Button>
                     </div>
                   </div>
                 </CardContent>
