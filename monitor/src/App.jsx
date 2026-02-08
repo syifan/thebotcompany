@@ -1263,6 +1263,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                           ...prev,
                           data: { ...prev.data, model: newModel }
                         }));
+                        // Refresh agent list to update the model pill
+                        fetchProjectData();
                       }
                     } catch (err) {
                       console.error('Failed to update model:', err);
