@@ -1184,13 +1184,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   </div>
                   <Separator className="my-3 shrink-0" />
                   <div className="space-y-2 shrink-0">
-                    <input
-                      type="text"
+                    <textarea
                       placeholder="Describe a new issue..."
-                      className="w-full px-3 py-2 border rounded text-sm"
+                      className="w-full px-3 py-2 border rounded text-sm resize-none overflow-hidden"
+                      rows={1}
                       value={newIssueText}
-                      onChange={(e) => setNewIssueText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && createIssue()}
+                      onChange={(e) => {
+                        setNewIssueText(e.target.value)
+                        e.target.style.height = 'auto'
+                        e.target.style.height = e.target.scrollHeight + 'px'
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); createIssue() } }}
                       disabled={creatingIssue}
                     />
                     <div className="flex items-center gap-2">
