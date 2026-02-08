@@ -549,10 +549,17 @@ class ProjectRunner {
         { cwd: this.path, encoding: 'utf-8', timeout: 30000 }
       );
       return JSON.parse(output).map(issue => {
-        const match = issue.title.match(/^\[([^\]]+)\]\s*->\s*\[([^\]]+)\]\s*(.*)$/);
-        return match
-          ? { ...issue, creator: match[1], assignee: match[2], shortTitle: match[3] }
-          : { ...issue, creator: null, assignee: null, shortTitle: issue.title };
+        // Match [creator] -> [assignee] title
+        const fullMatch = issue.title.match(/^\[([^\]]+)\]\s*->\s*\[([^\]]+)\]\s*(.*)$/);
+        if (fullMatch) {
+          return { ...issue, creator: fullMatch[1], assignee: fullMatch[2], shortTitle: fullMatch[3] };
+        }
+        // Match [creator] title (no assignee)
+        const creatorMatch = issue.title.match(/^\[([^\]]+)\]\s*(.*)$/);
+        if (creatorMatch) {
+          return { ...issue, creator: creatorMatch[1], assignee: null, shortTitle: creatorMatch[2] };
+        }
+        return { ...issue, creator: null, assignee: null, shortTitle: issue.title };
       });
     } catch {
       return [];
