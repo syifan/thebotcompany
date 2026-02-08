@@ -1,6 +1,17 @@
 import * as React from "react"
 
 function Modal({ open, onClose, children }) {
+  React.useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [open])
+
   if (!open) return null
   
   return (
