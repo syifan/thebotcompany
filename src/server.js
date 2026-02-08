@@ -240,22 +240,27 @@ class ProjectRunner {
     
     // Get last response from response log
     let lastResponse = null;
+    let lastRawOutput = null;
     const responseLogPath = path.join(this.agentDir, 'responses', `${agentName}.log`);
-    if (fs.existsSync(responseLogPath)) {
+    const rawLogPath = path.join(this.agentDir, 'responses', `${agentName}.raw.log`);
+    
+    const getLastBlock = (filePath, maxChars = 15000) => {
+      if (!fs.existsSync(filePath)) return null;
       try {
-        const content = fs.readFileSync(responseLogPath, 'utf-8');
-        // Find the last response block (after the last separator)
+        const content = fs.readFileSync(filePath, 'utf-8');
         const blocks = content.split(/={60,}/);
         if (blocks.length >= 2) {
-          // Get the last two parts: header line + content
           const lastBlock = blocks.slice(-2).join('').trim();
-          // Limit to last 10000 chars
-          lastResponse = lastBlock.length > 10000 ? lastBlock.slice(-10000) : lastBlock;
+          return lastBlock.length > maxChars ? lastBlock.slice(-maxChars) : lastBlock;
         }
       } catch {}
-    }
+      return null;
+    };
     
-    return { name: agentName, isManager, skill, workspaceFiles, lastResponse };
+    lastResponse = getLastBlock(responseLogPath);
+    lastRawOutput = getLastBlock(rawLogPath);
+    
+    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput };
   }
 
   getLogs(lines = 50) {
@@ -880,14 +885,23 @@ Do not ask questions, just create the issue based on the description provided.`;
         } catch {}
         
         // Log CLI response to agent-specific log file
-        if (resultText) {
-          try {
-            const agentLogPath = path.join(this.agentDir, 'responses', `${agent.name}.log`);
-            fs.mkdirSync(path.dirname(agentLogPath), { recursive: true });
-            const timestamp = new Date().toISOString();
-            const header = `\n${'='.repeat(60)}\n[${timestamp}] Cycle ${this.cycleCount}\n${'='.repeat(60)}\n`;
+        try {
+          const responsesDir = path.join(this.agentDir, 'responses');
+          fs.mkdirSync(responsesDir, { recursive: true });
+          const timestamp = new Date().toISOString();
+          const header = `\n${'='.repeat(60)}\n[${timestamp}] Cycle ${this.cycleCount} | Exit code: ${code}\n${'='.repeat(60)}\n`;
+          
+          // Always log raw output for debugging
+          const rawLogPath = path.join(responsesDir, `${agent.name}.raw.log`);
+          fs.appendFileSync(rawLogPath, header + stdout + '\n');
+          
+          // Log parsed result if available
+          if (resultText) {
+            const agentLogPath = path.join(responsesDir, `${agent.name}.log`);
             fs.appendFileSync(agentLogPath, header + resultText + '\n');
-          } catch {}
+          }
+        } catch (e) {
+          log(`Failed to log response for ${agent.name}: ${e.message}`, this.id);
         }
 
         // Append cost row to cost.csv

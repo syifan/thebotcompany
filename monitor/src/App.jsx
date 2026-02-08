@@ -1238,6 +1238,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   </div>
                 </div>
               )}
+              {agentModal.data.lastRawOutput && (
+                <div>
+                  <h3 className="font-semibold text-sm text-neutral-600 mb-2">Raw CLI Output</h3>
+                  <div className="bg-neutral-900 rounded p-3 text-sm max-h-64 overflow-y-auto">
+                    <pre className="text-neutral-300 whitespace-pre-wrap text-xs font-mono">{agentModal.data.lastRawOutput}</pre>
+                  </div>
+                </div>
+              )}
               {agentModal.data.workspaceFiles?.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-sm text-neutral-600 mb-2">Workspace Files</h3>
