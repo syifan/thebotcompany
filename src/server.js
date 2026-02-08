@@ -178,7 +178,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
-          managers.push({ name, role: parseRole(content), model: parseModel(content), isManager: true });
+          managers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: true });
         }
       }
     }
@@ -188,7 +188,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
-          workers.push({ name, role: parseRole(content), model: parseModel(content), isManager: false });
+          workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: false });
         }
       }
     }
@@ -880,7 +880,7 @@ Do not ask questions, just create the issue based on the description provided.`;
       try { everyone = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n'; } catch {}
       skillContent = (everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
 
-      const agentModel = agent.model || config.model || 'claude-sonnet-4-20250514';
+      const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-20250514';
       const args = [
         '-p', skillContent,
         '--model', agentModel,
