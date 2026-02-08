@@ -956,37 +956,57 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <span className="flex items-center gap-2"><Settings className="w-4 h-4" />Configuration</span>
                     <div className="flex items-center gap-2">
                       {configDirty && <Badge variant="warning">Unsaved</Badge>}
-                      {configDirty && <Button size="sm" variant="ghost" onClick={resetConfig}>Reset</Button>}
-                      <Button size="sm" onClick={saveConfig} disabled={!configDirty || configSaving}>
-                        <Save className="w-3 h-3 mr-1" />{configSaving ? '...' : 'Save'}
-                      </Button>
+                      {configDirty && (
+                        <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-700">
+                          Reset
+                        </button>
+                      )}
+                      <button 
+                        onClick={saveConfig} 
+                        disabled={!configDirty || configSaving}
+                        className={`px-3 py-1.5 rounded text-xs font-medium inline-flex items-center ${
+                          configDirty && !configSaving
+                            ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                            : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <Save className="w-3 h-3 mr-1.5" />{configSaving ? '...' : 'Save'}
+                      </button>
                     </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {configError && <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{configError}</div>}
-                  <div className="space-y-2 text-sm">
+                  {configError && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{configError}</div>}
+                  <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between">
                       <label className="text-neutral-600">Interval</label>
-                      <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.cycleIntervalMs} onChange={(e) => updateConfigField('cycleIntervalMs', Number(e.target.value))}>
+                      <select 
+                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        value={configForm.cycleIntervalMs} 
+                        onChange={(e) => updateConfigField('cycleIntervalMs', Number(e.target.value))}
+                      >
                         <option value={0}>No delay</option><option value={300000}>5m</option><option value={600000}>10m</option><option value={1200000}>20m</option><option value={1800000}>30m</option><option value={3600000}>1h</option>
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
                       <label className="text-neutral-600">Timeout</label>
-                      <select className="px-2 py-1 bg-neutral-100 border rounded text-sm" value={configForm.agentTimeoutMs} onChange={(e) => updateConfigField('agentTimeoutMs', Number(e.target.value))}>
+                      <select 
+                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        value={configForm.agentTimeoutMs} 
+                        onChange={(e) => updateConfigField('agentTimeoutMs', Number(e.target.value))}
+                      >
                         <option value={300000}>5m</option><option value={600000}>10m</option><option value={900000}>15m</option><option value={1800000}>30m</option><option value={3600000}>1h</option><option value={7200000}>2h</option><option value={14400000}>4h</option><option value={0}>Never</option>
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
                       <label className="text-neutral-600">Budget / 24h</label>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <span className="text-sm text-neutral-400">$</span>
                         <input
                           type="number"
                           min="0"
                           step="1"
-                          className="w-20 px-2 py-1 bg-neutral-100 border rounded text-sm text-right"
+                          className="w-20 px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           value={configForm.budgetPer24h || ''}
                           placeholder="off"
                           onChange={(e) => updateConfigField('budgetPer24h', Number(e.target.value) || 0)}
