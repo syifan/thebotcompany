@@ -629,6 +629,7 @@ Do not ask questions, just create the issue based on the description provided.`;
       enabled: this.enabled,
       running: this.running,
       paused: this.isPaused,
+      pauseReason: this.pauseReason || null,
       cycleCount: this.cycleCount,
       currentAgent: this.currentAgent,
       currentAgentRuntime: this.currentAgentStartTime
@@ -747,11 +748,13 @@ Do not ask questions, just create the issue based on the description provided.`;
 
   pause() {
     this.isPaused = true;
+    this.pauseReason = null;
     log(`Paused`, this.id);
   }
 
   resume() {
     this.isPaused = false;
+    this.pauseReason = null;
     this.wakeNow = true;
     log(`Resumed`, this.id);
   }
@@ -794,6 +797,9 @@ Do not ask questions, just create the issue based on the description provided.`;
         log(`===== RESUMING CYCLE ${this.cycleCount} (completed: ${this.completedAgents.length}/${allAgents.length}) =====`, this.id);
       }
 
+      let cycleFailures = 0;
+      let cycleTotal = 0;
+
       for (const agent of allAgents) {
         if (!this.running) break;
         
@@ -806,8 +812,12 @@ Do not ask questions, just create the issue based on the description provided.`;
         while (this.isPaused && this.running) {
           await sleep(1000);
         }
-        await this.runAgent(agent, config);
+        const result = await this.runAgent(agent, config);
         
+        // Track success/failure
+        cycleTotal++;
+        if (!result || !result.success) cycleFailures++;
+
         // Mark agent as completed and save state
         if (this.running) {
           this.completedAgents.push(agent.name);
@@ -819,6 +829,13 @@ Do not ask questions, just create the issue based on the description provided.`;
       this.completedAgents = [];
       this.currentCycleId = null;
       this.saveState();
+
+      // Auto-pause if every agent in the cycle failed
+      if (cycleTotal > 0 && cycleFailures === cycleTotal && this.running) {
+        log(`⚠️ All ${cycleTotal} agents failed in cycle ${this.cycleCount} — auto-pausing`, this.id);
+        this.isPaused = true;
+        this.pauseReason = `All ${cycleTotal} agents failed in cycle ${this.cycleCount}`;
+      }
 
       // Compute sleep: budget-derived or fixed interval
       const sleepMs = this.computeSleepInterval();
@@ -1001,7 +1018,7 @@ This is an automated message from the orchestrator.`;
         this.currentAgent = null;
         this.currentAgentProcess = null;
         this.currentAgentStartTime = null;
-        resolve();
+        resolve({ success: code === 0 && !killedByTimeout });
       });
     });
   }
