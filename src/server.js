@@ -89,6 +89,7 @@ class ProjectRunner {
     this.sleepUntil = null;
     this.wakeNow = false;
     this.running = false;
+    this.lastComputedSleepMs = null; // Cached sleep interval
     this._repo = null;
   }
 
@@ -393,14 +394,13 @@ class ProjectRunner {
     const remaining24h = budgetPer24h - spent24h;
     const percentUsed = budgetPer24h > 0 ? (spent24h / budgetPer24h) * 100 : 0;
     const exhausted = remaining24h <= 0;
-    const computedSleepMs = this.computeSleepInterval();
 
     return {
       budgetPer24h,
       spent24h,
       remaining24h,
       percentUsed,
-      computedSleepMs,
+      computedSleepMs: this.lastComputedSleepMs, // Use cached value
       exhausted
     };
   }
@@ -614,8 +614,9 @@ class ProjectRunner {
 
       // Compute sleep: budget-derived or fixed interval
       const sleepMs = this.computeSleepInterval();
+      this.lastComputedSleepMs = sleepMs; // Cache for status requests
       if (this.running) {
-        log(`Sleeping ${sleepMs / 1000}s...`, this.id);
+        log(`Sleeping ${Math.round(sleepMs / 1000)}s...`, this.id);
         this.wakeNow = false;
         this.sleepUntil = Date.now() + sleepMs;
 
