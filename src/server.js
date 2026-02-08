@@ -974,12 +974,19 @@ This is an automated message from the orchestrator.`;
             }
             
             if (comment) {
-              execSync(`gh issue comment ${config.trackerIssue} --body ${JSON.stringify(comment)}`, {
-                cwd: this.path,
-                encoding: 'utf-8',
-                timeout: 30000
-              });
-              log(`Posted comment to tracker #${config.trackerIssue}`, this.id);
+              // Write to temp file to avoid shell escaping issues
+              const tmpFile = path.join(this.agentDir, '.tmp_comment.md');
+              fs.writeFileSync(tmpFile, comment);
+              try {
+                execSync(`gh issue comment ${config.trackerIssue} --body-file ${tmpFile}`, {
+                  cwd: this.path,
+                  encoding: 'utf-8',
+                  timeout: 30000
+                });
+                log(`Posted comment to tracker #${config.trackerIssue}`, this.id);
+              } finally {
+                try { fs.unlinkSync(tmpFile); } catch {}
+              }
             }
           } catch (e) {
             log(`Failed to post tracker comment: ${e.message}`, this.id);
