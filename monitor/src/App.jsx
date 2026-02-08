@@ -88,6 +88,7 @@ function App() {
   const [creatingIssue, setCreatingIssue] = useState(false)
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
+  const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
 
@@ -917,6 +918,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     {!selectedProject.budget && (
                       <p className="text-xs text-neutral-400">No budget configured</p>
                     )}
+                    <div className="pt-2 border-t">
+                      <button
+                        onClick={() => setBudgetInfoModal(true)}
+                        className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
+                      >
+                        How budget works →
+                      </button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1264,6 +1273,47 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               </div>
             </div>
           )}
+        </ModalContent>
+      </Modal>
+
+      {/* Budget Info Modal */}
+      <Modal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)}>
+        <ModalHeader onClose={() => setBudgetInfoModal(false)}>
+          How Budget Works
+        </ModalHeader>
+        <ModalContent>
+          <div className="space-y-4 text-sm text-neutral-700">
+            <div>
+              <h3 className="font-semibold text-neutral-800 mb-1">Overview</h3>
+              <p>The budget system dynamically adjusts cycle intervals to keep your 24-hour spending under the configured limit.</p>
+            </div>
+            
+            <div>
+              <h3 className="font-semibold text-neutral-800 mb-1">How it calculates sleep time</h3>
+              <ol className="list-decimal list-inside space-y-1 text-neutral-600">
+                <li>Tracks cost of each cycle using EMA (exponential moving average)</li>
+                <li>Calculates remaining budget: <code className="bg-neutral-100 px-1 rounded">budget - spent_24h</code></li>
+                <li>Estimates how many cycles you can afford</li>
+                <li>Spreads those cycles evenly across 24 hours</li>
+                <li>Adds a conservatism factor that decreases as more data is collected</li>
+              </ol>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-neutral-800 mb-1">Interval as minimum</h3>
+              <p>If you set both budget and interval, the <strong>interval acts as a floor</strong>. Budget can make sleep longer, but never shorter than the configured interval.</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-neutral-800 mb-1">Budget exhaustion</h3>
+              <p>When spending hits the limit, the orchestrator sleeps until the oldest cost entry rolls off the 24-hour window (max 2 hours at a time).</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-neutral-800 mb-1">Cold start</h3>
+              <p>With no historical data, it estimates based on agent count and model type, using a higher conservatism factor.</p>
+            </div>
+          </div>
         </ModalContent>
       </Modal>
     </div>
