@@ -89,6 +89,9 @@ function App() {
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
+  const [intervalInfoModal, setIntervalInfoModal] = useState(false)
+  const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
+  const [createIssueInfoModal, setCreateIssueInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
 
@@ -979,7 +982,12 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   {configError && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{configError}</div>}
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600">Interval</label>
+                      <label className="text-neutral-600 flex items-center gap-1">
+                        Interval
+                        <button onClick={() => setIntervalInfoModal(true)} className="text-neutral-400 hover:text-neutral-600">
+                          <Info className="w-3 h-3" />
+                        </button>
+                      </label>
                       <select 
                         className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                         value={configForm.cycleIntervalMs} 
@@ -989,7 +997,12 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600">Timeout</label>
+                      <label className="text-neutral-600 flex items-center gap-1">
+                        Agent Timeout
+                        <button onClick={() => setTimeoutInfoModal(true)} className="text-neutral-400 hover:text-neutral-600">
+                          <Info className="w-3 h-3" />
+                        </button>
+                      </label>
                       <select 
                         className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                         value={configForm.agentTimeoutMs} 
@@ -999,7 +1012,12 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600">Budget / 24h</label>
+                      <label className="text-neutral-600 flex items-center gap-1">
+                        24hr Budget
+                        <button onClick={() => setBudgetInfoModal(true)} className="text-neutral-400 hover:text-neutral-600">
+                          <Info className="w-3 h-3" />
+                        </button>
+                      </label>
                       <div className="flex items-center">
                         <button
                           onClick={() => updateConfigField('budgetPer24h', Math.max(0, (configForm.budgetPer24h || 0) - 20))}
@@ -1154,9 +1172,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       onKeyDown={(e) => e.key === 'Enter' && createIssue()}
                       disabled={creatingIssue}
                     />
-                    <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="w-full">
-                      {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="flex-1">
+                        {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
+                      </Button>
+                      <button onClick={() => setCreateIssueInfoModal(true)} className="p-2 text-neutral-400 hover:text-neutral-600">
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1365,6 +1388,53 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               <h3 className="font-semibold text-neutral-800 mb-1">Cold start</h3>
               <p>With no historical data, it estimates based on agent count and model type, using a higher conservatism factor.</p>
             </div>
+          </div>
+        </ModalContent>
+      </Modal>
+
+      {/* Interval Info Modal */}
+      <Modal open={intervalInfoModal} onClose={() => setIntervalInfoModal(false)}>
+        <ModalHeader onClose={() => setIntervalInfoModal(false)}>
+          Interval
+        </ModalHeader>
+        <ModalContent>
+          <div className="space-y-3 text-sm text-neutral-700">
+            <p>The <strong>minimum time</strong> between cycles. After all agents complete a cycle, the orchestrator waits at least this long before starting the next cycle.</p>
+            <p>If a budget is configured, the actual interval may be longer to stay within the budget limit. The interval acts as a floor — never shorter, but can be longer.</p>
+            <p><strong>No delay</strong> means cycles run back-to-back (only useful with budget control).</p>
+          </div>
+        </ModalContent>
+      </Modal>
+
+      {/* Timeout Info Modal */}
+      <Modal open={timeoutInfoModal} onClose={() => setTimeoutInfoModal(false)}>
+        <ModalHeader onClose={() => setTimeoutInfoModal(false)}>
+          Agent Timeout
+        </ModalHeader>
+        <ModalContent>
+          <div className="space-y-3 text-sm text-neutral-700">
+            <p>The <strong>maximum time</strong> an individual agent is allowed to run before being killed.</p>
+            <p>If an agent exceeds this limit, it will be forcefully terminated and the orchestrator moves to the next agent.</p>
+            <p><strong>Never</strong> means no timeout — agents run until they complete naturally. Use with caution as stuck agents can block the entire cycle.</p>
+          </div>
+        </ModalContent>
+      </Modal>
+
+      {/* Create Issue Info Modal */}
+      <Modal open={createIssueInfoModal} onClose={() => setCreateIssueInfoModal(false)}>
+        <ModalHeader onClose={() => setCreateIssueInfoModal(false)}>
+          Create Issue (AI)
+        </ModalHeader>
+        <ModalContent>
+          <div className="space-y-3 text-sm text-neutral-700">
+            <p>Describe what you want in plain language, and AI will create a properly formatted GitHub issue with a clear title, description, and relevant labels.</p>
+            <p><strong>Example inputs:</strong></p>
+            <ul className="list-disc list-inside text-neutral-600 space-y-1">
+              <li>"Add dark mode support"</li>
+              <li>"The login button is broken on mobile"</li>
+              <li>"We need better error messages for API failures"</li>
+            </ul>
+            <p>The AI will expand your brief description into a detailed issue that agents can work on.</p>
           </div>
         </ModalContent>
       </Modal>
