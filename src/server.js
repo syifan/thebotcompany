@@ -230,7 +230,24 @@ class ProjectRunner {
       });
     }
     
-    return { name: agentName, isManager, skill, workspaceFiles };
+    // Get last response from response log
+    let lastResponse = null;
+    const responseLogPath = path.join(this.agentDir, 'responses', `${agentName}.log`);
+    if (fs.existsSync(responseLogPath)) {
+      try {
+        const content = fs.readFileSync(responseLogPath, 'utf-8');
+        // Find the last response block (after the last separator)
+        const blocks = content.split(/={60,}/);
+        if (blocks.length >= 2) {
+          // Get the last two parts: header line + content
+          const lastBlock = blocks.slice(-2).join('').trim();
+          // Limit to last 10000 chars
+          lastResponse = lastBlock.length > 10000 ? lastBlock.slice(-10000) : lastBlock;
+        }
+      } catch {}
+    }
+    
+    return { name: agentName, isManager, skill, workspaceFiles, lastResponse };
   }
 
   getLogs(lines = 50) {
@@ -834,19 +851,36 @@ Do not ask questions, just create the issue based on the description provided.`;
         
         let tokenInfo = '';
         let cost;
+        let resultText = '';
         try {
           const lines = stdout.trim().split('\n');
           for (const line of lines) {
             if (line.startsWith('{')) {
               const data = JSON.parse(line);
-              if (data.type === 'result' && data.usage) {
-                const u = data.usage;
-                cost = ((u.input_tokens * 15) + (u.output_tokens * 75) + (u.cache_read_input_tokens * 1.5)) / 1_000_000;
-                tokenInfo = ` | tokens: in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens} | cost: $${cost.toFixed(4)}`;
+              if (data.type === 'result') {
+                if (data.usage) {
+                  const u = data.usage;
+                  cost = ((u.input_tokens * 15) + (u.output_tokens * 75) + (u.cache_read_input_tokens * 1.5)) / 1_000_000;
+                  tokenInfo = ` | tokens: in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens} | cost: $${cost.toFixed(4)}`;
+                }
+                if (data.result) {
+                  resultText = data.result;
+                }
               }
             }
           }
         } catch {}
+        
+        // Log CLI response to agent-specific log file
+        if (resultText) {
+          try {
+            const agentLogPath = path.join(this.agentDir, 'responses', `${agent.name}.log`);
+            fs.mkdirSync(path.dirname(agentLogPath), { recursive: true });
+            const timestamp = new Date().toISOString();
+            const header = `\n${'='.repeat(60)}\n[${timestamp}] Cycle ${this.cycleCount}\n${'='.repeat(60)}\n`;
+            fs.appendFileSync(agentLogPath, header + resultText + '\n');
+          } catch {}
+        }
 
         // Append cost row to cost.csv
         if (cost !== undefined) {

@@ -1202,6 +1202,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
                 </div>
               </div>
+              {agentModal.data.lastResponse && (
+                <div>
+                  <h3 className="font-semibold text-sm text-neutral-600 mb-2">Last Response</h3>
+                  <div className="bg-neutral-900 rounded p-3 text-sm max-h-64 overflow-y-auto">
+                    <pre className="text-neutral-300 whitespace-pre-wrap text-xs font-mono">{agentModal.data.lastResponse}</pre>
+                  </div>
+                </div>
+              )}
               {agentModal.data.workspaceFiles?.length > 0 && (
                 <div>
                   <h3 className="font-semibold text-sm text-neutral-600 mb-2">Workspace Files</h3>
