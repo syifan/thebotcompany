@@ -405,13 +405,30 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     return () => window.removeEventListener('popstate', onPopState)
   }, [projects])
 
+  const fetchLogs = async () => {
+    if (!selectedProject) return
+    try {
+      const res = await fetch(projectApi('/logs?lines=100'))
+      setLogs((await res.json()).logs || [])
+    } catch (err) {
+      console.error('Failed to fetch logs:', err)
+    }
+  }
+
   useEffect(() => {
     if (selectedProject) {
       fetchProjectData()
       const savedAgent = localStorage.getItem('selectedAgent')
       fetchComments(1, savedAgent, false)
-      const interval = setInterval(() => fetchComments(1, selectedAgent, false), 30000)
-      return () => clearInterval(interval)
+      
+      // Separate intervals for different data
+      const logsInterval = setInterval(fetchLogs, 10000) // Logs every 10s
+      const commentsInterval = setInterval(() => fetchComments(1, selectedAgent, false), 30000) // Comments every 30s
+      
+      return () => {
+        clearInterval(logsInterval)
+        clearInterval(commentsInterval)
+      }
     }
   }, [selectedProject?.id])
 
