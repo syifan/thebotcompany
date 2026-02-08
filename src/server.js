@@ -620,10 +620,17 @@ Do not ask questions, just create the issue based on the description provided.`;
       if (fs.existsSync(statePath)) {
         const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
         this.cycleCount = state.cycleCount || 0;
-        log(`Loaded state: cycle ${this.cycleCount}`, this.id);
+        this.completedAgents = state.completedAgents || [];
+        this.currentCycleId = state.currentCycleId || null;
+        log(`Loaded state: cycle ${this.cycleCount}, completed: [${this.completedAgents.join(', ')}]`, this.id);
+      } else {
+        this.completedAgents = [];
+        this.currentCycleId = null;
       }
     } catch (e) {
       log(`Failed to load state: ${e.message}`, this.id);
+      this.completedAgents = [];
+      this.currentCycleId = null;
     }
   }
 
@@ -632,6 +639,8 @@ Do not ask questions, just create the issue based on the description provided.`;
     try {
       const state = {
         cycleCount: this.cycleCount,
+        completedAgents: this.completedAgents || [],
+        currentCycleId: this.currentCycleId,
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -680,18 +689,47 @@ Do not ask questions, just create the issue based on the description provided.`;
       const { managers, workers } = this.loadAgents();
       const allAgents = [...managers, ...workers];
 
-      this.cycleCount++;
-      log(`===== CYCLE ${this.cycleCount} (${workers.length} workers) =====`, this.id);
+      // Generate a cycle ID based on agent list to detect if agents changed
+      const cycleId = allAgents.map(a => a.name).sort().join(',');
+      
+      // Check if we're resuming an interrupted cycle or starting fresh
+      const isResume = this.currentCycleId === cycleId && this.completedAgents.length > 0;
+      
+      if (!isResume) {
+        // Starting a new cycle
+        this.cycleCount++;
+        this.completedAgents = [];
+        this.currentCycleId = cycleId;
+        this.saveState();
+        log(`===== CYCLE ${this.cycleCount} (${workers.length} workers) =====`, this.id);
+      } else {
+        log(`===== RESUMING CYCLE ${this.cycleCount} (completed: ${this.completedAgents.length}/${allAgents.length}) =====`, this.id);
+      }
 
       for (const agent of allAgents) {
         if (!this.running) break;
+        
+        // Skip agents that already completed in this cycle
+        if (this.completedAgents.includes(agent.name)) {
+          log(`Skipping ${agent.name} (already completed)`, this.id);
+          continue;
+        }
+        
         while (this.isPaused && this.running) {
           await sleep(1000);
         }
         await this.runAgent(agent, config);
+        
+        // Mark agent as completed and save state
+        if (this.running) {
+          this.completedAgents.push(agent.name);
+          this.saveState();
+        }
       }
 
-      // Save state after cycle completes
+      // Cycle complete - clear completed agents for next cycle
+      this.completedAgents = [];
+      this.currentCycleId = null;
       this.saveState();
 
       // Compute sleep: budget-derived or fixed interval
