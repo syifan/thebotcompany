@@ -505,42 +505,41 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     return (
       <div
         onClick={handleClick}
-        className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
-          isActive ? 'bg-blue-50 border border-blue-200' : isSelected ? 'bg-purple-50 border border-purple-200' : 'bg-neutral-50 hover:bg-neutral-100'
+        className={`p-2 rounded cursor-pointer transition-colors ${
+          isSelected ? 'bg-purple-50 border border-purple-200' : 'bg-neutral-50 hover:bg-neutral-100'
         }`}
         title="Click to toggle filter"
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
-            {agent.role && (
-              <span className="px-1.5 py-0.5 bg-neutral-200 text-neutral-600 text-xs rounded-full truncate max-w-[120px]" title={agent.role}>
-                {agent.role}
+        {/* Row 1: Name, active time, badges, info button */}
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
+          <div className="flex items-center gap-1.5">
+            {isActive && runtime !== null && (
+              <span className="text-xs text-blue-600 flex items-center gap-1">
+                <Clock className="w-3 h-3" />{formatRuntime(runtime)}
               </span>
             )}
+            {isSelected && <Badge variant="secondary">Filter</Badge>}
+            {isActive && <Badge variant="success">Active</Badge>}
+            <button
+              onClick={(e) => { e.stopPropagation(); openAgentModal(agent.name) }}
+              className="p-1 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600"
+              title="View skill"
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
-          {(agent.totalCost > 0 || agent.lastCallCost > 0) && (
-            <p className="text-xs text-neutral-400 mt-0.5">
-              Last: ${(agent.lastCallCost || 0).toFixed(2)} · Avg: ${(agent.avgCallCost || 0).toFixed(2)} · 24h: ${(agent.last24hCost || 0).toFixed(2)} · Total: ${(agent.totalCost || 0).toFixed(2)}
-            </p>
-          )}
         </div>
-        <div className="flex items-center gap-1.5 ml-2 shrink-0">
-          {isActive && runtime !== null && (
-            <span className="text-xs text-blue-600 flex items-center gap-1">
-              <Clock className="w-3 h-3" />{formatRuntime(runtime)}
-            </span>
-          )}
-          {isSelected && <Badge variant="secondary">Filter</Badge>}
-          {isActive && <Badge variant="success">Active</Badge>}
-          <button
-            onClick={(e) => { e.stopPropagation(); openAgentModal(agent.name) }}
-            className="p-1 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600"
-            title="View skill"
-          >
-            <Info className="w-4 h-4" />
-          </button>
-        </div>
+        {/* Row 2: Role */}
+        {agent.role && (
+          <p className="text-xs text-neutral-500 mt-1">{agent.role}</p>
+        )}
+        {/* Row 3: Cost metrics */}
+        {(agent.totalCost > 0 || agent.lastCallCost > 0) && (
+          <p className="text-xs text-neutral-400 mt-1">
+            Last: ${(agent.lastCallCost || 0).toFixed(2)} · Avg: ${(agent.avgCallCost || 0).toFixed(2)} · 24h: ${(agent.last24hCost || 0).toFixed(2)} · Total: ${(agent.totalCost || 0).toFixed(2)}
+          </p>
+        )}
       </div>
     )
   }
