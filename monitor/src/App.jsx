@@ -94,6 +94,7 @@ function App() {
   const [createIssueInfoModal, setCreateIssueInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
+  const prevAgentRef = useRef(null)
 
   const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
 
@@ -110,6 +111,16 @@ function App() {
         setSelectedProject(prev => {
           if (!prev) return prev
           const updated = data.projects.find(p => p.id === prev.id)
+          if (updated) {
+            const prevAgent = prevAgentRef.current
+            const curAgent = updated.currentAgent || null
+            // Agent changed (finished or new one started) → refresh project data
+            if (prevAgent !== null && prevAgent !== curAgent) {
+              fetchProjectData()
+              fetchComments(1, null, false)
+            }
+            prevAgentRef.current = curAgent
+          }
           return updated || prev
         })
       }
