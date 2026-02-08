@@ -976,28 +976,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               {/* Config */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2"><Settings className="w-4 h-4" />Configuration</span>
-                    <div className="flex items-center gap-2">
-                      {configDirty && <Badge variant="warning">Unsaved</Badge>}
-                      {configDirty && (
-                        <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-700">
-                          Reset
-                        </button>
-                      )}
-                      <button 
-                        onClick={saveConfig} 
-                        disabled={!configDirty || configSaving}
-                        className={`px-3 py-1.5 rounded text-xs font-medium inline-flex items-center ${
-                          configDirty && !configSaving
-                            ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                            : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <Save className="w-3 h-3 mr-1.5" />{configSaving ? '...' : 'Save'}
-                      </button>
-                    </div>
-                  </CardTitle>
+                  <CardTitle className="flex items-center gap-2"><Settings className="w-4 h-4" />Configuration</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {configError && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{configError}</div>}
@@ -1058,6 +1037,21 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </div>
                     </div>
                   </div>
+                  {configDirty && (
+                    <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100">
+                      <Badge variant="warning">Unsaved</Badge>
+                      <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-700">
+                        Reset
+                      </button>
+                      <button 
+                        onClick={saveConfig} 
+                        disabled={configSaving}
+                        className="px-3 py-1.5 rounded text-xs font-medium inline-flex items-center bg-blue-500 hover:bg-blue-600 text-white"
+                      >
+                        <Save className="w-3 h-3 mr-1.5" />{configSaving ? '...' : 'Save'}
+                      </button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
