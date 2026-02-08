@@ -2,12 +2,32 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft, Github } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+
+function Footer() {
+  return (
+    <footer className="mt-12 py-6 border-t border-neutral-200">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-neutral-400">
+        <span>TheBotCompany</span>
+        <span className="hidden sm:inline">·</span>
+        <a 
+          href="https://github.com/syifan/thebotcompany" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 hover:text-neutral-600 transition-colors"
+        >
+          <Github className="w-4 h-4" />
+          GitHub
+        </a>
+      </div>
+    </footer>
+  )
+}
 
 function SleepCountdown({ sleepUntil }) {
   const [remaining, setRemaining] = useState('')
@@ -599,6 +619,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               <Plus className="w-4 h-4 mr-2" /> Add Project
             </Button>
           </div>
+
+          <Footer />
         </div>
 
         {/* Add Project Modal */}
@@ -1086,6 +1108,8 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 </div>
               </CardContent>
             </Card>
+
+            <Footer />
           </>
         )}
       </div>
