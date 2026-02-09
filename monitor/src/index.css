@@ -10,7 +10,7 @@
   background-color: #f8f9fa;
 }
 
-.dark {
+:root.dark {
   color: #e5e7eb;
   background-color: #0a0a0a;
 }

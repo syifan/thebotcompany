@@ -824,7 +824,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 p-6">
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">
