@@ -46,6 +46,7 @@ Write **brief** evaluation to each worker's workspace: `{project_dir}/workspace/
 - Replace previous evaluation each cycle (don't accumulate)
 - Be constructive and actionable
 - Keep it brief (a few bullet points)
+- **Do not tell agents what to prioritize.** No mention of specific issues, milestones, or PRs in evaluations. Agents decide their own priorities from open issues. Evaluations are about performance and process, not task direction.
 
 ### 6. Adjust Agent Skills
 
