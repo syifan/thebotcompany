@@ -54,6 +54,7 @@ If an agent's skill file (`{project_dir}/workers/{name}.md`) needs improvement:
 - Clarify responsibilities
 - Adjust based on observed performance
 - Consider adjusting their model if needed
+- **Never reference specific issue numbers or PR numbers in skill files.** Skills define general capabilities and responsibilities, not current tasks. Agents discover their tasks from open issues each cycle.
 
 ### 7. Hiring & Firing
 
