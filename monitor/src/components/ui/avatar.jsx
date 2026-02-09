@@ -14,7 +14,7 @@ function Avatar({ className = "", children, ...props }) {
 function AvatarFallback({ className = "", children, ...props }) {
   return (
     <div
-      className={`flex h-full w-full items-center justify-center rounded-full bg-neutral-200 text-neutral-600 text-xs font-medium ${className}`}
+      className={`flex h-full w-full items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 text-xs font-medium ${className}`}
       {...props}
     >
       {children}

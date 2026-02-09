@@ -4,7 +4,7 @@ function Separator({ className = "", orientation = "horizontal", ...props }) {
   return (
     <div
       role="separator"
-      className={`shrink-0 bg-neutral-200 ${
+      className={`shrink-0 bg-neutral-200 dark:bg-neutral-700 ${
         orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]"
       } ${className}`}
       {...props}

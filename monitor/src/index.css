@@ -10,6 +10,11 @@
   background-color: #f8f9fa;
 }
 
+.dark {
+  color: #e5e7eb;
+  background-color: #0a0a0a;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -53,4 +58,39 @@ body {
 
 .prose tr:nth-child(even) {
   background-color: #f9fafb;
+}
+
+/* Dark mode prose tables */
+.dark .prose th, .dark .prose td {
+  border-color: #404040;
+}
+
+.dark .prose th {
+  background-color: #262626;
+}
+
+.dark .prose tr:nth-child(even) {
+  background-color: #262626;
+}
+
+/* Dark mode prose text */
+.dark .prose {
+  color: #d4d4d4;
+}
+
+.dark .prose strong {
+  color: #e5e5e5;
+}
+
+.dark .prose a {
+  color: #60a5fa;
+}
+
+.dark .prose code {
+  color: #e5e5e5;
+  background-color: #262626;
+}
+
+.dark .prose h1, .dark .prose h2, .dark .prose h3, .dark .prose h4 {
+  color: #f5f5f5;
 }

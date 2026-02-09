@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -11,15 +11,15 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 function Footer() {
   return (
-    <footer className="mt-12 py-6 border-t border-neutral-200">
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-neutral-400">
+    <footer className="mt-12 py-6 border-t border-neutral-200 dark:border-neutral-700">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-neutral-400 dark:text-neutral-500">
         <span>TheBotCompany</span>
         <span className="hidden sm:inline">·</span>
         <a 
           href="https://github.com/syifan/thebotcompany" 
           target="_blank" 
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 hover:text-neutral-600 transition-colors"
+          className="flex items-center gap-1.5 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
         >
           <Github className="w-4 h-4" />
           GitHub
@@ -95,6 +95,19 @@ function App() {
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
   const prevAgentRef = useRef(null)
+
+
+  // Dark mode
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode')
+    if (saved !== null) return saved === 'true'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+    localStorage.setItem('darkMode', darkMode)
+  }, [darkMode])
 
   const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
 
@@ -533,15 +546,15 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
       <div
         onClick={handleClick}
         className={`p-2 rounded cursor-pointer transition-colors ${
-          isSelected ? 'bg-purple-50 border border-purple-200' : 'bg-neutral-50 hover:bg-neutral-100'
+          isSelected ? 'bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800' : 'bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
         }`}
         title="Click to toggle filter"
       >
         {/* Row 1: Name, model, active time, badges, info button */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-neutral-800 capitalize">{agent.name}</span>
-            {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{agent.model}</span>}
+            <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}</span>
+            {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
           </div>
           <div className="flex items-center gap-1.5">
             {isActive && runtime !== null && (
@@ -553,7 +566,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             {isActive && <Badge variant="success">Active</Badge>}
             <button
               onClick={(e) => { e.stopPropagation(); openAgentModal(agent.name) }}
-              className="p-1 rounded hover:bg-neutral-200 text-neutral-400 hover:text-neutral-600"
+              className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
               title="View skill"
             >
               <Info className="w-4 h-4" />
@@ -562,11 +575,11 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
         </div>
         {/* Row 2: Role */}
         {agent.role && (
-          <p className="text-xs text-neutral-500 mt-1">{agent.role}</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{agent.role}</p>
         )}
         {/* Row 3: Cost metrics */}
         {(agent.totalCost > 0 || agent.lastCallCost > 0) && (
-          <p className="text-xs text-neutral-400 mt-1">
+          <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
             Last: ${(agent.lastCallCost || 0).toFixed(2)} · Avg: ${(agent.avgCallCost || 0).toFixed(2)} · 24h: ${(agent.last24hCost || 0).toFixed(2)} · Total: ${(agent.totalCost || 0).toFixed(2)}
           </p>
         )}
@@ -577,16 +590,25 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   // Project listing page (when no project is selected)
   if (!selectedProject) {
     return (
-      <div className="min-h-screen bg-neutral-50 p-6">
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 sm:mb-8">
             <div className="flex items-start sm:items-center justify-between gap-2">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800">TheBotCompany</h1>
-                <p className="text-neutral-500 text-sm mt-1 hidden sm:block">Multi-project AI Agent Orchestrator</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 dark:text-neutral-100">TheBotCompany</h1>
+                <p className="text-neutral-500 dark:text-neutral-400 text-sm mt-1 hidden sm:block">Multi-project AI Agent Orchestrator</p>
               </div>
-              <div className="text-xs sm:text-sm text-neutral-400 shrink-0">
-                {Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className="p-2 rounded-lg bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                  title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
+                <div className="text-xs sm:text-sm text-neutral-400 dark:text-neutral-500 shrink-0">
+                  {Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m
+                </div>
               </div>
             </div>
           </div>
@@ -604,7 +626,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         <Folder className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-base sm:text-lg font-semibold text-neutral-800 truncate">{project.id}</h3>
+                        <h3 className="text-base sm:text-lg font-semibold text-neutral-800 dark:text-neutral-100 truncate">{project.id}</h3>
                         {project.repo && (
                           <a href={`https://github.com/${project.repo}`} target="_blank" rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -621,9 +643,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         <Badge variant={project.paused ? 'warning' : project.running ? 'success' : project.sleeping ? 'secondary' : 'destructive'}>
                           {project.paused ? 'Paused' : project.running ? (project.currentAgent || 'Running') : project.sleeping ? 'Sleeping' : 'Stopped'}
                         </Badge>
-                        <p className="text-xs text-neutral-400 mt-1">Cycle {project.cycleCount}</p>
+                        <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Cycle {project.cycleCount}</p>
                         {project.cost && project.cost.totalCost > 0 && (
-                          <p className="text-xs text-neutral-500 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
+                          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
                         )}
                       </div>
                       <Button 
@@ -643,9 +665,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             {projects.length === 0 && (
               <Card>
                 <CardContent className="py-12">
-                  <div className="text-center text-neutral-500">
+                  <div className="text-center text-neutral-500 dark:text-neutral-400">
                     <Folder className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                    <p className="text-lg font-medium">No projects configured</p>
+                    <p className="text-lg font-medium dark:text-neutral-300">No projects configured</p>
                     <p className="text-sm mt-2">Add a project to get started</p>
                   </div>
                 </CardContent>
@@ -667,7 +689,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           </ModalHeader>
           <ModalContent>
             {addProjectModal.error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm mb-4">
+              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm mb-4">
                 {addProjectModal.error}
               </div>
             )}
@@ -676,7 +698,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             {(addProjectModal.step === 'url' || addProjectModal.step === 'cloning') && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">GitHub Repository URL</label>
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">GitHub Repository URL</label>
                   <input
                     type="text"
                     placeholder="https://github.com/username/reponame"
@@ -686,7 +708,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     disabled={addProjectModal.step === 'cloning'}
                     onKeyDown={(e) => { if (e.key === 'Enter') cloneProject() }}
                   />
-                  <p className="text-xs text-neutral-500 mt-1">
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
                     The repo will be cloned to ~/.thebotcompany/dev/src/github.com/org/repo/
                   </p>
                 </div>
@@ -709,15 +731,15 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             {/* Step: Spec */}
             {addProjectModal.step === 'spec' && (
               <div className="space-y-4">
-                <div className="p-3 bg-green-50 border border-green-200 rounded text-green-700 text-sm">
+                <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded text-green-700 dark:text-green-300 text-sm">
                   Repository cloned: <span className="font-mono font-bold">{addProjectModal.projectId}</span>
                 </div>
 
                 {addProjectModal.hasSpec ? (
                   <div className="space-y-3">
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                      <p className="text-sm font-medium text-blue-800 mb-1">spec.md already exists</p>
-                      <p className="text-xs text-blue-600">This project already has a specification file.</p>
+                    <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded">
+                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">spec.md already exists</p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">This project already has a specification file.</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -726,12 +748,12 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         checked={addProjectModal.updateSpec}
                         onChange={(e) => setAddProjectModal(prev => ({ ...prev, updateSpec: e.target.checked }))}
                       />
-                      <label htmlFor="updateSpec" className="text-sm text-neutral-700">Update the spec</label>
+                      <label htmlFor="updateSpec" className="text-sm text-neutral-700 dark:text-neutral-300">Update the spec</label>
                     </div>
                     {addProjectModal.updateSpec && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-neutral-700 mb-1">What do you want to build?</label>
+                          <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">What do you want to build?</label>
                           <textarea
                             className="w-full px-3 py-2 border rounded-md min-h-[80px]"
                             placeholder="Describe what you want to build..."
@@ -740,7 +762,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-neutral-700 mb-1">How do you consider the project is success?</label>
+                          <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">How do you consider the project is success?</label>
                           <textarea
                             className="w-full px-3 py-2 border rounded-md min-h-[80px]"
                             placeholder="Define the success criteria..."
@@ -753,11 +775,11 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-sm text-neutral-600">
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
                       No spec.md found. Describe your project so the AI agents know what to work on.
                     </p>
                     <div>
-                      <label className="block text-sm font-medium text-neutral-700 mb-1">What do you want to build?</label>
+                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">What do you want to build?</label>
                       <textarea
                         className="w-full px-3 py-2 border rounded-md min-h-[80px]"
                         placeholder="Describe what you want to build..."
@@ -766,7 +788,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-neutral-700 mb-1">How do you consider the project is success?</label>
+                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">How do you consider the project is success?</label>
                       <textarea
                         className="w-full px-3 py-2 border rounded-md min-h-[80px]"
                         placeholder="Define the success criteria..."
@@ -792,7 +814,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             {addProjectModal.step === 'adding' && (
               <div className="flex flex-col items-center justify-center py-8 gap-3">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
-                <p className="text-sm text-neutral-600">Adding project...</p>
+                <p className="text-sm text-neutral-600 dark:text-neutral-400">Adding project...</p>
               </div>
             )}
           </ModalContent>
@@ -810,17 +832,24 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             {/* Left: Back button + Title */}
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500 shrink-0 px-2">
+              <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500 dark:text-neutral-400 shrink-0 px-2">
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline ml-1">All Projects</span>
               </Button>
-              <h1 className="text-lg sm:text-2xl font-bold text-neutral-800 truncate">{selectedProject.id}</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-neutral-800 dark:text-neutral-100 truncate">{selectedProject.id}</h1>
             </div>
             
             {/* Right: Actions */}
             <div className="flex items-center gap-2 pl-8 sm:pl-0">
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-lg bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
               {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium inline-flex items-center">
+                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center">
                   <Github className="w-3 h-3 mr-1.5" />
                   GitHub
                 </a>
@@ -831,7 +860,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   Resume
                 </button>
               ) : (
-                <button onClick={() => controlAction('pause')} className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded text-xs text-neutral-700 font-medium inline-flex items-center">
+                <button onClick={() => controlAction('pause')} className="px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center">
                   <Pause className="w-3 h-3 mr-1.5" />
                   Pause
                 </button>
@@ -853,7 +882,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   className={`px-2.5 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
                     selectedProject?.id === project.id
                       ? 'bg-blue-500 text-white'
-                      : 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
+                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'
                   }`}
                 >
                   {project.id}
@@ -875,17 +904,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Status</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Status</span>
                       <Badge variant={selectedProject.paused ? 'warning' : selectedProject.running ? 'success' : 'destructive'}>
                         {selectedProject.paused && selectedProject.currentAgent ? '⏳ Pausing...' : selectedProject.paused ? '⏸️ Paused' : selectedProject.running ? '▶️ Running' : '⏹️ Stopped'}
                       </Badge>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Cycle</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Cycle</span>
                       <span className="text-2xl font-mono font-bold">{selectedProject.cycleCount}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Agent</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Agent</span>
                       {selectedProject.sleeping ? (
                         <Badge variant="secondary" className="flex items-center gap-1">
                           💤 Sleeping
@@ -897,12 +926,12 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     </div>
                     {selectedProject.sleeping && selectedProject.sleepUntil && (
                       <div className="flex justify-between items-center">
-                        <span className="text-neutral-600">Next cycle</span>
+                        <span className="text-neutral-600 dark:text-neutral-300">Next cycle</span>
                         <SleepCountdown sleepUntil={selectedProject.sleepUntil} />
                       </div>
                     )}
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Last Cycle</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Last Cycle</span>
                       <span className="text-sm font-mono">
                         {selectedProject.cost?.lastCycleDuration 
                           ? `${Math.floor(selectedProject.cost.lastCycleDuration / 60000)}m ${Math.floor((selectedProject.cost.lastCycleDuration % 60000) / 1000)}s`
@@ -910,7 +939,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Avg Cycle</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Avg Cycle</span>
                       <span className="text-sm font-mono">
                         {selectedProject.cost?.avgCycleDuration 
                           ? `${Math.floor(selectedProject.cost.avgCycleDuration / 60000)}m ${Math.floor((selectedProject.cost.avgCycleDuration % 60000) / 1000)}s`
@@ -918,7 +947,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Uptime</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Uptime</span>
                       <span className="text-sm font-mono">{Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m</span>
                     </div>
                   </div>
@@ -931,38 +960,38 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Last Cycle</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Last Cycle</span>
                       <span className="text-sm font-mono">${(selectedProject.cost?.lastCycleCost || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Avg Cycle</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Avg Cycle</span>
                       <span className="text-sm font-mono">${(selectedProject.cost?.avgCycleCost || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Last 24h</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Last 24h</span>
                       <span className="text-sm font-mono">${(selectedProject.cost?.last24hCost || 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-neutral-600">Total</span>
+                      <span className="text-neutral-600 dark:text-neutral-300">Total</span>
                       <span className="text-sm font-mono">${(selectedProject.cost?.totalCost || 0).toFixed(2)}</span>
                     </div>
                     {selectedProject.budget && (
                       <>
                         <div className="flex justify-between items-center">
-                          <span className="text-neutral-600">Budget</span>
+                          <span className="text-neutral-600 dark:text-neutral-300">Budget</span>
                           <span className="text-sm font-mono">
                             ${selectedProject.budget.spent24h.toFixed(2)} / ${selectedProject.budget.budgetPer24h.toFixed(2)}
                             <span className="text-neutral-400 ml-1">({selectedProject.budget.percentUsed.toFixed(0)}%)</span>
                           </span>
                         </div>
                         {selectedProject.budget.exhausted && (
-                          <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-medium">
+                          <div className="p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-xs font-medium">
                             Budget exhausted — cycle paused until spend rolls off
                           </div>
                         )}
                         {!selectedProject.budget.exhausted && (
                           <div className="flex justify-between items-center">
-                            <span className="text-neutral-600">Computed interval</span>
+                            <span className="text-neutral-600 dark:text-neutral-300">Computed interval</span>
                             <span className="text-sm font-mono">
                               {selectedProject.budget.computedSleepMs >= 60000
                                 ? `${Math.floor(selectedProject.budget.computedSleepMs / 60000)}m ${Math.floor((selectedProject.budget.computedSleepMs % 60000) / 1000)}s`
@@ -975,7 +1004,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <div className="pt-2 border-t">
                       <button
                         onClick={() => setBudgetInfoModal(true)}
-                        className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
+                        className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
                       >
                         How budget works →
                       </button>
@@ -990,17 +1019,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <CardTitle className="flex items-center gap-2"><Settings className="w-4 h-4" />Configuration</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {configError && <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">{configError}</div>}
+                  {configError && <div className="mb-3 p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-xs">{configError}</div>}
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 flex items-center gap-1">
+                      <label className="text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
                         Interval
-                        <button onClick={() => setIntervalInfoModal(true)} className="text-neutral-400 hover:text-neutral-600">
+                        <button onClick={() => setIntervalInfoModal(true)} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
                           <Info className="w-3 h-3" />
                         </button>
                       </label>
                       <select 
-                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                         value={configForm.cycleIntervalMs} 
                         onChange={(e) => updateConfigField('cycleIntervalMs', Number(e.target.value))}
                       >
@@ -1008,14 +1037,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 flex items-center gap-1">
+                      <label className="text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
                         Agent Timeout
-                        <button onClick={() => setTimeoutInfoModal(true)} className="text-neutral-400 hover:text-neutral-600">
+                        <button onClick={() => setTimeoutInfoModal(true)} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
                           <Info className="w-3 h-3" />
                         </button>
                       </label>
                       <select 
-                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                         value={configForm.agentTimeoutMs} 
                         onChange={(e) => updateConfigField('agentTimeoutMs', Number(e.target.value))}
                       >
@@ -1023,34 +1052,34 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 flex items-center gap-1">
+                      <label className="text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
                         24hr Budget
-                        <button onClick={() => setBudgetInfoModal(true)} className="text-neutral-400 hover:text-neutral-600">
+                        <button onClick={() => setBudgetInfoModal(true)} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
                           <Info className="w-3 h-3" />
                         </button>
                       </label>
                       <div className="flex items-center">
                         <button
                           onClick={() => updateConfigField('budgetPer24h', Math.max(0, (configForm.budgetPer24h || 0) - 20))}
-                          className="px-2 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded-l-md text-sm font-medium text-neutral-600"
+                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-l-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
                         >
                           −
                         </button>
-                        <div className="px-3 py-1.5 bg-white border-y border-neutral-300 text-sm text-center min-w-[60px]">
+                        <div className="px-3 py-1.5 bg-white dark:bg-neutral-800 border-y border-neutral-300 dark:border-neutral-600 text-sm dark:text-neutral-200 text-center min-w-[60px]">
                           {configForm.budgetPer24h ? `$${configForm.budgetPer24h}` : 'off'}
                         </div>
                         <button
                           onClick={() => updateConfigField('budgetPer24h', (configForm.budgetPer24h || 0) + 20)}
-                          className="px-2 py-1.5 bg-neutral-200 hover:bg-neutral-300 rounded-r-md text-sm font-medium text-neutral-600"
+                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-r-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
                         >
                           +
                         </button>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 text-sm">Athena Interval</label>
+                      <label className="text-neutral-600 dark:text-neutral-300 text-sm">Athena Interval</label>
                       <select 
-                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                         value={configForm.athenaCycleInterval} 
                         onChange={(e) => updateConfigField('athenaCycleInterval', Number(e.target.value))}
                       >
@@ -1058,9 +1087,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </select>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 text-sm">Apollo Interval</label>
+                      <label className="text-neutral-600 dark:text-neutral-300 text-sm">Apollo Interval</label>
                       <select 
-                        className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                         value={configForm.apolloCycleInterval} 
                         onChange={(e) => updateConfigField('apolloCycleInterval', Number(e.target.value))}
                       >
@@ -1069,9 +1098,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     </div>
                   </div>
                   {configDirty && (
-                    <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100">
+                    <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700">
                       <Badge variant="warning">Unsaved</Badge>
-                      <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-700">
+                      <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
                         Reset
                       </button>
                       <button 
@@ -1095,7 +1124,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 <CardContent>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {agents.managers.map((agent) => <AgentItem key={agent.name} agent={agent} isManager />)}
-                    {agents.managers.length === 0 && <p className="text-sm text-neutral-400">No managers</p>}
+                    {agents.managers.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No managers</p>}
                   </div>
                 </CardContent>
               </Card>
@@ -1106,7 +1135,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 <CardContent>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {agents.workers.map((agent) => <AgentItem key={agent.name} agent={agent} />)}
-                    {agents.workers.length === 0 && <p className="text-sm text-neutral-400">No workers</p>}
+                    {agents.workers.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No workers</p>}
                   </div>
                 </CardContent>
               </Card>
@@ -1118,18 +1147,18 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {prs.map((pr) => (
                       <a key={pr.number} href={`${repoUrl}/pull/${pr.number}`} target="_blank" rel="noopener noreferrer"
-                        className="block p-2 bg-neutral-50 hover:bg-neutral-100 rounded cursor-pointer transition-colors">
+                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer transition-colors">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-neutral-400">#{pr.number}</span>
-                          <span className="text-sm font-medium text-neutral-800 truncate">{pr.shortTitle || pr.title}</span>
+                          <span className="text-xs text-neutral-400 dark:text-neutral-500">#{pr.number}</span>
+                          <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{pr.shortTitle || pr.title}</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500">
+                        <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                           {pr.agent && <span className="flex items-center gap-1"><User className="w-3 h-3" />{pr.agent}</span>}
                           <span className="truncate">{pr.headRefName}</span>
                         </div>
                       </a>
                     ))}
-                    {prs.length === 0 && <p className="text-sm text-neutral-400">No open PRs</p>}
+                    {prs.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open PRs</p>}
                   </div>
                 </CardContent>
               </Card>
@@ -1150,7 +1179,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         </Badge>
                       )}
                     </span>
-                    <span className="text-sm font-normal text-neutral-500">{comments.length} loaded</span>
+                    <span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 flex-1 overflow-hidden">
@@ -1158,7 +1187,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     const { scrollTop, scrollHeight, clientHeight } = e.target
                     if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
                   }}>
-                    {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 text-center py-8">No reports found</p>}
+                    {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-8">No reports found</p>}
                     {comments.map((comment, idx) => (
                       <div key={comment.id}>
                         {idx > 0 && <Separator className="my-4" />}
@@ -1169,17 +1198,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                                 {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm font-semibold text-neutral-800 capitalize">{comment.agent || comment.author}</span>
-                            <span className="text-xs text-neutral-400">{new Date(comment.created_at).toLocaleString()}</span>
+                            <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
+                            <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
                           </div>
-                          <div className="text-sm text-neutral-700 prose prose-sm prose-neutral max-w-none">
+                          <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
                           </div>
                         </div>
                       </div>
                     ))}
                     {commentsLoading && (
-                      <div className="flex items-center justify-center py-4 gap-2 text-neutral-400">
+                      <div className="flex items-center justify-center py-4 gap-2 text-neutral-400 dark:text-neutral-500">
                         <RefreshCw className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span>
                       </div>
                     )}
@@ -1194,18 +1223,18 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <div className="space-y-2 flex-1 overflow-y-auto">
                     {issues.map((issue) => (
                       <a key={issue.number} href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer"
-                        className="block p-2 bg-neutral-50 hover:bg-neutral-100 rounded cursor-pointer transition-colors">
+                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer transition-colors">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-neutral-400">#{issue.number}</span>
-                          <span className="text-sm font-medium text-neutral-800 truncate">{issue.shortTitle || issue.title}</span>
+                          <span className="text-xs text-neutral-400 dark:text-neutral-500">#{issue.number}</span>
+                          <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{issue.shortTitle || issue.title}</span>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-neutral-500">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                           {issue.creator && <span className="flex items-center gap-1"><User className="w-3 h-3" />{issue.creator}</span>}
                           {issue.assignee && <span className="flex items-center gap-1 text-green-600"><UserCheck className="w-3 h-3" />{issue.assignee}</span>}
                         </div>
                       </a>
                     ))}
-                    {issues.length === 0 && <p className="text-sm text-neutral-400">No open issues</p>}
+                    {issues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open issues</p>}
                   </div>
                   <Separator className="my-3 shrink-0" />
                   <div className="space-y-2 shrink-0">
@@ -1226,7 +1255,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="flex-1">
                         {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
                       </Button>
-                      <button onClick={() => setCreateIssueInfoModal(true)} className="p-2 text-neutral-400 hover:text-neutral-600">
+                      <button onClick={() => setCreateIssueInfoModal(true)} className="p-2 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
                         <Info className="w-4 h-4" />
                       </button>
                     </div>
@@ -1275,9 +1304,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           ) : agentModal.data ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm text-neutral-600">Model</h3>
+                <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300">Model</h3>
                 <select
-                  className="px-3 py-1.5 bg-white border border-neutral-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   value={agentModal.data.model || 'claude-sonnet-4-20250514'}
                   onChange={async (e) => {
                     const newModel = e.target.value;
@@ -1306,14 +1335,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 </select>
               </div>
               <div>
-                <h3 className="font-semibold text-sm text-neutral-600 mb-2">Skill Definition</h3>
-                <div className="bg-neutral-50 rounded p-3 text-sm prose prose-sm max-w-none max-h-64 overflow-y-auto">
+                <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Skill Definition</h3>
+                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
                 </div>
               </div>
               {agentModal.data.lastResponse && (
                 <div>
-                  <h3 className="font-semibold text-sm text-neutral-600 mb-2">Last Response</h3>
+                  <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Last Response</h3>
                   <div className="bg-neutral-900 rounded p-3 text-sm max-h-64 overflow-y-auto">
                     <pre className="text-neutral-300 whitespace-pre-wrap text-xs font-mono">{agentModal.data.lastResponse}</pre>
                   </div>
@@ -1321,7 +1350,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               )}
               {agentModal.data.lastRawOutput && (
                 <div>
-                  <h3 className="font-semibold text-sm text-neutral-600 mb-2">Raw CLI Output</h3>
+                  <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Raw CLI Output</h3>
                   <div className="bg-neutral-900 rounded p-3 text-sm max-h-64 overflow-y-auto">
                     <pre className="text-neutral-300 whitespace-pre-wrap text-xs font-mono">{agentModal.data.lastRawOutput}</pre>
                   </div>
@@ -1329,16 +1358,16 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               )}
               {agentModal.data.workspaceFiles?.length > 0 && (
                 <div>
-                  <h3 className="font-semibold text-sm text-neutral-600 mb-2">Workspace Files</h3>
+                  <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Workspace Files</h3>
                   <div className="space-y-2">
                     {agentModal.data.workspaceFiles.map((file) => (
-                      <div key={file.name} className="bg-neutral-50 rounded p-3">
+                      <div key={file.name} className="bg-neutral-50 dark:bg-neutral-900 rounded p-3">
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-medium text-sm">{file.name}</span>
                           <span className="text-xs text-neutral-400">{new Date(file.modified).toLocaleString()}</span>
                         </div>
                         {file.content && (
-                          <pre className="text-xs text-neutral-600 whitespace-pre-wrap max-h-32 overflow-y-auto">{file.content}</pre>
+                          <pre className="text-xs text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap max-h-32 overflow-y-auto">{file.content}</pre>
                         )}
                       </div>
                     ))}
@@ -1347,7 +1376,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               )}
             </div>
           ) : (
-            <p className="text-neutral-400 text-center py-8">Failed to load agent details</p>
+            <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load agent details</p>
           )}
         </ModalContent>
       </Modal>
@@ -1364,7 +1393,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             </div>
           ) : bootstrapModal.preview && !bootstrapModal.preview.available ? (
             <div className="space-y-4">
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-sm">
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded text-yellow-700 dark:text-yellow-300 text-sm">
                 {bootstrapModal.preview.reason || 'Bootstrap is not available for this project.'}
               </div>
               <div className="flex justify-end">
@@ -1373,21 +1402,21 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             </div>
           ) : bootstrapModal.preview ? (
             <div className="space-y-4">
-              <p className="text-sm text-neutral-600">
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 Bootstrap clears the workspace and creates a fresh tracker issue so agents start from a clean slate.
               </p>
 
-              <div className="p-3 bg-red-50 border border-red-200 rounded">
-                <p className="text-sm font-medium text-red-800 mb-1">What will be lost</p>
-                <ul className="text-sm text-red-700 space-y-1 list-disc list-inside">
+              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded">
+                <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">What will be lost</p>
+                <ul className="text-sm text-red-700 dark:text-red-300 space-y-1 list-disc list-inside">
                   <li>The entire workspace folder will be emptied — all worker skills, agent notes, and workspace files will be deleted</li>
                   <li>The cycle count will be reset to 1</li>
                 </ul>
               </div>
 
-              <div className="p-3 bg-green-50 border border-green-200 rounded">
-                <p className="text-sm font-medium text-green-800 mb-1">What will happen</p>
-                <ul className="text-sm text-green-700 space-y-1 list-disc list-inside">
+              <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">What will happen</p>
+                <ul className="text-sm text-green-700 dark:text-green-300 space-y-1 list-disc list-inside">
                   {bootstrapModal.preview.repo && (
                     <li>A new GitHub tracker issue will be created and set in config</li>
                   )}
@@ -1395,9 +1424,9 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 </ul>
               </div>
 
-              <div className="p-3 bg-neutral-50 border border-neutral-200 rounded">
-                <p className="text-sm font-medium text-neutral-600 mb-1">What will be kept</p>
-                <ul className="text-sm text-neutral-500 space-y-1 list-disc list-inside">
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
+                <p className="text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">What will be kept</p>
+                <ul className="text-sm text-neutral-500 dark:text-neutral-400 space-y-1 list-disc list-inside">
                   <li>Project configuration (config.yaml) is preserved</li>
                   <li>All repository files, PRs, and issues remain untouched</li>
                   <li>The old tracker issue will not be closed</li>
@@ -1405,7 +1434,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               </div>
 
               {bootstrapModal.error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm">
                   {bootstrapModal.error}
                 </div>
               )}
@@ -1428,7 +1457,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           ) : (
             <div className="space-y-4">
               {bootstrapModal.error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm">
                   {bootstrapModal.error}
                 </div>
               )}
@@ -1446,17 +1475,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           How Budget Works
         </ModalHeader>
         <ModalContent>
-          <div className="space-y-4 text-sm text-neutral-700">
+          <div className="space-y-4 text-sm text-neutral-700 dark:text-neutral-300">
             <div>
-              <h3 className="font-semibold text-neutral-800 mb-1">Overview</h3>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Overview</h3>
               <p>The budget system dynamically adjusts cycle intervals to keep your 24-hour spending under the configured limit.</p>
             </div>
             
             <div>
-              <h3 className="font-semibold text-neutral-800 mb-1">How it calculates sleep time</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600">
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">How it calculates sleep time</h3>
+              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
                 <li>Tracks cost of each cycle using EMA (exponential moving average)</li>
-                <li>Calculates remaining budget: <code className="bg-neutral-100 px-1 rounded">budget - spent_24h</code></li>
+                <li>Calculates remaining budget: <code className="bg-neutral-100 dark:bg-neutral-800 px-1 rounded">budget - spent_24h</code></li>
                 <li>Estimates how many cycles you can afford</li>
                 <li>Spreads those cycles evenly across 24 hours</li>
                 <li>Adds a conservatism factor that decreases as more data is collected</li>
@@ -1464,17 +1493,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             </div>
 
             <div>
-              <h3 className="font-semibold text-neutral-800 mb-1">Interval as minimum</h3>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Interval as minimum</h3>
               <p>If you set both budget and interval, the <strong>interval acts as a floor</strong>. Budget can make sleep longer, but never shorter than the configured interval.</p>
             </div>
 
             <div>
-              <h3 className="font-semibold text-neutral-800 mb-1">Budget exhaustion</h3>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Budget exhaustion</h3>
               <p>When spending hits the limit, the orchestrator sleeps until the oldest cost entry rolls off the 24-hour window (max 2 hours at a time).</p>
             </div>
 
             <div>
-              <h3 className="font-semibold text-neutral-800 mb-1">Cold start</h3>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Cold start</h3>
               <p>With no historical data, it estimates based on agent count and model type, using a higher conservatism factor.</p>
             </div>
           </div>
@@ -1487,7 +1516,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           Interval
         </ModalHeader>
         <ModalContent>
-          <div className="space-y-3 text-sm text-neutral-700">
+          <div className="space-y-3 text-sm text-neutral-700 dark:text-neutral-300">
             <p>The <strong>minimum time</strong> between cycles. After all agents complete a cycle, the orchestrator waits at least this long before starting the next cycle.</p>
             <p>If a budget is configured, the actual interval may be longer to stay within the budget limit. The interval acts as a floor — never shorter, but can be longer.</p>
             <p><strong>No delay</strong> means cycles run back-to-back (only useful with budget control).</p>
@@ -1501,7 +1530,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           Agent Timeout
         </ModalHeader>
         <ModalContent>
-          <div className="space-y-3 text-sm text-neutral-700">
+          <div className="space-y-3 text-sm text-neutral-700 dark:text-neutral-300">
             <p>The <strong>maximum time</strong> an individual agent is allowed to run before being killed.</p>
             <p>If an agent exceeds this limit, it will be forcefully terminated and the orchestrator moves to the next agent.</p>
             <p><strong>Never</strong> means no timeout — agents run until they complete naturally. Use with caution as stuck agents can block the entire cycle.</p>
@@ -1515,10 +1544,10 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           Create Issue (AI)
         </ModalHeader>
         <ModalContent>
-          <div className="space-y-3 text-sm text-neutral-700">
+          <div className="space-y-3 text-sm text-neutral-700 dark:text-neutral-300">
             <p>Describe what you want in plain language, and AI will create a properly formatted GitHub issue with a clear title, description, and relevant labels.</p>
             <p><strong>Example inputs:</strong></p>
-            <ul className="list-disc list-inside text-neutral-600 space-y-1">
+            <ul className="list-disc list-inside text-neutral-600 dark:text-neutral-400 space-y-1">
               <li>"Add dark mode support"</li>
               <li>"The login button is broken on mobile"</li>
               <li>"We need better error messages for API failures"</li>
