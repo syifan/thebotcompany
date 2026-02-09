@@ -17,6 +17,8 @@ Check `{project_dir}/cost.csv` for per-agent cost data (columns: time, cycle, ag
 
 **If an agent consistently costs significantly more tokens than others**, consider splitting its responsibilities into two smaller, focused agents. A single agent doing too much per cycle is inefficient — it's better to have two agents each doing one thing well.
 
+**If an agent keeps timing out**, that's a strong signal its scope is too broad. Split its responsibilities so each sub-agent can complete within the time limit.
+
 ### 3. Review Recent Activity
 
 - Recent tracker comments (last 100)
