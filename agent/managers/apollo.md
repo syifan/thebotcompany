@@ -73,12 +73,17 @@ If an agent's skill file (`{project_dir}/workers/{name}.md`) needs improvement:
 
 **Disable (Fire):** If an agent is consistently ineffective or keeps timing out:
 - **Do NOT delete the agent file**
-- Add to the YAML frontmatter at the top of the agent skill file:
+- Update the **full YAML frontmatter** at the top of the agent skill file
+
+  **Header template:**
   ```yaml
   ---
+  model: claude-sonnet-4-20250514
   disabled: true
   ---
   ```
+
+- Always show the *complete header* when modifying model or disabled state
 - No warning or gradual deprecation is required
 - Do not document firing in tracker
 
@@ -91,28 +96,23 @@ Disabled agents must be skipped entirely by the orchestrator.
 
 ## Model Selection
 
-**Default to the best model (claude-opus-4-6).** Only downgrade for clear reasons.
+**Default to a mid‑tier model.** Use higher‑end models only when there is a clear reason.
 
-Available models:
-- **claude-opus-4-6** — Best quality, use by default
-- **claude-sonnet-4** — Only if task is clearly simple and repetitive
-- **claude-haiku-3-5** — Only for trivial, high-volume tasks
+Guidelines:
+- Start agents on **claude‑sonnet‑4** by default
+- Upgrade to **claude‑opus‑4‑6** only when the task truly requires deep reasoning, complex analysis, or high ambiguity
+- Use **claude‑haiku‑3‑5** only for trivial, high‑volume, mechanical work
 
-### Fast Mode
+When changing a model, always show the **full YAML header** explicitly.
 
-For **claude-opus-4-6**, fast mode is available. It provides faster responses at higher cost (same quality).
+**Header template:**
+```yaml
+---
+model: claude-sonnet-4-20250514
+---
+```
 
-**Consider fast mode for agents that:**
-- Do simple, routine tasks
-- Don't need long thinking/reasoning
-- Benefit from quick turnaround
-
-**Don't use fast mode for agents that:**
-- Do complex analysis or planning
-- Need deep reasoning
-- Work on nuanced problems
-
-Add options in YAML frontmatter at the top of skill files:
+Prefer correctness and clarity over raw intelligence — most work does not need the strongest model.
 ```yaml
 ---
 model: claude-opus-4-6
