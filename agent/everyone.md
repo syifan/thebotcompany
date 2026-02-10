@@ -57,14 +57,16 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 **First, create your workspace folder if it doesn't exist:** `mkdir -p {project_dir}/workspace/{your_name}`
 
-**At the end of each cycle**, write a brief `note.md` with:
-- Context for your future self
-- Lessons learned
-- How to do better next time
+**At the end of each cycle**, write a brief `note.md` with **two sections**:
+
+- **Long‑term memory**: principles, heuristics, or tips you would want to remember for a long time.
+  - Change this **sparingly** — avoid rewriting it every cycle.
+- **Short‑term memory**: context about the current work, what you tried, and what to do next.
 
 **Rules:**
-- Keep it short (a few bullet points)
-- Replace previous note each cycle (don't accumulate)
+- Be very concise (a few bullet points)
+- Short‑term memory can change every cycle
+- Long‑term memory should be stable unless you learn something genuinely new
 - This is for YOU — help yourself be more effective
 
 ---
