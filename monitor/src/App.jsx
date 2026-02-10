@@ -550,9 +550,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     return (
       <div
         onClick={handleAgentClick}
-        className={`p-2 rounded cursor-pointer transition-colors ${
-          isSelected ? 'bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800' : 'bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-        }`}
+        className="p-2 rounded cursor-pointer transition-colors bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800"
         title="Click to view agent details"
       >
         {/* Row 1: Name, model, active time, badges, info button */}
