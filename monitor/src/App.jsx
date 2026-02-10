@@ -1083,24 +1083,36 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 dark:text-neutral-300 text-sm">Athena Interval</label>
-                      <select 
-                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        value={configForm.athenaCycleInterval} 
-                        onChange={(e) => updateConfigField('athenaCycleInterval', Number(e.target.value))}
-                      >
-                        <option value={1}>Every cycle</option><option value={2}>Every 2</option><option value={3}>Every 3</option><option value={5}>Every 5</option><option value={10}>Every 10</option>
-                      </select>
+                      <label className="text-neutral-600 dark:text-neutral-300 text-sm">Athena (Strategist) Interval</label>
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => updateConfigField('athenaCycleInterval', Math.max(1, (configForm.athenaCycleInterval || 1) - 1))}
+                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-l-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                        >−</button>
+                        <div className="px-3 py-1.5 bg-white dark:bg-neutral-800 border-y border-neutral-300 dark:border-neutral-600 text-sm dark:text-neutral-200 text-center min-w-[48px]">
+                          {configForm.athenaCycleInterval || 1}
+                        </div>
+                        <button
+                          onClick={() => updateConfigField('athenaCycleInterval', (configForm.athenaCycleInterval || 1) + 1)}
+                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-r-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                        >+</button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 dark:text-neutral-300 text-sm">Apollo Interval</label>
-                      <select 
-                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        value={configForm.apolloCycleInterval} 
-                        onChange={(e) => updateConfigField('apolloCycleInterval', Number(e.target.value))}
-                      >
-                        <option value={1}>Every cycle</option><option value={2}>Every 2</option><option value={3}>Every 3</option><option value={5}>Every 5</option><option value={10}>Every 10</option>
-                      </select>
+                      <label className="text-neutral-600 dark:text-neutral-300 text-sm">Apollo (HR) Interval</label>
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => updateConfigField('apolloCycleInterval', Math.max(1, (configForm.apolloCycleInterval || 1) - 1))}
+                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-l-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                        >−</button>
+                        <div className="px-3 py-1.5 bg-white dark:bg-neutral-800 border-y border-neutral-300 dark:border-neutral-600 text-sm dark:text-neutral-200 text-center min-w-[48px]">
+                          {configForm.apolloCycleInterval || 1}
+                        </div>
+                        <button
+                          onClick={() => updateConfigField('apolloCycleInterval', (configForm.apolloCycleInterval || 1) + 1)}
+                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-r-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                        >+</button>
+                      </div>
                     </div>
                   </div>
                   {configDirty && (
