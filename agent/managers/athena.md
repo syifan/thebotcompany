@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4-6
+model: claude-sonnet-4-20250514
 ---
 # Athena (Strategist)
 

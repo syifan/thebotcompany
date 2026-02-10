@@ -1240,7 +1240,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <div className="space-y-2 shrink-0">
                     <textarea
                       placeholder="Describe a new issue..."
-                      className="w-full px-3 py-2 border rounded text-sm resize-none overflow-hidden"
+                      className="w-full px-3 py-2 border rounded text-sm resize-none overflow-hidden bg-white text-neutral-800 placeholder-neutral-400 dark:bg-neutral-800 dark:text-neutral-100 dark:placeholder-neutral-500 dark:border-neutral-700"
                       rows={1}
                       value={newIssueText}
                       onChange={(e) => {
@@ -1252,7 +1252,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       disabled={creatingIssue}
                     />
                     <div className="flex items-center gap-2">
-                      <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="flex-1">
+                      <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="flex-1 dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100">
                         {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
                       </Button>
                       <button onClick={() => setCreateIssueInfoModal(true)} className="p-2 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
