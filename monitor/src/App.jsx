@@ -1270,7 +1270,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                       disabled={creatingIssue}
                     />
                     <div className="flex items-center gap-2">
-                      <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="flex-1 dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100">
+                      <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="flex-1 dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-300 dark:disabled:opacity-100">
                         {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
                       </Button>
                       <button onClick={() => setCreateIssueInfoModal(true)} className="p-2 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
