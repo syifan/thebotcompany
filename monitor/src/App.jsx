@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Info, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Filter } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -537,18 +537,23 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     const isSelected = selectedAgent === agent.name
     const runtime = isActive ? selectedProject?.currentAgentRuntime : null
     
-    const handleClick = () => {
+    const handleAgentClick = () => {
+      openAgentModal(agent.name)
+    }
+
+    const handleFilterClick = (e) => {
+      e.stopPropagation()
       if (isSelected) clearAgentFilter()
       else selectAgent(agent.name)
     }
     
     return (
       <div
-        onClick={handleClick}
+        onClick={handleAgentClick}
         className={`p-2 rounded cursor-pointer transition-colors ${
           isSelected ? 'bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800' : 'bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
         }`}
-        title="Click to toggle filter"
+        title="Click to view agent details"
       >
         {/* Row 1: Name, model, active time, badges, info button */}
         <div className="flex items-center justify-between">
@@ -562,14 +567,17 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                 <Clock className="w-3 h-3" />{formatRuntime(runtime)}
               </span>
             )}
-            {isSelected && <Badge variant="secondary">Filter</Badge>}
             {isActive && <Badge variant="success">Active</Badge>}
             <button
-              onClick={(e) => { e.stopPropagation(); openAgentModal(agent.name) }}
-              className="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
-              title="View skill"
+              onClick={handleFilterClick}
+              className={`p-1 rounded transition-colors ${
+                isSelected
+                  ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
+                  : 'hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300'
+              }`}
+              title="Filter comments by agent"
             >
-              <Info className="w-4 h-4" />
+              <Filter className="w-4 h-4" />
             </button>
           </div>
         </div>
