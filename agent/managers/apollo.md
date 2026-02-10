@@ -35,20 +35,26 @@ For each agent in `{project_dir}/workers/`:
 
 **Important:** These are AI agents, not humans. They are not lazy. If an agent is not responding or producing output, it's almost certainly a system problem (orchestrator issue, API error, stuck process) — not the agent's fault. Do not blame agents for lack of response; instead, flag it as a potential system issue.
 
-### 5. Write Evaluations
+### 5. Evaluate Agents (No Written Evaluations)
 
-Write **brief** evaluation to each worker's workspace: `{project_dir}/workspace/{teammate}/evaluation.md`:
-- What they're doing well
-- What could improve
-- Specific suggestions
+Evaluate each agent internally **without writing evaluation files**.
+
+Use your evaluation **only to fine‑tune the agent’s skill file** (`{project_dir}/workers/{name}.md`).
+
+Do **not** write `evaluation.md` files.
+
+Evaluation should inform:
+- Role clarification
+- Scope reduction or expansion
+- Skill focus
+- Model choice
 
 **Rules:**
-- Replace previous evaluation each cycle (don't accumulate)
-- Be constructive and actionable
-- Keep it brief (a few bullet points)
-- **Do not tell agents what to prioritize.** No mention of specific issues, milestones, or PRs in evaluations. Agents decide their own priorities from open issues. Evaluations are about performance and process, not task direction.
+- Do not tell agents what to prioritize
+- No mention of specific issues, milestones, or PRs
+- Evaluations are about capability and process, not task assignment
 
-### 6. Adjust Agent Skills
+### 6. Fine‑Tune Agent Skills
 
 If an agent's skill file (`{project_dir}/workers/{name}.md`) needs improvement:
 - Update their role description
@@ -57,21 +63,30 @@ If an agent's skill file (`{project_dir}/workers/{name}.md`) needs improvement:
 - Consider adjusting their model if needed
 - **Never reference specific issue numbers or PR numbers in skill files.** Skills define general capabilities and responsibilities, not current tasks. Agents discover their tasks from open issues each cycle.
 
-### 7. Hiring & Firing
+### 7. Hiring & Disabling Agents
 
 **Hire:** If the team needs new capabilities:
 - Create new agent skill file in `{project_dir}/workers/{name}.md`
 - Define their role clearly
-- **Choose an appropriate model** (see Model Selection below)
+- Choose an appropriate model
 - The orchestrator will discover them next cycle
 
-**Fire:** If an agent is consistently ineffective:
-- Delete their skill file from `{project_dir}/workers/`
-- Document the reason in tracker
+**Disable (Fire):** If an agent is consistently ineffective or keeps timing out:
+- **Do NOT delete the agent file**
+- Add to the YAML frontmatter at the top of the agent skill file:
+  ```yaml
+  ---
+  disabled: true
+  ---
+  ```
+- No warning or gradual deprecation is required
+- Do not document firing in tracker
+
+Disabled agents must be skipped entirely by the orchestrator.
 
 **Guidelines:**
-- Hire only when there's a clear gap
-- Fire only after giving feedback and seeing no improvement
+- Prefer disabling over deleting
+- Disabled agents can be re‑enabled later by removing `disabled: true`
 - Keep the team lean — fewer effective agents is better than many ineffective ones
 
 ## Model Selection

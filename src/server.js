@@ -178,6 +178,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
+          if (/^disabled:\s*true$/m.test(content)) continue;
           managers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: true });
         }
       }
@@ -188,6 +189,7 @@ class ProjectRunner {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
+          if (/^disabled:\s*true$/m.test(content)) continue;
           workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: false });
         }
       }
