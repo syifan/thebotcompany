@@ -1019,7 +1019,12 @@ This is an automated message from the orchestrator.`;
               // Post agent's response — strip any preamble before "# [AgentName]"
               const headerMatch = resultText.match(/^(# \[.+\])/m);
               if (headerMatch) {
-                comment = resultText.slice(resultText.indexOf(headerMatch[0]));
+                const headerIdx = resultText.indexOf(headerMatch[0]);
+                const preamble = resultText.slice(0, headerIdx).trim();
+                const structured = resultText.slice(headerIdx);
+                comment = preamble
+                  ? structured + '\n\n## Thoughts\n' + preamble
+                  : structured;
               } else {
                 comment = resultText;
               }
