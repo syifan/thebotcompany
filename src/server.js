@@ -793,6 +793,30 @@ class ProjectRunner {
     }
   }
 
+  // Wait while paused, auto-resuming after intervalMs. Optional condition check to resume early.
+  async _autoPauseWait(intervalMs, resumeCondition = null) {
+    const retryAt = Date.now() + intervalMs;
+    while (this.isPaused && this.running && !this.wakeNow) {
+      await sleep(5000);
+      // Check if it's time to auto-retry
+      if (Date.now() >= retryAt) {
+        if (resumeCondition && !resumeCondition()) {
+          // Condition not met, keep waiting (check again in 2h)
+          log(`Auto-retry check: condition not met, waiting another 2h`, this.id);
+          return this._autoPauseWait(intervalMs, resumeCondition);
+        }
+        log(`Auto-resuming after ${Math.round(intervalMs / 60000)}m pause`, this.id);
+        this.isPaused = false;
+        this.pauseReason = null;
+        return;
+      }
+    }
+    // Manually resumed or stopped
+    if (!this.isPaused) {
+      this.pauseReason = null;
+    }
+  }
+
   parseSchedule(resultText) {
     // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Hermes' response
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
@@ -818,12 +842,11 @@ class ProjectRunner {
       // Check budget before starting cycle
       const budgetStatus = this.getBudgetStatus();
       if (budgetStatus.exhausted) {
-        log(`Budget exhausted ($${budgetStatus.spent24h.toFixed(2)}/$${budgetStatus.budgetPer24h}), pausing project`, this.id);
+        log(`Budget exhausted ($${budgetStatus.spent24h.toFixed(2)}/$${budgetStatus.budgetPer24h}), waiting for budget to roll off`, this.id);
         this.isPaused = true;
         this.pauseReason = `Budget exhausted: $${budgetStatus.spent24h.toFixed(2)} / $${budgetStatus.budgetPer24h} (24h)`;
-        while (this.isPaused && this.running) {
-          await sleep(5000);
-        }
+        // Re-check every 2 hours until budget rolls off or manually resumed
+        await this._autoPauseWait(2 * 60 * 60 * 1000, () => !this.getBudgetStatus().exhausted);
         if (!this.running) break;
         continue;
       }
@@ -963,11 +986,14 @@ class ProjectRunner {
       this.currentSchedule = null;
       this.saveState();
 
-      // Auto-pause if every agent in the cycle failed
+      // Auto-pause if every agent in the cycle failed — retry after 2 hours
       if (cycleTotal > 0 && cycleFailures === cycleTotal && this.running) {
-        log(`⚠️ All ${cycleTotal} agents failed in cycle ${this.cycleCount} — auto-pausing`, this.id);
+        log(`⚠️ All ${cycleTotal} agents failed in cycle ${this.cycleCount} — auto-pausing (retry in 2h)`, this.id);
         this.isPaused = true;
         this.pauseReason = `All ${cycleTotal} agents failed in cycle ${this.cycleCount}`;
+        await this._autoPauseWait(2 * 60 * 60 * 1000);
+        if (!this.running) break;
+        continue; // Retry one round
       }
 
       // Compute sleep: budget-derived or fixed interval
