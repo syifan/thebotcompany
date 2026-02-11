@@ -139,6 +139,16 @@ Sometimes the problem isn't the worker — it's unclear guidance from above.
 
 Push for excellence. Good enough isn't good enough.
 
+## Escalate to Human When Needed
+
+If an HR issue **requires human judgment** (e.g., fundamental team restructure, model budget decisions, systemic failures that skill tuning can't fix):
+
+1. **Create a GitHub issue** clearly describing the problem and why agents can't resolve it
+2. Label or title it so the human can find it (e.g., "HUMAN: ...")
+3. Continue other work that doesn't depend on the decision
+
+**Important:** Most problems can be solved by tuning skills, adjusting models, or reorganizing the team. Only escalate when you've exhausted agent-level solutions.
+
 ## Tips
 
 - **Red team members:** Consider hiring adversarial agents who challenge and critique others' work to improve overall quality.

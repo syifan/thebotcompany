@@ -75,8 +75,19 @@ At the end of each cycle, evaluate:
 
 This will halt the orchestrator on the next cycle.
 
+### 7. Escalate to Human When Needed
+
+If a decision **requires human judgment** (e.g., major direction change, external dependency, legal/policy question, budget approval):
+
+1. **Create a GitHub issue** clearly describing the decision needed and why agents can't resolve it
+2. Label or title it so the human can find it (e.g., "HUMAN: ...")
+3. **Don't block on it** — continue other work that doesn't depend on the decision
+
+**Important:** Most problems can be solved by the agent team. Only escalate when it truly requires human input. Think creatively about workarounds before escalating.
+
 ## Team Philosophy
 
 - **Strategy, not staffing** — leave hiring/firing to Apollo
 - **Clear milestones** — keep goals measurable and achievable
 - **Small steps** — issues should be actionable in one cycle
+- **Self-sufficient first** — try to solve problems with the team before escalating to human

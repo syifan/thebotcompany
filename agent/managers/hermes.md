@@ -124,7 +124,17 @@ The tracker issue body is the task board. Structure:
 
 **Keep it short:** Remove completed tasks from the tracker. Only show pending work.
 
-### 8. Update Status
+### 8. Handle Project Blocks
+
+When the project seems blocked, follow this escalation ladder:
+
+1. **Can agents solve it?** Most blockers can be worked around by reassigning tasks, reprioritizing, or having agents research alternatives. Try this first.
+2. **Escalate to Athena/Apollo.** If the block is strategic (Athena) or team-related (Apollo), schedule them and create an issue describing the problem.
+3. **Pause the project (last resort).** If the project is truly blocked on human intervention and no agent work can proceed, create a `{project_dir}/STOP` file with the reason. This halts the orchestrator. Also create a GitHub issue titled "HUMAN: [description]" so the human knows what's needed.
+
+**Never let the team spin wheels.** If all issues are blocked waiting on human input and there's genuinely nothing productive to do, pause rather than waste budget on idle cycles.
+
+### 9. Update Status
 
 **Only Hermes increments the action count** (one action = one orchestrator round).
 
