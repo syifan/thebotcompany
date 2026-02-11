@@ -953,19 +953,21 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
                     </p>
                   </>
                 )}
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={resetAddProjectModal}>Cancel</Button>
-                  <Button
-                    onClick={addProjectModal.inputMode === 'dropdown' ? cloneSelectedRepo : cloneProject}
-                    disabled={addProjectModal.step === 'cloning' || (addProjectModal.inputMode === 'dropdown' ? !addProjectModal.selectedRepo : !addProjectModal.githubUrl.trim())}
-                  >
-                    {addProjectModal.step === 'cloning' ? (
-                      <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Cloning...</>
-                    ) : (
-                      'Next'
-                    )}
-                  </Button>
-                </div>
+                {addProjectModal.repoMode === 'existing' && (
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={resetAddProjectModal}>Cancel</Button>
+                    <Button
+                      onClick={addProjectModal.inputMode === 'dropdown' ? cloneSelectedRepo : cloneProject}
+                      disabled={addProjectModal.step === 'cloning' || (addProjectModal.inputMode === 'dropdown' ? !addProjectModal.selectedRepo : !addProjectModal.githubUrl.trim())}
+                    >
+                      {addProjectModal.step === 'cloning' ? (
+                        <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Cloning...</>
+                      ) : (
+                        'Next'
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
