@@ -154,13 +154,8 @@ class ProjectRunner {
       return match ? match[1] : null;
     };
     
-    const parseModel = (content) => {
-      // Match "model: xxx" in YAML frontmatter
-      const match = content.match(/^model:\s*(.+)$/m);
-      if (!match) return null;
-      const model = match[1].trim();
-      // Shorten common model names, keep version
-      // e.g., "claude-opus-4-6" -> "opus 4.6", "claude-sonnet-4-20250514" -> "sonnet 4"
+    const shortenModel = (model) => {
+      if (!model) return null;
       const versionMatch = model.match(/(opus|sonnet|haiku)-(\d+)(?:-(\d+))?/i);
       if (versionMatch) {
         const name = versionMatch[1].toLowerCase();
@@ -174,13 +169,27 @@ class ProjectRunner {
       return model;
     };
     
+    const parseModel = (content) => {
+      const match = content.match(/^model:\s*(.+)$/m);
+      return match ? shortenModel(match[1].trim()) : null;
+    };
+    
+    const config = this.loadConfig();
+    const managerOverrides = config.managers || {};
+    
     if (fs.existsSync(managersDir)) {
       for (const file of fs.readdirSync(managersDir)) {
         if (file.endsWith('.md')) {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
-          if (/^disabled:\s*true$/m.test(content)) continue;
-          managers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: true });
+          const overrides = managerOverrides[name] || {};
+          // Disabled check: config override takes priority, then frontmatter
+          const isDisabled = overrides.disabled !== undefined ? overrides.disabled : /^disabled:\s*true$/m.test(content);
+          if (isDisabled) continue;
+          // Model: config override takes priority, then frontmatter
+          const frontmatterModel = (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null;
+          const rawModel = overrides.model || frontmatterModel;
+          managers.push({ name, role: parseRole(content), model: shortenModel(rawModel), rawModel, isManager: true });
         }
       }
     }
@@ -1489,7 +1498,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // PATCH /api/projects/:id/agents/:name - Update agent model
+    // PATCH /api/projects/:id/agents/:name - Update agent settings
     if (req.method === 'PATCH' && subPath.startsWith('agents/') && subPath.split('/')[1]) {
       const agentName = subPath.split('/')[1];
       let body = '';
@@ -1497,35 +1506,51 @@ const server = http.createServer(async (req, res) => {
       req.on('end', () => {
         try {
           const { model } = JSON.parse(body);
-          if (!model) throw new Error('Missing model');
+          if (!model && model !== '') throw new Error('Missing model');
           
-          // Find skill file
-          const workersDir = path.join(runner.agentDir, 'workers');
+          // Check if this is a manager or worker
           const managersDir = path.join(ROOT, 'agent', 'managers');
-          let skillPath = path.join(workersDir, `${agentName}.md`);
-          if (!fs.existsSync(skillPath)) {
-            skillPath = path.join(managersDir, `${agentName}.md`);
-          }
-          if (!fs.existsSync(skillPath)) {
+          const workersDir = path.join(runner.agentDir, 'workers');
+          const isManager = fs.existsSync(path.join(managersDir, `${agentName}.md`));
+          const isWorker = fs.existsSync(path.join(workersDir, `${agentName}.md`));
+          
+          if (!isManager && !isWorker) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Agent not found' }));
             return;
           }
           
-          // Update frontmatter
-          let content = fs.readFileSync(skillPath, 'utf-8');
-          if (content.startsWith('---')) {
+          if (isManager) {
+            // Manager settings go in project config.yaml (not the skill file)
+            const config = runner.loadConfig();
+            if (!config.managers) config.managers = {};
+            if (!config.managers[agentName]) config.managers[agentName] = {};
             if (model) {
-              content = content.replace(/^(---[\s\S]*?)model:\s*.+$/m, `$1model: ${model}`);
-              if (!content.match(/^model:/m)) {
-                content = content.replace(/^---\n/, `---\nmodel: ${model}\n`);
+              config.managers[agentName].model = model;
+            } else {
+              // Empty string = clear override (inherit from skill file)
+              delete config.managers[agentName].model;
+              if (Object.keys(config.managers[agentName]).length === 0) {
+                delete config.managers[agentName];
               }
             }
+            fs.writeFileSync(runner.configPath, yaml.dump(config, { lineWidth: -1 }));
           } else {
-            content = `---\n${model ? `model: ${model}\n` : ''}---\n${content}`;
+            // Worker settings go in the skill file frontmatter
+            const skillPath = path.join(workersDir, `${agentName}.md`);
+            let content = fs.readFileSync(skillPath, 'utf-8');
+            if (content.startsWith('---')) {
+              if (model) {
+                content = content.replace(/^(---[\s\S]*?)model:\s*.+$/m, `$1model: ${model}`);
+                if (!content.match(/^model:/m)) {
+                  content = content.replace(/^---\n/, `---\nmodel: ${model}\n`);
+                }
+              }
+            } else {
+              content = `---\n${model ? `model: ${model}\n` : ''}---\n${content}`;
+            }
+            fs.writeFileSync(skillPath, content);
           }
-          
-          fs.writeFileSync(skillPath, content);
           
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
