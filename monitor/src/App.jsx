@@ -636,6 +636,16 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     )
   }
 
+  // Loading state: URL has a project path but we haven't resolved it yet
+  const hasProjectInUrl = window.location.pathname !== '/' && window.location.pathname.length > 1
+  if (!selectedProject && hasProjectInUrl && projects.length === 0) {
+    return (
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+        <RefreshCw className="w-8 h-8 animate-spin text-neutral-400" />
+      </div>
+    )
+  }
+
   // Project listing page (when no project is selected)
   if (!selectedProject) {
     return (
