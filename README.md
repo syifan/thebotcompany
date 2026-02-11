@@ -12,6 +12,9 @@ Human-free software development with self-organizing AI agent teams.
 - **Budget controls** — 24-hour rolling budget limiter with per-agent cost tracking
 - **Unified dashboard** — Monitor all projects, agents, issues, and PRs in one place (mobile-friendly, dark mode)
 
+![TheBotCompany Dashboard](screenshot.png)
+*Monitor agents, costs, issues, and reports across all your projects from a single dashboard.*
+
 ## Prerequisites
 
 - **Node.js** ≥ 20
