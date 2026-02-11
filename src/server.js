@@ -603,12 +603,44 @@ class ProjectRunner {
     if (!this.repo) throw new Error('No repo configured');
     if (!text?.trim()) throw new Error('Missing issue description');
     
-    // Parse first line as title, rest as body
-    const lines = text.trim().split('\n');
-    const title = `[Human] -> [Athena] ${lines[0].trim()}`;
-    const body = lines.length > 1 ? lines.slice(1).join('\n').trim() : lines[0].trim();
+    // Use Anthropic API to frame the issue properly
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
     
-    // Write body to temp file to avoid shell escaping issues
+    const prompt = `Create a GitHub issue from this description. Return ONLY valid JSON with "title" and "body" fields.
+
+Title format: [Human] -> [Assignee] Short description
+- If a specific agent is mentioned, use that name as assignee
+- Otherwise assign to Athena
+
+Body: well-formatted markdown with context.
+
+Description: "${text}"`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20241022',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    const content = data.content[0]?.text || '';
+    
+    // Parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Failed to parse AI response');
+    const { title, body } = JSON.parse(jsonMatch[0]);
+    
+    // Create issue via gh CLI
     const tmpFile = path.join(this.projectDir, '.tmp_issue_body.md');
     fs.writeFileSync(tmpFile, body);
     try {
