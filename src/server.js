@@ -1286,6 +1286,47 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/github/orgs - List GitHub orgs + current user
+  if (req.method === 'GET' && url.pathname === '/api/github/orgs') {
+    try {
+      const user = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
+      let orgs = [];
+      try {
+        orgs = execSync('gh api user/orgs --jq ".[].login"', { encoding: 'utf-8', timeout: 15000 })
+          .trim().split('\n').filter(Boolean);
+      } catch {}
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ user, orgs: [user, ...orgs] }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // GET /api/github/repos?owner=xxx - List repos for an owner
+  if (req.method === 'GET' && url.pathname === '/api/github/repos') {
+    const owner = url.searchParams.get('owner');
+    if (!owner) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing owner parameter' }));
+      return;
+    }
+    try {
+      const output = execSync(
+        `gh repo list ${owner} --json nameWithOwner,name,description --limit 100`,
+        { encoding: 'utf-8', timeout: 30000 }
+      );
+      const repos = JSON.parse(output);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ repos }));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
   // POST /api/projects/clone - Clone a GitHub repo and check for spec.md
   if (req.method === 'POST' && url.pathname === '/api/projects/clone') {
     let body = '';

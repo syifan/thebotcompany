@@ -60,6 +60,8 @@ function App() {
     step: null, githubUrl: '', projectId: null, projectPath: null,
     hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
     updateSpec: false, budgetPer24h: 50, error: null,
+    orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: false, reposLoading: false,
+    inputMode: 'dropdown', // 'dropdown' or 'url'
   })
   
   // Project-specific state
@@ -369,7 +371,57 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   }
 
   const openAddProjectModal = () => {
-    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null, budgetPer24h: 50 }))
+    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null, budgetPer24h: 50, orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: true, inputMode: 'dropdown' }))
+    // Fetch orgs
+    fetch('/api/github/orgs')
+      .then(r => r.json())
+      .then(data => {
+        setAddProjectModal(prev => ({ ...prev, orgs: data.orgs || [], orgsLoading: false, selectedOrg: data.user || '' }))
+        // Auto-load repos for the user
+        if (data.user) {
+          fetchReposForOrg(data.user)
+        }
+      })
+      .catch(() => {
+        setAddProjectModal(prev => ({ ...prev, orgsLoading: false, inputMode: 'url' }))
+      })
+  }
+
+  const fetchReposForOrg = (org) => {
+    setAddProjectModal(prev => ({ ...prev, reposLoading: true, repos: [], selectedRepo: '' }))
+    fetch(`/api/github/repos?owner=${encodeURIComponent(org)}`)
+      .then(r => r.json())
+      .then(data => {
+        setAddProjectModal(prev => ({ ...prev, repos: data.repos || [], reposLoading: false }))
+      })
+      .catch(() => {
+        setAddProjectModal(prev => ({ ...prev, reposLoading: false }))
+      })
+  }
+
+  const cloneSelectedRepo = () => {
+    const repo = addProjectModal.repos.find(r => r.name === addProjectModal.selectedRepo)
+    if (!repo) return
+    const url = `https://github.com/${repo.nameWithOwner}`
+    setAddProjectModal(prev => ({ ...prev, githubUrl: url }))
+    // Trigger clone with this URL
+    setAddProjectModal(prev => ({ ...prev, step: 'cloning', error: null, githubUrl: url }))
+    fetch('/api/projects/clone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setAddProjectModal(prev => ({
+          ...prev, step: 'spec', projectId: data.id, projectPath: data.path,
+          hasSpec: data.hasSpec, specContent: data.specContent, error: null,
+        }))
+      })
+      .catch(err => {
+        setAddProjectModal(prev => ({ ...prev, step: 'url', error: err.message }))
+      })
   }
 
   const cloneProject = async () => {
@@ -756,26 +808,76 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             {/* Step: URL Input */}
             {(addProjectModal.step === 'url' || addProjectModal.step === 'cloning') && (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">GitHub Repository URL</label>
-                  <input
-                    type="text"
-                    placeholder="https://github.com/username/reponame"
-                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                    value={addProjectModal.githubUrl}
-                    onChange={(e) => setAddProjectModal(prev => ({ ...prev, githubUrl: e.target.value, error: null }))}
-                    disabled={addProjectModal.step === 'cloning'}
-                    onKeyDown={(e) => { if (e.key === 'Enter') cloneProject() }}
-                  />
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                    The repo will be cloned to ~/.thebotcompany/dev/src/github.com/org/repo/
-                  </p>
-                </div>
+                {addProjectModal.inputMode === 'dropdown' ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Organization / User</label>
+                      {addProjectModal.orgsLoading ? (
+                        <div className="flex items-center gap-2 py-2 text-sm text-neutral-500"><RefreshCw className="w-4 h-4 animate-spin" /> Loading...</div>
+                      ) : (
+                        <select
+                          className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                          value={addProjectModal.selectedOrg}
+                          onChange={(e) => {
+                            const org = e.target.value
+                            setAddProjectModal(prev => ({ ...prev, selectedOrg: org }))
+                            if (org) fetchReposForOrg(org)
+                          }}
+                          disabled={addProjectModal.step === 'cloning'}
+                        >
+                          <option value="">Select...</option>
+                          {addProjectModal.orgs.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    {addProjectModal.selectedOrg && (
+                      <div>
+                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Repository</label>
+                        {addProjectModal.reposLoading ? (
+                          <div className="flex items-center gap-2 py-2 text-sm text-neutral-500"><RefreshCw className="w-4 h-4 animate-spin" /> Loading repos...</div>
+                        ) : (
+                          <select
+                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                            value={addProjectModal.selectedRepo}
+                            onChange={(e) => setAddProjectModal(prev => ({ ...prev, selectedRepo: e.target.value }))}
+                            disabled={addProjectModal.step === 'cloning'}
+                          >
+                            <option value="">Select a repository...</option>
+                            {addProjectModal.repos.map(r => (
+                              <option key={r.name} value={r.name}>{r.name}{r.description ? ` — ${r.description}` : ''}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      Or <button className="underline hover:text-neutral-700 dark:hover:text-neutral-300" onClick={() => setAddProjectModal(prev => ({ ...prev, inputMode: 'url' }))}>enter a URL manually</button>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">GitHub Repository URL</label>
+                      <input
+                        type="text"
+                        placeholder="https://github.com/username/reponame"
+                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                        value={addProjectModal.githubUrl}
+                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, githubUrl: e.target.value, error: null }))}
+                        disabled={addProjectModal.step === 'cloning'}
+                        onKeyDown={(e) => { if (e.key === 'Enter') cloneProject() }}
+                      />
+                    </div>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      Or <button className="underline hover:text-neutral-700 dark:hover:text-neutral-300" onClick={() => setAddProjectModal(prev => ({ ...prev, inputMode: 'dropdown' }))}>select from your repos</button>
+                    </p>
+                  </>
+                )}
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={resetAddProjectModal}>Cancel</Button>
                   <Button
-                    onClick={cloneProject}
-                    disabled={addProjectModal.step === 'cloning' || !addProjectModal.githubUrl.trim()}
+                    onClick={addProjectModal.inputMode === 'dropdown' ? cloneSelectedRepo : cloneProject}
+                    disabled={addProjectModal.step === 'cloning' || (addProjectModal.inputMode === 'dropdown' ? !addProjectModal.selectedRepo : !addProjectModal.githubUrl.trim())}
                   >
                     {addProjectModal.step === 'cloning' ? (
                       <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Cloning...</>
