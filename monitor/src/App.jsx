@@ -684,9 +684,10 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
             </button>
           </div>
         </div>
-        {/* Row 2: Labels */}
+        {/* Row 2: Role */}
+        {agent.role && <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{agent.role}</p>}
+        {/* Row 3: Pills */}
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          {agent.role && <span className="text-xs text-neutral-500 dark:text-neutral-400">{agent.role}</span>}
           {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
           {mode && <span className={`px-1.5 py-0.5 text-xs rounded-full ${
             mode === 'execute' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
