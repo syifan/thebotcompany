@@ -532,42 +532,89 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     return `${m}m ${s}s`
   }
 
+  // Agent settings modal state
+  const [agentSettingsModal, setAgentSettingsModal] = useState({ open: false, agent: null, model: '', saving: false, error: null })
+
+  const openAgentSettings = (agent) => {
+    setAgentSettingsModal({ open: false, agent: null, model: '', saving: false, error: null })
+    // Fetch current agent details to get model
+    fetch(`${API_BASE}/api/projects/${selectedProject?.id}/agents/${agent.name}`)
+      .then(r => r.json())
+      .then(data => {
+        setAgentSettingsModal({ open: true, agent, model: data.model || '', saving: false, error: null })
+      })
+      .catch(() => {
+        setAgentSettingsModal({ open: true, agent, model: agent.rawModel || '', saving: false, error: null })
+      })
+  }
+
+  const saveAgentSettings = async () => {
+    setAgentSettingsModal(prev => ({ ...prev, saving: true, error: null }))
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${selectedProject?.id}/agents/${agentSettingsModal.agent.name}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: agentSettingsModal.model })
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to save')
+      setAgentSettingsModal(prev => ({ ...prev, open: false }))
+    } catch (e) {
+      setAgentSettingsModal(prev => ({ ...prev, saving: false, error: e.message }))
+    }
+  }
+
   const AgentItem = ({ agent, isManager = false }) => {
     const isActive = selectedProject?.currentAgent === agent.name
     const isSelected = selectedAgent === agent.name
     const runtime = isActive ? selectedProject?.currentAgentRuntime : null
-    
-    const handleAgentClick = () => {
-      openAgentModal(agent.name)
-    }
-
-    const handleFilterClick = (e) => {
-      e.stopPropagation()
-      if (isSelected) clearAgentFilter()
-      else selectAgent(agent.name)
-    }
+    // Get mode from schedule
+    const schedule = selectedProject?.schedule
+    const mode = schedule?.agents?.[agent.name] || null
     
     return (
-      <div
-        onClick={handleAgentClick}
-        className="p-2 rounded cursor-pointer transition-colors bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-        title="Click to view agent details"
-      >
-        {/* Row 1: Name, model, active time, badges, info button */}
+      <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
+        {/* Row 1: Name, model, mode badge, active time, badges, 3 buttons */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}</span>
             {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
+            {mode && <span className={`px-1.5 py-0.5 text-xs rounded-full ${
+              mode === 'execute' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+              mode === 'plan' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
+              mode === 'discuss' ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' :
+              mode === 'research' ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300' :
+              'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+            }`}>{mode}</span>}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {isActive && runtime !== null && (
-              <span className="text-xs text-blue-600 flex items-center gap-1">
+              <span className="text-xs text-blue-600 flex items-center gap-1 mr-1">
                 <Clock className="w-3 h-3" />{formatRuntime(runtime)}
               </span>
             )}
             {isActive && <Badge variant="success">Active</Badge>}
+            {/* Info button */}
             <button
-              onClick={handleFilterClick}
+              onClick={() => openAgentModal(agent.name)}
+              className="p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
+              title="View agent details"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+            {/* Settings button */}
+            <button
+              onClick={() => openAgentSettings(agent)}
+              className="p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
+              title="Agent settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            {/* Filter button */}
+            <button
+              onClick={() => {
+                if (isSelected) clearAgentFilter()
+                else selectAgent(agent.name)
+              }}
               className={`p-1 rounded transition-colors ${
                 isSelected
                   ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
@@ -1323,34 +1370,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300">Model</h3>
-                <select
-                  className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={agentModal.data.model || 'claude-sonnet-4-20250514'}
-                  onChange={async (e) => {
-                    const newModel = e.target.value;
-                    try {
-                      const res = await fetch(projectApi(`/agents/${agentModal.agent}`), {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ model: newModel })
-                      });
-                      if (res.ok) {
-                        setAgentModal(prev => ({
-                          ...prev,
-                          data: { ...prev.data, model: newModel }
-                        }));
-                        // Refresh agent list to update the model pill
-                        fetchProjectData();
-                      }
-                    } catch (err) {
-                      console.error('Failed to update model:', err);
-                    }
-                  }}
-                >
-                  <option value="claude-opus-4-6">claude-opus-4-6</option>
-                  <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
-                  <option value="claude-haiku-3-5-20241022">claude-haiku-3.5</option>
-                </select>
+                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm rounded">{agentModal.data.model || 'inherited'}</span>
               </div>
               <div>
                 <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Skill Definition</h3>
@@ -1396,6 +1416,41 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
           ) : (
             <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load agent details</p>
           )}
+        </ModalContent>
+      </Modal>
+
+      {/* Agent Settings Modal */}
+      <Modal open={agentSettingsModal.open} onClose={() => setAgentSettingsModal({ ...agentSettingsModal, open: false })}>
+        <ModalHeader onClose={() => setAgentSettingsModal({ ...agentSettingsModal, open: false })}>
+          <Settings className="w-4 h-4 inline mr-2" />
+          <span className="capitalize">{agentSettingsModal.agent?.name}</span> Settings
+        </ModalHeader>
+        <ModalContent>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">Model</label>
+              <select
+                className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={agentSettingsModal.model}
+                onChange={(e) => setAgentSettingsModal(prev => ({ ...prev, model: e.target.value }))}
+              >
+                <option value="">Inherited from global</option>
+                <option value="claude-opus-4-6">claude-opus-4-6</option>
+                <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
+                <option value="claude-haiku-3-5-20241022">claude-haiku-3.5</option>
+              </select>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Leave empty to use the project's default model.</p>
+            </div>
+            {agentSettingsModal.error && (
+              <p className="text-sm text-red-600 dark:text-red-400">{agentSettingsModal.error}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAgentSettingsModal({ ...agentSettingsModal, open: false })}>Cancel</Button>
+              <Button onClick={saveAgentSettings} disabled={agentSettingsModal.saving}>
+                {agentSettingsModal.saving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </div>
         </ModalContent>
       </Modal>
 
