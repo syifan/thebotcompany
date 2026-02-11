@@ -1,6 +1,6 @@
 {
   "name": "thebotcompany",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Multi-project AI agent orchestrator",
   "type": "module",
   "main": "src/server.js",
@@ -12,7 +12,12 @@
     "dev": "node --watch src/server.js",
     "monitor": "cd monitor && npm run dev"
   },
-  "keywords": ["ai", "agents", "orchestrator", "automation"],
+  "keywords": [
+    "ai",
+    "agents",
+    "orchestrator",
+    "automation"
+  ],
   "author": "Yifan Sun",
   "license": "MIT",
   "dependencies": {
