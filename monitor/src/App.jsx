@@ -537,27 +537,27 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
 
   const openAgentSettings = (agent) => {
     setAgentSettingsModal({ open: false, agent: null, model: '', saving: false, error: null })
-    // Fetch current agent details to get model
-    fetch(`${API_BASE}/api/projects/${selectedProject?.id}/agents/${agent.name}`)
+    fetch(projectApi(`/agents/${agent.name}`))
       .then(r => r.json())
       .then(data => {
         setAgentSettingsModal({ open: true, agent, model: data.model || '', saving: false, error: null })
       })
       .catch(() => {
-        setAgentSettingsModal({ open: true, agent, model: agent.rawModel || '', saving: false, error: null })
+        setAgentSettingsModal({ open: true, agent, model: '', saving: false, error: null })
       })
   }
 
   const saveAgentSettings = async () => {
     setAgentSettingsModal(prev => ({ ...prev, saving: true, error: null }))
     try {
-      const res = await fetch(`${API_BASE}/api/projects/${selectedProject?.id}/agents/${agentSettingsModal.agent.name}`, {
+      const res = await fetch(projectApi(`/agents/${agentSettingsModal.agent.name}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: agentSettingsModal.model })
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to save')
       setAgentSettingsModal(prev => ({ ...prev, open: false }))
+      fetchProjectData()
     } catch (e) {
       setAgentSettingsModal(prev => ({ ...prev, saving: false, error: e.message }))
     }
