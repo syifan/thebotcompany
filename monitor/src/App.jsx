@@ -147,8 +147,12 @@ function App() {
     }
   }
 
+  const selectedProjectRef = useRef(null)
+  useEffect(() => { selectedProjectRef.current = selectedProject }, [selectedProject])
+
   const fetchProjectData = async () => {
-    const baseApi = projectApi('')
+    const currentProject = selectedProjectRef.current
+    const baseApi = currentProject ? `/api/projects/${currentProject.id}` : null
     if (!baseApi) return
     
     try {
@@ -160,6 +164,9 @@ function App() {
         fetch(`${baseApi}/issues`),
         fetch(`${baseApi}/repo`)
       ])
+      
+      // Verify we're still on the same project before setting state
+      if (selectedProjectRef.current?.id !== currentProject.id) return
       
       setLogs((await logsRes.json()).logs || [])
       setAgents(await agentsRes.json())
@@ -237,7 +244,8 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
   }
   
   const fetchComments = async (page = 1, agent = null, append = false) => {
-    const baseApi = projectApi('')
+    const currentProject = selectedProjectRef.current
+    const baseApi = currentProject ? `/api/projects/${currentProject.id}` : null
     if (!baseApi) return
     setCommentsLoading(true)
     try {
@@ -245,6 +253,7 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
       if (agent) params.set('author', agent)
       const res = await fetch(`${baseApi}/comments?${params}`)
       if (!res.ok) return
+      if (selectedProjectRef.current?.id !== currentProject.id) return
       const data = await res.json()
       if (append) setComments(prev => [...prev, ...data.comments])
       else setComments(data.comments || [])
