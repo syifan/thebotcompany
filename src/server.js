@@ -894,11 +894,17 @@ class ProjectRunner {
           }
         }
         
-        // Add scheduled workers with their modes
+        // Add scheduled workers with their modes and tasks
         if (schedule.agents) {
-          for (const [name, mode] of Object.entries(schedule.agents)) {
+          for (const [name, value] of Object.entries(schedule.agents)) {
             const worker = workers.find(w => w.name === name);
-            if (worker) scheduledAgents.push({ ...worker, mode });
+            if (!worker) continue;
+            // Support both old format (string mode) and new format ({mode, task})
+            if (typeof value === 'string') {
+              scheduledAgents.push({ ...worker, mode: value, task: null });
+            } else {
+              scheduledAgents.push({ ...worker, mode: value.mode, task: value.task || null });
+            }
           }
         }
         
@@ -924,7 +930,7 @@ class ProjectRunner {
         while (this.isPaused && this.running) {
           await sleep(1000);
         }
-        const result = await this.runAgent(agent, config, agent.mode);
+        const result = await this.runAgent(agent, config, agent.mode, agent.task);
         
         // Track success/failure
         cycleTotal++;
@@ -971,7 +977,7 @@ class ProjectRunner {
     }
   }
 
-  async runAgent(agent, config, mode = null) {
+  async runAgent(agent, config, mode = null, task = null) {
     this.currentAgent = agent.name;
     this.currentAgentStartTime = Date.now();
     const modeStr = mode ? ` [${mode}]` : '';
@@ -1002,7 +1008,11 @@ class ProjectRunner {
           plan: 'PLAN — Decide what to do. Write a plan in your workspace notes. Do NOT write code, create PRs, or comment on issues. ONLY plan.',
           execute: 'EXECUTE — Do the actual work: write code, create PRs, implement features, fix bugs.'
         };
-        modeHeader = `> **Current mode: ${modeDescriptions[mode] || mode.toUpperCase()}**\n\n`;
+        modeHeader = `> **Current mode: ${modeDescriptions[mode] || mode.toUpperCase()}**\n`;
+        if (task) {
+          modeHeader += `> **Task: ${task}**\n`;
+        }
+        modeHeader += '\n';
       }
       
       skillContent = (modeHeader + everyone + skillContent).replaceAll('{project_dir}', this.agentDir);

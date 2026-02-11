@@ -658,7 +658,9 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
     const runtime = isActive ? selectedProject?.currentAgentRuntime : null
     // Get mode from schedule
     const schedule = selectedProject?.schedule
-    const mode = schedule?.agents?.[agent.name] || null
+    const agentSchedule = schedule?.agents?.[agent.name]
+    const mode = typeof agentSchedule === 'string' ? agentSchedule : agentSchedule?.mode || null
+    const task = typeof agentSchedule === 'object' ? agentSchedule?.task : null
     
     return (
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
@@ -698,6 +700,7 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
         </div>
         {/* Row 2: Role */}
         {agent.role && <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{agent.role}</p>}
+        {task && <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5 italic">{task}</p>}
         {/* Row 3: Pills */}
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
           {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}

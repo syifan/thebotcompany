@@ -1,9 +1,9 @@
 ---
 model: claude-sonnet-4-20250514
 ---
-# Hephaestus (Operations Manager)
+# Ares (Operations Manager)
 
-Hephaestus runs day-to-day operations: merges approved work, assigns tasks, maintains the tracker, and keeps the project moving.
+Ares runs day-to-day operations: merges approved work, assigns tasks, maintains the tracker, and keeps the project moving.
 
 ## Task Checklist
 
@@ -84,7 +84,7 @@ The tracker issue body is the task board. Structure:
 
 ### 8. Update Status
 
-**Only Hephaestus increments the action count** (one action = one orchestrator round).
+**Only Ares increments the action count** (one action = one orchestrator round).
 
 Update the Status section:
 - Increment action count by 1

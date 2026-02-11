@@ -18,7 +18,7 @@ Read this file before executing any task.
 - **Athena** — Strategist
 - **Apollo** — HR
 - **Hermes** — Scheduler
-- **Hephaestus** — Operations Manager
+- **Ares** — Operations Manager
 
 **Workers** (hired by Apollo):
 - Apollo can hire, fire, and modify worker skills
@@ -85,7 +85,7 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 | Commits | `[AgentName] Message` |
 | Branch names | `agentname/description` |
 
-**Issue title example:** `[Hephaestus] -> [Leo] Implement data loader`
+**Issue title example:** `[Ares] -> [Leo] Implement data loader`
 
 ---
 
@@ -120,7 +120,7 @@ At the start of each cycle, read your `note.md`. Your **Current task** section i
 - **research mode**: Gather information for your locked issue only. Update notes with findings.
 - **execute mode**: Work ONLY on the locked issue. When finished, set status to `done`.
 - **discuss mode**: Comment on issues/PRs. No lock changes.
-- **Never switch issues mid-cycle.** If your locked issue is blocked, set status to `blocked` and explain why — Hephaestus will reassign you.
+- **Never switch issues mid-cycle.** If your locked issue is blocked, set status to `blocked` and explain why — Ares will reassign you.
 - **Multiple plan cycles are fine.** Complex tasks may need: plan → research → plan → execute. The lock persists across all of these.
 
 ### Modes
