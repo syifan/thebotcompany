@@ -95,6 +95,8 @@ function App() {
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
+  const [projectLoading, setProjectLoading] = useState(false)
+  const [toast, setToast] = useState(null)
   const logsRef = useRef(null)
   const prevAgentRef = useRef(null)
 
@@ -112,6 +114,11 @@ function App() {
   }, [darkMode])
 
   const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
+
+  const showToast = (message, type = 'error') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 4000)
+  }
 
   const fetchGlobalStatus = async () => {
     try {
@@ -150,10 +157,11 @@ function App() {
   const selectedProjectRef = useRef(null)
   useEffect(() => { selectedProjectRef.current = selectedProject }, [selectedProject])
 
-  const fetchProjectData = async () => {
+  const fetchProjectData = async (initial = false) => {
     const currentProject = selectedProjectRef.current
     const baseApi = currentProject ? `/api/projects/${currentProject.id}` : null
     if (!baseApi) return
+    if (initial) setProjectLoading(true)
     
     try {
       const [logsRes, agentsRes, configRes, prsRes, issuesRes, repoRes] = await Promise.all([
@@ -187,6 +195,9 @@ function App() {
       setRepoUrl((await repoRes.json()).url)
     } catch (err) {
       console.error('Failed to fetch project data:', err)
+      if (initial) showToast('Failed to load project data')
+    } finally {
+      setProjectLoading(false)
     }
   }
   
@@ -195,7 +206,8 @@ function App() {
     try {
       const res = await fetch(projectApi(`/${action}`), { method: 'POST' })
       if (res.ok) await fetchGlobalStatus()
-    } catch (err) { console.error(`Control action ${action} failed:`, err) }
+      else showToast(`Action "${action}" failed`)
+    } catch (err) { showToast(`Action "${action}" failed: ${err.message}`) }
   }
   
   const saveConfig = async () => {
@@ -577,7 +589,7 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
 
   useEffect(() => {
     if (selectedProject) {
-      fetchProjectData()
+      fetchProjectData(true)
       const savedAgent = localStorage.getItem('selectedAgent')
       fetchComments(1, savedAgent, false)
       
@@ -1216,7 +1228,14 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
           {error && <Badge variant="warning">Error: {error}</Badge>}
         </div>
 
-        {selectedProject && (
+        {selectedProject && projectLoading && (
+          <div className="flex items-center justify-center py-20">
+            <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
+            <span className="ml-3 text-neutral-500 dark:text-neutral-400">Loading project...</span>
+          </div>
+        )}
+
+        {selectedProject && !projectLoading && (
           <>
             {/* Row 1: State, Cost & Budget, Config */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1878,6 +1897,20 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
           </div>
         </ModalContent>
       </Modal>
+
+      {/* Toast notifications */}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-all ${
+          toast.type === 'error' ? 'bg-red-600 text-white' :
+          toast.type === 'success' ? 'bg-green-600 text-white' :
+          'bg-neutral-800 text-white'
+        }`}>
+          <div className="flex items-center gap-2">
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 opacity-70 hover:opacity-100">✕</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
