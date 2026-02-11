@@ -86,14 +86,12 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState(() => localStorage.getItem('selectedAgent') || null)
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
-  const [newIssueText, setNewIssueText] = useState('')
-  const [creatingIssue, setCreatingIssue] = useState(false)
+  const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', creating: false, error: null })
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
-  const [createIssueInfoModal, setCreateIssueInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
   const prevAgentRef = useRef(null)
@@ -313,25 +311,26 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
   }
 
   const createIssue = async () => {
-    if (!newIssueText.trim() || creatingIssue) return
-    setCreatingIssue(true)
+    if (!createIssueModal.title.trim()) return
+    setCreateIssueModal(prev => ({ ...prev, creating: true, error: null }))
     try {
+      const text = createIssueModal.body.trim()
+        ? `${createIssueModal.title.trim()}\n${createIssueModal.body.trim()}`
+        : createIssueModal.title.trim()
       const res = await fetch(projectApi('/issues/create'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: newIssueText })
+        body: JSON.stringify({ text })
       })
       const data = await res.json()
       if (data.success) {
-        setNewIssueText('')
+        setCreateIssueModal({ open: false, title: '', body: '', creating: false, error: null })
         await fetchProjectData()
       } else {
-        alert(data.error || 'Failed to create issue')
+        setCreateIssueModal(prev => ({ ...prev, creating: false, error: data.error || 'Failed to create issue' }))
       }
     } catch (err) {
-      alert('Failed to create issue: ' + err.message)
-    } finally {
-      setCreatingIssue(false)
+      setCreateIssueModal(prev => ({ ...prev, creating: false, error: err.message }))
     }
   }
 
@@ -1443,28 +1442,13 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
                     {issues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open issues</p>}
                   </div>
                   <Separator className="my-3 shrink-0" />
-                  <div className="space-y-2 shrink-0">
-                    <textarea
-                      placeholder="Describe a new issue..."
-                      className="w-full px-3 py-2 border rounded text-sm resize-none overflow-hidden bg-white text-neutral-800 placeholder-neutral-400 dark:bg-neutral-800 dark:text-neutral-100 dark:placeholder-neutral-500 dark:border-neutral-700"
-                      rows={1}
-                      value={newIssueText}
-                      onChange={(e) => {
-                        setNewIssueText(e.target.value)
-                        e.target.style.height = 'auto'
-                        e.target.style.height = e.target.scrollHeight + 'px'
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); createIssue() } }}
-                      disabled={creatingIssue}
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button onClick={createIssue} disabled={!newIssueText.trim() || creatingIssue} className="flex-1 dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-300 dark:disabled:opacity-100">
-                        {creatingIssue ? 'Creating...' : 'Create Issue (AI)'}
-                      </Button>
-                      <button onClick={() => setCreateIssueInfoModal(true)} className="p-2 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
-                        <Info className="w-4 h-4" />
-                      </button>
-                    </div>
+                  <div className="shrink-0">
+                    <Button 
+                      onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}
+                      className="w-full dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100"
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Create Issue
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -1752,21 +1736,48 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
         </ModalContent>
       </Modal>
 
-      {/* Create Issue Info Modal */}
-      <Modal open={createIssueInfoModal} onClose={() => setCreateIssueInfoModal(false)}>
-        <ModalHeader onClose={() => setCreateIssueInfoModal(false)}>
-          Create Issue (AI)
+      {/* Create Issue Modal */}
+      <Modal open={createIssueModal.open} onClose={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>
+        <ModalHeader onClose={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>
+          Create Issue
         </ModalHeader>
         <ModalContent>
-          <div className="space-y-3 text-sm text-neutral-700 dark:text-neutral-300">
-            <p>Describe what you want in plain language, and AI will create a properly formatted GitHub issue with a clear title, description, and relevant labels.</p>
-            <p><strong>Example inputs:</strong></p>
-            <ul className="list-disc list-inside text-neutral-600 dark:text-neutral-400 space-y-1">
-              <li>"Add dark mode support"</li>
-              <li>"The login button is broken on mobile"</li>
-              <li>"We need better error messages for API failures"</li>
-            </ul>
-            <p>The AI will expand your brief description into a detailed issue that agents can work on.</p>
+          <div className="space-y-4">
+            {createIssueModal.error && (
+              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm">
+                {createIssueModal.error}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Title</label>
+              <input
+                type="text"
+                placeholder="Short description of the issue"
+                className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                value={createIssueModal.title}
+                onChange={(e) => setCreateIssueModal(prev => ({ ...prev, title: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') createIssue() }}
+                disabled={createIssueModal.creating}
+                autoFocus
+              />
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Will be prefixed with [Human] → [Athena]</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
+              <textarea
+                placeholder="Additional details, context, acceptance criteria..."
+                className="w-full px-3 py-2 border rounded-md min-h-[100px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                value={createIssueModal.body}
+                onChange={(e) => setCreateIssueModal(prev => ({ ...prev, body: e.target.value }))}
+                disabled={createIssueModal.creating}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
+              <Button onClick={createIssue} disabled={!createIssueModal.title.trim() || createIssueModal.creating}>
+                {createIssueModal.creating ? 'Creating...' : 'Create'}
+              </Button>
+            </div>
           </div>
         </ModalContent>
       </Modal>
