@@ -573,7 +573,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
     
     return (
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
-        {/* Row 1: Name, model, mode badge, active time, badges, 3 buttons */}
+        {/* Row 1: Name + badges */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}</span>
@@ -585,31 +585,31 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               mode === 'research' ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300' :
               'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
             }`}>{mode}</span>}
-          </div>
-          <div className="flex items-center gap-1">
-            {isActive && runtime !== null && (
-              <span className="text-xs text-blue-600 flex items-center gap-1 mr-1">
-                <Clock className="w-3 h-3" />{formatRuntime(runtime)}
-              </span>
+            {isActive && (
+              <Badge variant="success" className="flex items-center gap-1">
+                Active{runtime !== null && <span className="font-mono">{formatRuntime(runtime)}</span>}
+              </Badge>
             )}
-            {isActive && <Badge variant="success">Active</Badge>}
-            {/* Info button */}
+          </div>
+        </div>
+        {/* Row 2: Role + action buttons */}
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">{agent.role || '\u00A0'}</p>
+          <div className="flex items-center gap-0.5">
             <button
               onClick={() => openAgentModal(agent.name)}
               className="p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
               title="View agent details"
             >
-              <Info className="w-4 h-4" />
+              <Info className="w-3.5 h-3.5" />
             </button>
-            {/* Settings button */}
             <button
               onClick={() => openAgentSettings(agent)}
               className="p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
               title="Agent settings"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
             </button>
-            {/* Filter button */}
             <button
               onClick={() => {
                 if (isSelected) clearAgentFilter()
@@ -622,14 +622,10 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
               }`}
               title="Filter comments by agent"
             >
-              <Filter className="w-4 h-4" />
+              <Filter className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
-        {/* Row 2: Role */}
-        {agent.role && (
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{agent.role}</p>
-        )}
         {/* Row 3: Cost metrics */}
         {(agent.totalCost > 0 || agent.lastCallCost > 0) && (
           <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
