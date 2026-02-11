@@ -64,11 +64,12 @@ TheBotCompany runs in cycles. Each cycle, an AI project manager (**Hermes**) rea
 
 Three AI managers oversee each project:
 
-- **Hermes** (PM) — Schedules agents, assigns work modes, merges PRs, maintains the task tracker
+- **Hermes** (Scheduler) — Runs first every cycle, reads project state, decides who runs and in what mode
+- **Hephaestus** (Operations Manager) — Merges PRs, assigns tasks, maintains the task tracker
 - **Athena** (Strategist) — Sets project direction, manages milestones, creates issues from high-level goals
 - **Apollo** (HR) — Evaluates agent performance, tunes skill files, hires/disables agents
 
-Hermes runs every cycle. Athena and Apollo are called in by Hermes when needed.
+Hermes runs first every cycle as a lightweight scheduler. Hephaestus, Athena, and Apollo are called in by Hermes when needed.
 
 ### Work Modes
 

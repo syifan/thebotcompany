@@ -17,7 +17,8 @@ Read this file before executing any task.
 **Managers** (permanent, skills never change):
 - **Athena** — Strategist
 - **Apollo** — HR
-- **Hermes** — Project Manager
+- **Hermes** — Scheduler
+- **Hephaestus** — Operations Manager
 
 **Workers** (hired by Apollo):
 - Apollo can hire, fire, and modify worker skills
@@ -84,7 +85,7 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 | Commits | `[AgentName] Message` |
 | Branch names | `agentname/description` |
 
-**Issue title example:** `[Hermes] -> [Leo] Implement data loader`
+**Issue title example:** `[Hephaestus] -> [Leo] Implement data loader`
 
 ---
 
@@ -119,12 +120,12 @@ At the start of each cycle, read your `note.md`. Your **Current task** section i
 - **research mode**: Gather information for your locked issue only. Update notes with findings.
 - **execute mode**: Work ONLY on the locked issue. When finished, set status to `done`.
 - **discuss mode**: Comment on issues/PRs. No lock changes.
-- **Never switch issues mid-cycle.** If your locked issue is blocked, set status to `blocked` and explain why — Hermes will reassign you.
+- **Never switch issues mid-cycle.** If your locked issue is blocked, set status to `blocked` and explain why — Hephaestus will reassign you.
 - **Multiple plan cycles are fine.** Complex tasks may need: plan → research → plan → execute. The lock persists across all of these.
 
 ### Modes
 
-Each cycle, Hermes assigns you a **mode** that determines what you should focus on:
+Each cycle, Hermes (the scheduler) assigns you a **mode** that determines what you should focus on:
 
 - **discuss** — Read issues, PRs, and comments. Participate in conversations. Do NOT write code, create PRs, or plan.
 - **research** — Gather information: web search, read docs, run experiments via CI. Do NOT write code, create PRs, or comment on issues. ONLY research.
