@@ -603,11 +603,8 @@ class ProjectRunner {
     if (!this.repo) throw new Error('No repo configured');
     if (!text?.trim()) throw new Error('Missing issue description');
     
-    // Use Anthropic API to frame the issue properly
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
-    
-    const prompt = `Create a GitHub issue from this description. Return ONLY valid JSON with "title" and "body" fields.
+    // Use claude CLI --print (text-only, no tools) to frame the issue
+    const prompt = `Create a GitHub issue from this description. Return ONLY valid JSON with "title" and "body" fields. No markdown fences, just raw JSON.
 
 Title format: [Human] -> [Assignee] Short description
 - If a specific agent is mentioned, use that name as assignee
@@ -615,28 +612,23 @@ Title format: [Human] -> [Assignee] Short description
 
 Body: well-formatted markdown with context.
 
-Description: "${text}"`;
+Description: ${text}`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20241022',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    
-    if (!response.ok) throw new Error(`API error: ${response.status}`);
-    const data = await response.json();
-    const content = data.content[0]?.text || '';
+    const tmpPrompt = path.join(this.projectDir, '.tmp_issue_prompt.txt');
+    fs.writeFileSync(tmpPrompt, prompt);
+    let aiOutput;
+    try {
+      aiOutput = execSync(`cat ${tmpPrompt} | claude --print --output-format text --model claude-haiku-4-5-20241022`, {
+        cwd: this.path,
+        encoding: 'utf-8',
+        timeout: 30000
+      });
+    } finally {
+      try { fs.unlinkSync(tmpPrompt); } catch {}
+    }
     
     // Parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const jsonMatch = aiOutput.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Failed to parse AI response');
     const { title, body } = JSON.parse(jsonMatch[0]);
     
