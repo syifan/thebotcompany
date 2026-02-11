@@ -603,43 +603,18 @@ class ProjectRunner {
     if (!this.repo) throw new Error('No repo configured');
     if (!text?.trim()) throw new Error('Missing issue description');
     
-    // Use claude CLI --print (text-only, no tools) to frame the issue
-    const prompt = `Create a GitHub issue from this description. Return ONLY valid JSON with "title" and "body" fields. No markdown fences, just raw JSON.
-
-Title format: [Human] -> [Assignee] Short description
-- If a specific agent is mentioned, use that name as assignee
-- Otherwise assign to Athena
-
-Body: well-formatted markdown with context.
-
-Description: ${text}`;
-
-    const tmpPrompt = path.join(this.projectDir, '.tmp_issue_prompt.txt');
-    fs.writeFileSync(tmpPrompt, prompt);
-    let aiOutput;
-    try {
-      aiOutput = execSync(`cat ${tmpPrompt} | claude --print --output-format text`, {
-        cwd: this.path,
-        encoding: 'utf-8',
-        timeout: 30000
-      });
-    } finally {
-      try { fs.unlinkSync(tmpPrompt); } catch {}
-    }
+    // First line = title, rest = body
+    const lines = text.trim().split('\n');
+    const title = `[Human] -> [Athena] ${lines[0].trim()}`;
+    const body = lines.length > 1 ? lines.slice(1).join('\n').trim() : '';
     
-    // Parse JSON from response
-    const jsonMatch = aiOutput.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Failed to parse AI response');
-    const { title, body } = JSON.parse(jsonMatch[0]);
-    
-    // Create issue via gh CLI
     const tmpFile = path.join(this.projectDir, '.tmp_issue_body.md');
-    fs.writeFileSync(tmpFile, body);
+    fs.writeFileSync(tmpFile, body || title);
     try {
       const output = execSync(`gh issue create --title ${JSON.stringify(title)} --body-file ${tmpFile}`, {
         cwd: this.path,
         encoding: 'utf-8',
-        timeout: 30000
+        timeout: 15000
       });
       const match = output.match(/\/issues\/(\d+)/);
       return { success: true, issueNumber: match ? parseInt(match[1]) : null };
