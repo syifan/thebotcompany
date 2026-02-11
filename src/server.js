@@ -992,9 +992,9 @@ Do not ask questions, just create the issue based on the description provided.`;
       let modeHeader = '';
       if (mode) {
         const modeDescriptions = {
-          discuss: 'DISCUSS — Read issues, PRs, and comments. Participate in conversations. Do NOT write code or create PRs.',
-          research: 'RESEARCH — Gather information: web search, read docs, run experiments via CI. Do NOT write code or create PRs.',
-          plan: 'PLAN — Decide what to do. Write a plan in your workspace notes. Do NOT write code or create PRs.',
+          discuss: 'DISCUSS — Read issues, PRs, and comments. Participate in conversations. Do NOT write code, create PRs, or plan. ONLY discuss.',
+          research: 'RESEARCH — Gather information: web search, read docs, run experiments via CI. Do NOT write code, create PRs, or comment on issues. ONLY research.',
+          plan: 'PLAN — Decide what to do. Write a plan in your workspace notes. Do NOT write code, create PRs, or comment on issues. ONLY plan.',
           execute: 'EXECUTE — Do the actual work: write code, create PRs, implement features, fix bugs.'
         };
         modeHeader = `> **Current mode: ${modeDescriptions[mode] || mode.toUpperCase()}**\n\n`;

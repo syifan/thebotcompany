@@ -101,10 +101,12 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 Each cycle, Hermes assigns you a **mode** that determines what you should focus on:
 
-- **discuss** — Read issues, PRs, and comments. Participate in conversations. Share opinions. Do NOT write code or create PRs.
-- **research** — Gather information: web search, read docs, run experiments via CI. Do NOT write code or create PRs.
-- **plan** — Decide what to do. Write a plan in your workspace notes. Do NOT write code or create PRs.
+- **discuss** — Read issues, PRs, and comments. Participate in conversations. Share opinions. Do NOT write code, create PRs, or do any implementation work.
+- **research** — Gather information: web search, read docs, run experiments via CI. Do NOT write code, create PRs, comment on issues, or do any implementation work.
+- **plan** — Decide what to do. Write a plan in your workspace notes. Do NOT write code, create PRs, comment on issues, or do any implementation work.
 - **execute** — Do the actual work: write code, create PRs, implement features, fix bugs.
+
+**Strictly do ONLY what your mode allows.** If you're in `plan` mode, don't comment on issues — just plan. If you're in `discuss` mode, don't plan or implement — just discuss.
 
 **Your current mode will be injected at the top of your prompt.** Respect it strictly. If you're in `discuss` mode, don't try to implement anything — just contribute to conversations.
 
