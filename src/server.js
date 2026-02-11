@@ -603,34 +603,25 @@ class ProjectRunner {
     if (!this.repo) throw new Error('No repo configured');
     if (!text?.trim()) throw new Error('Missing issue description');
     
-    const config = this.loadConfig();
-    const model = config.model || 'claude-sonnet-4-20250514';
+    // Parse first line as title, rest as body
+    const lines = text.trim().split('\n');
+    const title = `[Human] -> [Athena] ${lines[0].trim()}`;
+    const body = lines.length > 1 ? lines.slice(1).join('\n').trim() : lines[0].trim();
     
-    const prompt = `You are helping create a GitHub issue. The user provided this description:
-
-"${text}"
-
-SAFETY: First verify you are in the correct repo (${this.repo}) by checking the remote URL. If not, abort.
-
-Create a well-formatted GitHub issue with:
-1. Title format: [Human] -> [Assignee] Description
-   - If the user mentions a specific agent to assign, use that agent name
-   - If no assignee is clear from the description, assign to Athena
-2. A detailed description with context in the body
-
-Use the gh CLI to create the issue. Run:
-gh issue create --title "[Human] -> [Assignee] ..." --body "..."
-
-The body should be markdown formatted. Add a "human-request" label.
-Do not ask questions, just create the issue based on the description provided.`;
-
-    execSync(`claude --model ${model} --dangerously-skip-permissions --print "${prompt.replace(/"/g, '\\"')}"`, {
-      cwd: this.path,
-      encoding: 'utf-8',
-      timeout: 120000
-    });
-    
-    return { success: true };
+    // Write body to temp file to avoid shell escaping issues
+    const tmpFile = path.join(this.projectDir, '.tmp_issue_body.md');
+    fs.writeFileSync(tmpFile, body);
+    try {
+      const output = execSync(`gh issue create --title ${JSON.stringify(title)} --body-file ${tmpFile}`, {
+        cwd: this.path,
+        encoding: 'utf-8',
+        timeout: 30000
+      });
+      const match = output.match(/\/issues\/(\d+)/);
+      return { success: true, issueNumber: match ? parseInt(match[1]) : null };
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
   }
 
   getStatus() {
