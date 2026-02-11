@@ -1447,7 +1447,7 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
                       onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}
                       className="w-full dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100"
                     >
-                      <Plus className="w-4 h-4 mr-1" /> Create Issue
+                      Human Intervention (Create Issue)
                     </Button>
                   </div>
                 </CardContent>
