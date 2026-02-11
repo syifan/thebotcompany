@@ -814,19 +814,8 @@ Do not ask questions, just create the issue based on the description provided.`;
       const hermes = managers.find(m => m.name === 'hermes');
       const otherManagers = managers.filter(m => m.name !== 'hermes');
       
-      // Filter non-Hermes managers by their cycle interval (fallback if no schedule)
-      const activeManagers = otherManagers.filter(m => {
-        const interval = config[`${m.name}CycleInterval`] || 1;
-        if (interval <= 1) return true;
-        return nextCycle % interval === 0;
-      });
-      if (activeManagers.length < otherManagers.length) {
-        const skipped = otherManagers.filter(m => !activeManagers.includes(m)).map(m => m.name);
-        log(`Skipping managers this cycle (interval): ${skipped.join(', ')}`, this.id);
-      }
-      
       // Default: all managers + all workers (used if Hermes doesn't produce a schedule)
-      let allAgents = [...(hermes ? [hermes] : []), ...activeManagers, ...workers];
+      let allAgents = [...(hermes ? [hermes] : []), ...otherManagers, ...workers];
 
       // Generate a cycle ID based on agent list to detect if agents changed
       const cycleId = allAgents.map(a => a.name).sort().join(',');
