@@ -59,7 +59,7 @@ function App() {
   const [addProjectModal, setAddProjectModal] = useState({
     step: null, githubUrl: '', projectId: null, projectPath: null,
     hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
-    updateSpec: false, error: null,
+    updateSpec: false, budgetPer24h: 50, error: null,
   })
   
   // Project-specific state
@@ -369,7 +369,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   }
 
   const openAddProjectModal = () => {
-    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null }))
+    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null, budgetPer24h: 50 }))
   }
 
   const cloneProject = async () => {
@@ -394,11 +394,11 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   }
 
   const finalizeAddProject = async () => {
-    const { projectId, projectPath, hasSpec, updateSpec, whatToBuild, successCriteria } = addProjectModal
+    const { projectId, projectPath, hasSpec, updateSpec, whatToBuild, successCriteria, budgetPer24h } = addProjectModal
     if (!projectId || !projectPath) return
     setAddProjectModal(prev => ({ ...prev, step: 'adding', error: null }))
     try {
-      const body = { id: projectId, path: projectPath }
+      const body = { id: projectId, path: projectPath, budgetPer24h: parseFloat(budgetPer24h) || 0 }
       if (!hasSpec || updateSpec) {
         body.spec = { whatToBuild: whatToBuild.trim(), successCriteria: successCriteria.trim() }
       }
@@ -409,14 +409,14 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      // Bootstrap workspace from repo's agent/ folder
+      // Bootstrap workspace
       try {
         await fetch(`/api/projects/${projectId}/bootstrap`, { method: 'POST' })
       } catch {} // Best effort
       resetAddProjectModal()
       await fetchGlobalStatus()
     } catch (err) {
-      setAddProjectModal(prev => ({ ...prev, step: 'spec', error: err.message }))
+      setAddProjectModal(prev => ({ ...prev, step: 'confirm', error: err.message }))
     }
   }
 
@@ -862,8 +862,79 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'url', error: null }))}>
                     <ArrowLeft className="w-4 h-4 mr-1" /> Back
                   </Button>
+                  <Button onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'budget', error: null }))}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step: Budget */}
+            {addProjectModal.step === 'budget' && (
+              <div className="space-y-4">
+                <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                  Set a daily budget to control API spending. The orchestrator will pace cycles to stay within budget.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Daily Budget (USD)</label>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-mono text-neutral-800 dark:text-neutral-200">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="10"
+                      className="w-32 px-3 py-2 border rounded-md text-lg font-mono dark:bg-neutral-800 dark:border-neutral-600 dark:text-neutral-200"
+                      value={addProjectModal.budgetPer24h}
+                      onChange={(e) => setAddProjectModal(prev => ({ ...prev, budgetPer24h: e.target.value }))}
+                    />
+                    <span className="text-sm text-neutral-500 dark:text-neutral-400">per 24 hours</span>
+                  </div>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-2">
+                    Set to 0 for unlimited. Recommended: $20-100/day depending on agent count and model.
+                  </p>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'spec', error: null }))}>
+                    <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  </Button>
+                  <Button onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'confirm', error: null }))}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step: Confirm */}
+            {addProjectModal.step === 'confirm' && (
+              <div className="space-y-4">
+                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Review before creating:</p>
+                <div className="space-y-2 p-3 bg-neutral-50 dark:bg-neutral-900 rounded border border-neutral-200 dark:border-neutral-700">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-500 dark:text-neutral-400">Repository</span>
+                    <span className="font-mono text-neutral-800 dark:text-neutral-200">{addProjectModal.projectId}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-500 dark:text-neutral-400">Spec</span>
+                    <span className="text-neutral-800 dark:text-neutral-200">
+                      {addProjectModal.hasSpec && !addProjectModal.updateSpec ? 'Existing (unchanged)' : addProjectModal.whatToBuild ? 'Will be created' : 'None'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-500 dark:text-neutral-400">Daily Budget</span>
+                    <span className="font-mono text-neutral-800 dark:text-neutral-200">
+                      {parseFloat(addProjectModal.budgetPer24h) > 0 ? `$${addProjectModal.budgetPer24h}/day` : 'Unlimited'}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-blue-700 dark:text-blue-300 text-sm">
+                  A fresh workspace will be created and the orchestrator will start running agents.
+                </div>
+                <div className="flex justify-between gap-2">
+                  <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'budget', error: null }))}>
+                    <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                  </Button>
                   <Button onClick={finalizeAddProject}>
-                    Add Project
+                    Create Project
                   </Button>
                 </div>
               </div>

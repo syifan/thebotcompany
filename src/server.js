@@ -1366,7 +1366,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { id, path: projectPath, spec } = JSON.parse(body);
+        const { id, path: projectPath, spec, budgetPer24h } = JSON.parse(body);
         if (!id || !projectPath) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Missing id or path' }));
@@ -1389,13 +1389,24 @@ const server = http.createServer(async (req, res) => {
 
         const projectsPath = path.join(TBC_HOME, 'projects.yaml');
         const raw = fs.readFileSync(projectsPath, 'utf-8');
-        const config = yaml.load(raw) || {};
-        if (!config.projects) config.projects = {};
+        const projConfig = yaml.load(raw) || {};
+        if (!projConfig.projects) projConfig.projects = {};
 
-        config.projects[id] = { path: resolvedPath, enabled: true };
+        projConfig.projects[id] = { path: resolvedPath, enabled: true };
 
-        fs.writeFileSync(projectsPath, yaml.dump(config, { lineWidth: -1 }));
+        fs.writeFileSync(projectsPath, yaml.dump(projConfig, { lineWidth: -1 }));
         syncProjects();
+
+        // Write initial project config with budget
+        if (budgetPer24h !== undefined) {
+          const runner = projects.get(id);
+          if (runner) {
+            const config = runner.loadConfig();
+            config.budgetPer24h = parseFloat(budgetPer24h) || 0;
+            fs.mkdirSync(runner.projectDir, { recursive: true });
+            fs.writeFileSync(runner.configPath, yaml.dump(config, { lineWidth: -1 }));
+          }
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, id, path: resolvedPath }));
