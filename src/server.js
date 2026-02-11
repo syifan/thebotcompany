@@ -1240,14 +1240,32 @@ function serveStatic(req, res, urlPath) {
   fs.createReadStream(filePath).pipe(res);
 }
 
+// --- Basic Auth ---
+const TBC_PASSWORD = process.env.TBC_PASSWORD || null;
+
+function checkAuth(req, res) {
+  if (!TBC_PASSWORD) return true;
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Basic ')) {
+    const decoded = Buffer.from(auth.slice(6), 'base64').toString();
+    const [, pass] = decoded.split(':');
+    if (pass === TBC_PASSWORD) return true;
+  }
+  res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="TheBotCompany"' });
+  res.end('Unauthorized');
+  return false;
+}
+
 // --- HTTP API ---
 const server = http.createServer(async (req, res) => {
+  if (!checkAuth(req, res)) return;
+
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathParts = url.pathname.split('/').filter(Boolean);
   
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
