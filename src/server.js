@@ -814,6 +814,20 @@ class ProjectRunner {
       if (!this.running) break;
 
       const config = this.loadConfig();
+
+      // Check budget before starting cycle
+      const budgetStatus = this.getBudgetStatus();
+      if (budgetStatus.exhausted) {
+        log(`Budget exhausted ($${budgetStatus.spent24h.toFixed(2)}/$${budgetStatus.budgetPer24h}), pausing project`, this.id);
+        this.isPaused = true;
+        this.pauseReason = `Budget exhausted: $${budgetStatus.spent24h.toFixed(2)} / $${budgetStatus.budgetPer24h} (24h)`;
+        while (this.isPaused && this.running) {
+          await sleep(5000);
+        }
+        if (!this.running) break;
+        continue;
+      }
+
       const { managers, workers } = this.loadAgents();
       const nextCycle = (this.cycleCount || 0) + 1;
       
