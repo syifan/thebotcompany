@@ -1016,8 +1016,13 @@ ${errorMsg}
 
 This is an automated message from the orchestrator.`;
             } else if (resultText) {
-              // Post agent's response
-              comment = resultText;
+              // Post agent's response — strip any preamble before "# [AgentName]"
+              const headerMatch = resultText.match(/^(# \[.+\])/m);
+              if (headerMatch) {
+                comment = resultText.slice(resultText.indexOf(headerMatch[0]));
+              } else {
+                comment = resultText;
+              }
             }
             
             if (comment) {

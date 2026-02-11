@@ -108,9 +108,9 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ---
 
-## 8. Response Format
+## 8. Response Format (CRITICAL — READ THIS CAREFULLY)
 
-At the end of your cycle, your final response **must** follow this exact format and nothing else:
+Your **entire final response** must be **exactly** this format:
 
 ```
 # [AgentName]
@@ -122,4 +122,11 @@ At the end of your cycle, your final response **must** follow this exact format 
 (what you did)
 ```
 
-**Do not write anything outside this format.** No extra commentary, no preamble, no sign-offs. Start with `# [AgentName]` and end after the Actions section. The orchestrator will automatically post this to the tracker issue.
+**RULES:**
+- Your response **MUST start with `# [AgentName]`** as the very first line
+- **Nothing before it** — no thinking, no analysis, no preamble, no status checks
+- **Nothing after Actions** — no sign-offs, no summaries, no next-step suggestions
+- The orchestrator posts your **entire response** verbatim to the tracker issue
+- Any text outside this format **will appear publicly** as noise
+
+**Think all you want during your cycle. But your final response is ONLY the formatted block above.**
