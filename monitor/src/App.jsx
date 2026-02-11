@@ -62,6 +62,8 @@ function App() {
     updateSpec: false, budgetPer24h: 40, error: null,
     orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: false, reposLoading: false,
     inputMode: 'dropdown', // 'dropdown' or 'url'
+    repoMode: 'existing', // 'existing' or 'new'
+    newRepoName: '', newRepoPrivate: false, newRepoDescription: '', creatingRepo: false,
   })
   
   // Project-specific state
@@ -390,6 +392,27 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
       .catch(() => {
         setAddProjectModal(prev => ({ ...prev, reposLoading: false }))
       })
+  }
+
+  const createNewRepo = async () => {
+    const { selectedOrg, newRepoName, newRepoPrivate, newRepoDescription } = addProjectModal
+    if (!newRepoName.trim()) return
+    setAddProjectModal(prev => ({ ...prev, creatingRepo: true, error: null }))
+    try {
+      const res = await fetch('/api/github/create-repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newRepoName.trim(), owner: selectedOrg, isPrivate: newRepoPrivate, description: newRepoDescription.trim() })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setAddProjectModal(prev => ({
+        ...prev, step: 'spec', projectId: data.id, projectPath: data.path,
+        hasSpec: false, specContent: null, creatingRepo: false, error: null,
+      }))
+    } catch (err) {
+      setAddProjectModal(prev => ({ ...prev, creatingRepo: false, error: err.message }))
+    }
   }
 
   const cloneSelectedRepo = () => {
@@ -801,7 +824,71 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
             {/* Step: URL Input */}
             {(addProjectModal.step === 'url' || addProjectModal.step === 'cloning') && (
               <div className="space-y-4">
-                {addProjectModal.inputMode === 'dropdown' ? (
+                {/* Toggle: Existing vs New */}
+                <div className="flex rounded-md overflow-hidden border border-neutral-300 dark:border-neutral-600">
+                  <button
+                    className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${addProjectModal.repoMode === 'existing' ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-white text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-700'}`}
+                    onClick={() => setAddProjectModal(prev => ({ ...prev, repoMode: 'existing' }))}
+                  >Import Existing</button>
+                  <button
+                    className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${addProjectModal.repoMode === 'new' ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-white text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-700'}`}
+                    onClick={() => setAddProjectModal(prev => ({ ...prev, repoMode: 'new' }))}
+                  >Create New</button>
+                </div>
+
+                {addProjectModal.repoMode === 'new' ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Owner</label>
+                      {addProjectModal.orgsLoading ? (
+                        <div className="flex items-center gap-2 py-2 text-sm text-neutral-500"><RefreshCw className="w-4 h-4 animate-spin" /> Loading...</div>
+                      ) : (
+                        <select
+                          className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                          value={addProjectModal.selectedOrg}
+                          onChange={(e) => setAddProjectModal(prev => ({ ...prev, selectedOrg: e.target.value }))}
+                        >
+                          {addProjectModal.orgs.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Repository Name</label>
+                      <input
+                        type="text"
+                        placeholder="my-project"
+                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                        value={addProjectModal.newRepoName}
+                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, newRepoName: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
+                      <input
+                        type="text"
+                        placeholder="A brief description"
+                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                        value={addProjectModal.newRepoDescription}
+                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, newRepoDescription: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="newRepoPrivate"
+                        checked={addProjectModal.newRepoPrivate}
+                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, newRepoPrivate: e.target.checked }))}
+                      />
+                      <label htmlFor="newRepoPrivate" className="text-sm text-neutral-700 dark:text-neutral-300">Private repository</label>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={resetAddProjectModal}>Cancel</Button>
+                      <Button onClick={createNewRepo} disabled={!addProjectModal.newRepoName.trim() || addProjectModal.creatingRepo}>
+                        {addProjectModal.creatingRepo ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Creating...</> : 'Next'}
+                      </Button>
+                    </div>
+                  </>
+                ) : addProjectModal.inputMode === 'dropdown' ? (
                   <>
                     <div>
                       <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Organization / User</label>

@@ -1306,6 +1306,51 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // POST /api/github/create-repo - Create a new GitHub repo
+  if (req.method === 'POST' && url.pathname === '/api/github/create-repo') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { name, owner, isPrivate, description } = JSON.parse(body);
+        if (!name) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing repo name' }));
+          return;
+        }
+        
+        // Get current user to check if owner is user or org
+        const currentUser = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
+        const isOrg = owner && owner !== currentUser;
+        
+        let cmd = `gh repo create`;
+        if (isOrg) {
+          cmd += ` ${owner}/${name}`;
+        } else {
+          cmd += ` ${name}`;
+        }
+        cmd += isPrivate ? ' --private' : ' --public';
+        if (description) cmd += ` --description ${JSON.stringify(description)}`;
+        cmd += ' --clone';
+        
+        // Create in TBC_HOME
+        const repoId = `${owner || currentUser}/${name}`;
+        const projectDir = path.join(TBC_HOME, 'dev', 'src', 'github.com', owner || currentUser, name);
+        fs.mkdirSync(projectDir, { recursive: true });
+        const repoDir = path.join(projectDir, 'repo');
+        
+        execSync(cmd, { cwd: projectDir, encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, id: repoId, path: repoDir }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // POST /api/projects/clone - Clone a GitHub repo and check for spec.md
   if (req.method === 'POST' && url.pathname === '/api/projects/clone') {
     let body = '';
