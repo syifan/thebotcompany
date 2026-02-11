@@ -916,7 +916,7 @@ Description: ${text}`;
         }
       } else {
         // Fallback: run all managers + workers with no mode
-        scheduledAgents = [...activeManagers, ...workers].map(a => ({ ...a, mode: null }));
+        scheduledAgents = [...otherManagers, ...workers].map(a => ({ ...a, mode: null }));
       }
 
       // Step 3: Run scheduled agents
