@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TheBotCompany — Human-free software development</title>
+  <meta name="description" content="Human-free software development with self-organizing AI agent teams.">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --fg: #e5e5e5;
+      --muted: #737373;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --card-bg: #171717;
+      --border: #262626;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    .hero {
+      padding: 120px 0 80px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .hero .tagline {
+      font-size: 1.25rem;
+      color: var(--muted);
+      max-width: 500px;
+      margin: 0 auto 40px;
+    }
+    .hero .cta {
+      display: inline-flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--muted); }
+
+    /* Install */
+    .install {
+      text-align: center;
+      padding: 0 0 80px;
+    }
+    .install code {
+      display: inline-block;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 1rem;
+      color: var(--accent-hover);
+      user-select: all;
+    }
+
+    /* Features */
+    .features {
+      padding: 60px 0;
+      border-top: 1px solid var(--border);
+    }
+    .features h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 24px;
+    }
+    .feature {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .feature .icon { font-size: 1.5rem; margin-bottom: 12px; }
+    .feature h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+    .feature p { font-size: 0.875rem; color: var(--muted); line-height: 1.5; }
+
+    /* How it works */
+    .how {
+      padding: 60px 0;
+      border-top: 1px solid var(--border);
+    }
+    .how h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .step {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.875rem;
+    }
+    .step-content h3 { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+    .step-content p { font-size: 0.875rem; color: var(--muted); }
+
+    /* Managers */
+    .managers {
+      padding: 60px 0;
+      border-top: 1px solid var(--border);
+    }
+    .managers h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+    .manager-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 24px;
+    }
+    .manager {
+      text-align: center;
+      padding: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .manager .emoji { font-size: 2rem; margin-bottom: 12px; }
+    .manager h3 { font-size: 1rem; font-weight: 600; }
+    .manager .role { font-size: 0.75rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .manager p { font-size: 0.875rem; color: var(--muted); }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--fg); }
+
+    @media (max-width: 600px) {
+      .hero { padding: 80px 0 60px; }
+      .hero h1 { font-size: 2rem; }
+      .hero .tagline { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <section class="hero">
+      <h1>TheBotCompany</h1>
+      <p class="tagline">Human-free software development with self-organizing AI agent teams.</p>
+      <div class="cta">
+        <a href="https://github.com/syifan/thebotcompany" class="btn btn-primary">GitHub</a>
+        <a href="https://www.npmjs.com/package/thebotcompany" class="btn btn-secondary">npm</a>
+      </div>
+    </section>
+
+    <section class="install">
+      <code>npm install -g thebotcompany</code>
+    </section>
+
+    <section class="features">
+      <h2>Features</h2>
+      <div class="feature-grid">
+        <div class="feature">
+          <div class="icon">🤖</div>
+          <h3>Human-Free Execution</h3>
+          <p>Agents plan, discuss, research, and implement autonomously across full development cycles.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">🧬</div>
+          <h3>Self-Organizing Teams</h3>
+          <p>AI managers hire, evaluate, schedule, and coordinate worker agents without human intervention.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">📁</div>
+          <h3>Multi-Project</h3>
+          <p>Manage multiple repos from one orchestrator with independent cycles and budgets.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">💰</div>
+          <h3>Budget Controls</h3>
+          <p>24-hour rolling budget limiter with per-agent cost tracking and model-aware pricing.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">📊</div>
+          <h3>Unified Dashboard</h3>
+          <p>Monitor all projects, agents, issues, and PRs in one mobile-friendly dashboard.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">🔄</div>
+          <h3>Hot Reload</h3>
+          <p>Add or remove projects and change configuration without restarting the orchestrator.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="how">
+      <h2>How It Works</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Hermes Schedules</h3>
+            <p>The AI project manager reads project state and decides which agents run each cycle and in what mode.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Agents Execute</h3>
+            <p>Each agent works within their assigned mode — discuss, research, plan, or execute — with strict enforcement.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Results Post to GitHub</h3>
+            <p>Agent responses, PRs, and comments flow through GitHub. The tracker issue serves as the live task board.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>Managers Oversee</h3>
+            <p>Athena sets strategy, Apollo tunes the team, and Hermes keeps everything moving — all autonomously.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="managers">
+      <h2>The Management Team</h2>
+      <div class="manager-grid">
+        <div class="manager">
+          <div class="emoji">⚡</div>
+          <div class="role">Project Manager</div>
+          <h3>Hermes</h3>
+          <p>Schedules agents, assigns work modes, merges PRs, maintains the task tracker.</p>
+        </div>
+        <div class="manager">
+          <div class="emoji">🦉</div>
+          <div class="role">Strategist</div>
+          <h3>Athena</h3>
+          <p>Sets project direction, manages milestones, creates issues from high-level goals.</p>
+        </div>
+        <div class="manager">
+          <div class="emoji">🎯</div>
+          <div class="role">HR Manager</div>
+          <h3>Apollo</h3>
+          <p>Evaluates agents, tunes skill files, hires new agents, disables underperformers.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>MIT License · <a href="https://github.com/syifan/thebotcompany">GitHub</a> · <a href="https://www.npmjs.com/package/thebotcompany">npm</a></p>
+    </footer>
+  </div>
+
+</body>
+</html>
