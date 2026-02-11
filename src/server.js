@@ -90,6 +90,7 @@ class ProjectRunner {
     this.wakeNow = false;
     this.running = false;
     this.lastComputedSleepMs = null; // Cached sleep interval
+    this.currentSchedule = null; // Hermes' schedule for current cycle
     this._repo = null;
   }
 
@@ -639,6 +640,7 @@ Do not ask questions, just create the issue based on the description provided.`;
         : null,
       sleeping: this.sleepUntil !== null,
       sleepUntil: this.sleepUntil,
+      schedule: this.currentSchedule || null,
       config: this.loadConfig(),
       agents: this.loadAgents(),
       cost: this.getCostSummary(),
@@ -713,15 +715,18 @@ Do not ask questions, just create the issue based on the description provided.`;
         this.cycleCount = state.cycleCount || 0;
         this.completedAgents = state.completedAgents || [];
         this.currentCycleId = state.currentCycleId || null;
+        this.currentSchedule = state.currentSchedule || null;
         log(`Loaded state: cycle ${this.cycleCount}, completed: [${this.completedAgents.join(', ')}]`, this.id);
       } else {
         this.completedAgents = [];
         this.currentCycleId = null;
+        this.currentSchedule = null;
       }
     } catch (e) {
       log(`Failed to load state: ${e.message}`, this.id);
       this.completedAgents = [];
       this.currentCycleId = null;
+      this.currentSchedule = null;
     }
   }
 
@@ -732,6 +737,7 @@ Do not ask questions, just create the issue based on the description provided.`;
         cycleCount: this.cycleCount,
         completedAgents: this.completedAgents || [],
         currentCycleId: this.currentCycleId,
+        currentSchedule: this.currentSchedule || null,
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -771,6 +777,19 @@ Do not ask questions, just create the issue based on the description provided.`;
     }
   }
 
+  parseSchedule(resultText) {
+    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Hermes' response
+    const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
+    if (!match) return null;
+    try {
+      const schedule = JSON.parse(match[1]);
+      return schedule;
+    } catch (e) {
+      log(`Failed to parse Hermes schedule: ${e.message}`, this.id);
+      return null;
+    }
+  }
+
   async runLoop() {
     while (this.running) {
       while (this.isPaused && this.running) {
@@ -782,21 +801,27 @@ Do not ask questions, just create the issue based on the description provided.`;
       const { managers, workers } = this.loadAgents();
       const nextCycle = (this.cycleCount || 0) + 1;
       
-      // Filter managers by their cycle interval
-      const activeManagers = managers.filter(m => {
+      // Find Hermes — always runs first as scheduler
+      const hermes = managers.find(m => m.name === 'hermes');
+      const otherManagers = managers.filter(m => m.name !== 'hermes');
+      
+      // Filter non-Hermes managers by their cycle interval (fallback if no schedule)
+      const activeManagers = otherManagers.filter(m => {
         const interval = config[`${m.name}CycleInterval`] || 1;
         if (interval <= 1) return true;
         return nextCycle % interval === 0;
       });
-      if (activeManagers.length < managers.length) {
-        const skipped = managers.filter(m => !activeManagers.includes(m)).map(m => m.name);
-        log(`Skipping managers this cycle: ${skipped.join(', ')}`, this.id);
+      if (activeManagers.length < otherManagers.length) {
+        const skipped = otherManagers.filter(m => !activeManagers.includes(m)).map(m => m.name);
+        log(`Skipping managers this cycle (interval): ${skipped.join(', ')}`, this.id);
       }
       
-      const allAgents = [...activeManagers, ...workers];
+      // Default: all managers + all workers (used if Hermes doesn't produce a schedule)
+      let allAgents = [...(hermes ? [hermes] : []), ...activeManagers, ...workers];
 
       // Generate a cycle ID based on agent list to detect if agents changed
       const cycleId = allAgents.map(a => a.name).sort().join(',');
+      // Note: allAgents is the default list; actual run list may differ after Hermes schedules
       
       // Check if we're resuming an interrupted cycle or starting fresh
       const isResume = this.currentCycleId === cycleId && this.completedAgents.length > 0;
@@ -814,8 +839,75 @@ Do not ask questions, just create the issue based on the description provided.`;
 
       let cycleFailures = 0;
       let cycleTotal = 0;
+      let schedule = null;
 
-      for (const agent of allAgents) {
+      // Step 1: Run Hermes first (if not already completed) to get the schedule
+      if (hermes && !this.completedAgents.includes('hermes')) {
+        while (this.isPaused && this.running) {
+          await sleep(1000);
+        }
+        if (this.running) {
+          const result = await this.runAgent(hermes, config);
+          cycleTotal++;
+          if (!result || !result.success) cycleFailures++;
+          
+          if (this.running) {
+            this.completedAgents.push('hermes');
+            this.saveState();
+          }
+          
+          // Parse schedule from Hermes' response
+          if (result && result.resultText) {
+            schedule = this.parseSchedule(result.resultText);
+            if (schedule) {
+              log(`Hermes schedule: ${JSON.stringify(schedule)}`, this.id);
+              this.currentSchedule = schedule;
+            } else {
+              log(`No schedule found in Hermes response, using defaults`, this.id);
+            }
+          }
+        }
+      } else if (this.completedAgents.includes('hermes')) {
+        log(`Skipping hermes (already completed)`, this.id);
+        // Try to reload schedule from saved state
+        schedule = this.currentSchedule || null;
+      }
+
+      // Step 2: Determine which agents to run based on schedule
+      let scheduledAgents;
+      if (schedule) {
+        // Build agent list from Hermes' schedule
+        scheduledAgents = [];
+        
+        // Add scheduled managers (excluding hermes)
+        if (schedule.managers) {
+          for (const [name, shouldRun] of Object.entries(schedule.managers)) {
+            if (name === 'hermes') continue;
+            if (!shouldRun) continue;
+            const mgr = otherManagers.find(m => m.name === name);
+            if (mgr) scheduledAgents.push({ ...mgr, mode: null });
+          }
+        }
+        
+        // Add scheduled workers with their modes
+        if (schedule.agents) {
+          for (const [name, mode] of Object.entries(schedule.agents)) {
+            const worker = workers.find(w => w.name === name);
+            if (worker) scheduledAgents.push({ ...worker, mode });
+          }
+        }
+        
+        const skippedWorkers = workers.filter(w => !schedule.agents?.[w.name]).map(w => w.name);
+        if (skippedWorkers.length > 0) {
+          log(`Hermes skipped workers: ${skippedWorkers.join(', ')}`, this.id);
+        }
+      } else {
+        // Fallback: run all managers + workers with no mode
+        scheduledAgents = [...activeManagers, ...workers].map(a => ({ ...a, mode: null }));
+      }
+
+      // Step 3: Run scheduled agents
+      for (const agent of scheduledAgents) {
         if (!this.running) break;
         
         // Skip agents that already completed in this cycle
@@ -827,7 +919,7 @@ Do not ask questions, just create the issue based on the description provided.`;
         while (this.isPaused && this.running) {
           await sleep(1000);
         }
-        const result = await this.runAgent(agent, config);
+        const result = await this.runAgent(agent, config, agent.mode);
         
         // Track success/failure
         cycleTotal++;
@@ -843,6 +935,7 @@ Do not ask questions, just create the issue based on the description provided.`;
       // Cycle complete - clear completed agents for next cycle
       this.completedAgents = [];
       this.currentCycleId = null;
+      this.currentSchedule = null;
       this.saveState();
 
       // Auto-pause if every agent in the cycle failed
@@ -873,10 +966,11 @@ Do not ask questions, just create the issue based on the description provided.`;
     }
   }
 
-  async runAgent(agent, config) {
+  async runAgent(agent, config, mode = null) {
     this.currentAgent = agent.name;
     this.currentAgentStartTime = Date.now();
-    log(`Running: ${agent.name}${agent.isManager ? ' (manager)' : ''}`, this.id);
+    const modeStr = mode ? ` [${mode}]` : '';
+    log(`Running: ${agent.name}${agent.isManager ? ' (manager)' : ''}${modeStr}`, this.id);
 
     // Managers come from the TBC repo, workers from the project workspace
     const skillPath = agent.isManager
@@ -888,12 +982,25 @@ Do not ask questions, just create the issue based on the description provided.`;
     fs.mkdirSync(workspaceDir, { recursive: true });
 
     return new Promise((resolve) => {
-      // Build prompt: everyone.md + skill file, with {project_dir} replaced
+      // Build prompt: mode header + everyone.md + skill file, with {project_dir} replaced
       let skillContent = fs.readFileSync(skillPath, 'utf-8');
       const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
       let everyone = '';
       try { everyone = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n'; } catch {}
-      skillContent = (everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
+      
+      // Inject mode as ambient context at the top
+      let modeHeader = '';
+      if (mode) {
+        const modeDescriptions = {
+          discuss: 'DISCUSS — Read issues, PRs, and comments. Participate in conversations. Do NOT write code or create PRs.',
+          research: 'RESEARCH — Gather information: web search, read docs, run experiments via CI. Do NOT write code or create PRs.',
+          plan: 'PLAN — Decide what to do. Write a plan in your workspace notes. Do NOT write code or create PRs.',
+          execute: 'EXECUTE — Do the actual work: write code, create PRs, implement features, fix bugs.'
+        };
+        modeHeader = `> **Current mode: ${modeDescriptions[mode] || mode.toUpperCase()}**\n\n`;
+      }
+      
+      skillContent = (modeHeader + everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
 
       const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-20250514';
       const args = [
@@ -1054,7 +1161,7 @@ This is an automated message from the orchestrator.`;
         this.currentAgent = null;
         this.currentAgentProcess = null;
         this.currentAgentStartTime = null;
-        resolve({ success: code === 0 && !killedByTimeout });
+        resolve({ success: code === 0 && !killedByTimeout, resultText });
       });
     });
   }

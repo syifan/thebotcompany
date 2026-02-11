@@ -97,7 +97,20 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ---
 
-## 7. Timeout Awareness
+## 7. Cycle Mode
+
+Each cycle, Hermes assigns you a **mode** that determines what you should focus on:
+
+- **discuss** — Read issues, PRs, and comments. Participate in conversations. Share opinions. Do NOT write code or create PRs.
+- **research** — Gather information: web search, read docs, run experiments via CI. Do NOT write code or create PRs.
+- **plan** — Decide what to do. Write a plan in your workspace notes. Do NOT write code or create PRs.
+- **execute** — Do the actual work: write code, create PRs, implement features, fix bugs.
+
+**Your current mode will be injected at the top of your prompt.** Respect it strictly. If you're in `discuss` mode, don't try to implement anything — just contribute to conversations.
+
+---
+
+## 8. Timeout Awareness
 
 **You have a strict time limit per cycle — it may be as short as 5 minutes.** Plan accordingly:
 
@@ -108,7 +121,7 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ---
 
-## 8. Response Format (CRITICAL — READ THIS CAREFULLY)
+## 9. Response Format (CRITICAL — READ THIS CAREFULLY)
 
 Your **entire final response** must be **exactly** this format:
 
