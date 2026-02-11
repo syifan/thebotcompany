@@ -127,11 +127,20 @@ class ProjectRunner {
   }
 
   loadConfig() {
+    const defaults = { cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-sonnet-4-20250514', budgetPer24h: 0 };
     try {
       const raw = fs.readFileSync(this.configPath, 'utf-8');
-      return yaml.load(raw) || {};
+      const config = yaml.load(raw) || {};
+      // Validate numeric fields
+      for (const key of ['cycleIntervalMs', 'agentTimeoutMs', 'budgetPer24h']) {
+        if (config[key] !== undefined && (typeof config[key] !== 'number' || config[key] < 0)) {
+          log(`WARNING: Invalid ${key} in config.yaml (${config[key]}), using default`, this.id);
+          config[key] = defaults[key];
+        }
+      }
+      return { ...defaults, ...config };
     } catch (e) {
-      return { cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-sonnet-4-20250514', budgetPer24h: 0 };
+      return defaults;
     }
   }
 
@@ -695,8 +704,16 @@ class ProjectRunner {
 
   async start() {
     if (this.running) return;
-    // Ensure project directory exists in TBC_HOME
-    fs.mkdirSync(this.agentDir, { recursive: true });
+    // Validate project path exists
+    if (!fs.existsSync(this.path)) {
+      log(`ERROR: Project path does not exist: ${this.path}`, this.id);
+      return;
+    }
+
+    // Ensure project workspace directories exist
+    for (const sub of ['', 'responses', 'workers']) {
+      fs.mkdirSync(path.join(this.agentDir, sub), { recursive: true });
+    }
     
     // Load persisted state
     this.loadState();
@@ -1776,8 +1793,21 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// --- Preflight checks ---
+function checkPrerequisites() {
+  const missing = [];
+  try { execSync('gh --version', { stdio: 'pipe' }); } catch { missing.push('gh (GitHub CLI) — install from https://cli.github.com'); }
+  try { execSync('claude --version', { stdio: 'pipe' }); } catch { missing.push('claude (Claude Code CLI) — install from https://docs.anthropic.com/en/docs/claude-code'); }
+  if (missing.length > 0) {
+    log('WARNING: Missing required tools:');
+    missing.forEach(m => log(`  - ${m}`));
+    log('Some features will not work without these tools.');
+  }
+}
+
 // --- Main ---
 log('TheBotCompany starting...');
+checkPrerequisites();
 syncProjects();
 server.listen(PORT, () => {
   log(`Server listening on http://localhost:${PORT}`);
