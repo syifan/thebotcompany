@@ -58,7 +58,7 @@ tbc remove <id>             # Remove a project
 
 ## How It Works
 
-TheBotCompany runs in cycles. Each cycle, an AI project manager (**Hermes**) reads the current state of the project — open issues, agent progress, PR status — and decides which agents should run and what they should do.
+TheBotCompany runs in cycles. Each cycle, a lightweight scheduler (**Hermes**) reads the current state of the project — agent locks, issue progress, PR status — and decides which agents should run and in what mode.
 
 ### Managers
 
