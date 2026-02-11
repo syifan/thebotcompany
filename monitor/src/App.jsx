@@ -59,7 +59,7 @@ function App() {
   const [addProjectModal, setAddProjectModal] = useState({
     step: null, githubUrl: '', projectId: null, projectPath: null,
     hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
-    updateSpec: false, budgetPer24h: 50, error: null,
+    updateSpec: false, budgetPer24h: 40, error: null,
     orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: false, reposLoading: false,
     inputMode: 'dropdown', // 'dropdown' or 'url'
   })
@@ -371,7 +371,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
   }
 
   const openAddProjectModal = () => {
-    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null, budgetPer24h: 50, orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: true, inputMode: 'dropdown' }))
+    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null, budgetPer24h: 40, orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: true, inputMode: 'dropdown' }))
     // Fetch orgs
     fetch('/api/github/orgs')
       .then(r => r.json())
@@ -984,7 +984,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <input
                       type="number"
                       min="0"
-                      step="10"
+                      step="20"
                       className="w-32 px-3 py-2 border rounded-md text-lg font-mono dark:bg-neutral-800 dark:border-neutral-600 dark:text-neutral-200"
                       value={addProjectModal.budgetPer24h}
                       onChange={(e) => setAddProjectModal(prev => ({ ...prev, budgetPer24h: e.target.value }))}
