@@ -761,7 +761,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                   <input
                     type="text"
                     placeholder="https://github.com/username/reponame"
-                    className="w-full px-3 py-2 border rounded-md"
+                    className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                     value={addProjectModal.githubUrl}
                     onChange={(e) => setAddProjectModal(prev => ({ ...prev, githubUrl: e.target.value, error: null }))}
                     disabled={addProjectModal.step === 'cloning'}
@@ -814,7 +814,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         <div>
                           <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">What do you want to build?</label>
                           <textarea
-                            className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                            className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                             placeholder="Describe what you want to build..."
                             value={addProjectModal.whatToBuild}
                             onChange={(e) => setAddProjectModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
@@ -823,7 +823,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                         <div>
                           <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">How do you consider the project is success?</label>
                           <textarea
-                            className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                            className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                             placeholder="Define the success criteria..."
                             value={addProjectModal.successCriteria}
                             onChange={(e) => setAddProjectModal(prev => ({ ...prev, successCriteria: e.target.value }))}
@@ -840,7 +840,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <div>
                       <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">What do you want to build?</label>
                       <textarea
-                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                        className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                         placeholder="Describe what you want to build..."
                         value={addProjectModal.whatToBuild}
                         onChange={(e) => setAddProjectModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
@@ -849,7 +849,7 @@ apolloCycleInterval: ${configForm.apolloCycleInterval}${budgetLine}
                     <div>
                       <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">How do you consider the project is success?</label>
                       <textarea
-                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                        className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                         placeholder="Define the success criteria..."
                         value={addProjectModal.successCriteria}
                         onChange={(e) => setAddProjectModal(prev => ({ ...prev, successCriteria: e.target.value }))}
