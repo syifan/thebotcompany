@@ -650,28 +650,9 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
     
     return (
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
-        {/* Row 1: Name + badges */}
+        {/* Row 1: Name + action buttons */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}</span>
-            {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
-            {mode && <span className={`px-1.5 py-0.5 text-xs rounded-full ${
-              mode === 'execute' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
-              mode === 'plan' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
-              mode === 'discuss' ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' :
-              mode === 'research' ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300' :
-              'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
-            }`}>{mode}</span>}
-            {isActive && (
-              <Badge variant="success" className="flex items-center gap-1">
-                Active{runtime !== null && <span className="font-mono">{formatRuntime(runtime)}</span>}
-              </Badge>
-            )}
-          </div>
-        </div>
-        {/* Row 2: Role + action buttons */}
-        <div className="flex items-center justify-between mt-1">
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">{agent.role || '\u00A0'}</p>
+          <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}</span>
           <div className="flex items-center gap-0.5">
             <button
               onClick={() => openAgentModal(agent.name)}
@@ -702,6 +683,23 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
               <Filter className="w-3.5 h-3.5" />
             </button>
           </div>
+        </div>
+        {/* Row 2: Labels */}
+        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+          {agent.role && <span className="text-xs text-neutral-500 dark:text-neutral-400">{agent.role}</span>}
+          {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
+          {mode && <span className={`px-1.5 py-0.5 text-xs rounded-full ${
+            mode === 'execute' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+            mode === 'plan' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
+            mode === 'discuss' ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' :
+            mode === 'research' ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300' :
+            'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+          }`}>{mode}</span>}
+          {isActive && (
+            <Badge variant="success" className="flex items-center gap-1">
+              Active{runtime !== null && <span className="font-mono">{formatRuntime(runtime)}</span>}
+            </Badge>
+          )}
         </div>
         {/* Row 3: Cost metrics */}
         {(agent.totalCost > 0 || agent.lastCallCost > 0) && (
