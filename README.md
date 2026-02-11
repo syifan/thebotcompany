@@ -1,19 +1,14 @@
 # TheBotCompany
 
-Multi-project AI agent orchestrator. Run autonomous AI agent teams across multiple GitHub repositories from a single service with a unified dashboard.
-
-TheBotCompany manages teams of AI coding agents (powered by [Claude Code](https://docs.anthropic.com/en/docs/claude-code)) that collaborate on software projects — planning, discussing, researching, and executing code changes through GitHub issues and PRs.
+Human-free software development with self-organizing AI agent teams.
 
 ## Features
 
-- **Multi-project** — Manage multiple repos from one central orchestrator
-- **Hermes-driven scheduling** — An AI project manager (Hermes) decides which agents run each cycle and in what mode
-- **4 work modes** — `discuss`, `research`, `plan`, `execute` — agents are assigned modes per cycle
-- **Issue lock system** — Each agent locks one issue at a time, following a plan→execute lifecycle
-- **Manager hierarchy** — Hermes (PM), Athena (Strategist), Apollo (HR) oversee workers
+- **Human-free execution** — Agents plan, discuss, research, and implement autonomously across full development cycles
+- **Self-organizing teams** — AI managers (Hermes, Athena, Apollo) hire, evaluate, schedule, and coordinate worker agents without human intervention
+- **Multi-project** — Manage multiple repos from one central orchestrator with independent cycles
 - **Budget controls** — 24-hour rolling budget limiter with per-agent cost tracking
 - **Unified dashboard** — Monitor all projects, agents, issues, and PRs in one place (mobile-friendly, dark mode)
-- **Hot reload** — Add/remove projects, change config without restart
 
 ## Prerequisites
 
