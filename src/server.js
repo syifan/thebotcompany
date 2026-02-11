@@ -618,7 +618,7 @@ Description: ${text}`;
     fs.writeFileSync(tmpPrompt, prompt);
     let aiOutput;
     try {
-      aiOutput = execSync(`cat ${tmpPrompt} | claude --print --output-format text --model claude-haiku-4-5-20241022`, {
+      aiOutput = execSync(`cat ${tmpPrompt} | claude --print --output-format text`, {
         cwd: this.path,
         encoding: 'utf-8',
         timeout: 30000
