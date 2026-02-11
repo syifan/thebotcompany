@@ -1,0 +1,67 @@
+name: Clean Install Test
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  install-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install from npm
+        run: npm install -g thebotcompany
+
+      - name: Verify tbc CLI exists
+        run: tbc --help
+
+      - name: Run tbc init
+        run: tbc init
+
+      - name: Verify config directory created
+        run: |
+          test -d ~/.thebotcompany
+          test -f ~/.thebotcompany/projects.yaml
+          echo "Config directory OK"
+
+      - name: Verify tbc status (server not running)
+        run: |
+          tbc status || true
+
+      - name: Test tbc add with temp repo
+        run: |
+          mkdir -p /tmp/test-repo
+          cd /tmp/test-repo
+          git init
+          git remote add origin https://github.com/octocat/Hello-World.git
+          tbc add test-project /tmp/test-repo
+          cat ~/.thebotcompany/projects.yaml
+          echo "Add project OK"
+
+      - name: Test tbc projects
+        run: tbc projects
+
+      - name: Test tbc remove
+        run: |
+          tbc remove test-project
+          cat ~/.thebotcompany/projects.yaml
+          echo "Remove project OK"
+
+      - name: Start and verify server responds
+        run: |
+          tbc start
+          sleep 5
+          curl -sf http://localhost:3100/api/status || (echo "Server failed to start"; tbc logs; exit 1)
+          echo "Server OK"
+
+      - name: Stop server
+        run: tbc stop
