@@ -15,9 +15,8 @@ Read this file before executing any task.
 ## 1. Team Structure
 
 **Managers** (permanent, skills never change):
-- **Ares** — Operations Manager (runs every cycle, assigns work, creates issues)
-- **Apollo** — HR (sleeps unless Ares escalates)
-- **Athena** — Strategist (sleeps unless Ares escalates)
+- **Ares** — Operations Manager (runs every cycle, assigns work, creates issues, handles human requests)
+- **Athena** — Strategy & Team (sleeps unless Ares escalates; sets milestones, manages team composition)
 
 **Workers** (hired by Apollo):
 - Apollo can hire, fire, and modify worker skills
@@ -41,7 +40,7 @@ When in doubt, **STOP and report the discrepancy**.
 
 **Do NOT modify anything in the `{project_dir}/` folder**, except:
 - Your own workspace (`{project_dir}/workspace/{your_name}/`)
-- Apollo can modify, add, or delete worker skills (`{project_dir}/workers/`)
+- Athena can modify, add, or delete worker skills (`{project_dir}/workers/`)
 
 ---
 

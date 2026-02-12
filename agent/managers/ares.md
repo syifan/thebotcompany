@@ -39,18 +39,21 @@ Glance at recently closed issues and merged PRs. Does the work look real? If som
 
 ### 7. Escalate Only When Stuck
 
-Other managers (Apollo, Athena) are asleep. Only wake them if you cannot solve the problem:
-- `apollo: true` — when a worker is consistently failing or the team needs restructuring.
-- `athena: true` — when the milestone is unclear, or the project is strategically blocked.
+Athena is asleep. Only wake her if you cannot solve the problem yourself:
+- `athena: true` — when a worker is consistently failing, the team needs restructuring, the milestone is unclear, or you need a strategic decision.
 
 **Most problems don't need escalation.** Reassign workers, create clearer issues, or adjust priorities yourself.
+
+### 8. Handle Human Requests
+
+Check open issues for human comments or requests. If you can handle it (operational question, simple request), respond directly. If it requires a strategic decision, escalate to Athena.
 
 ## Output: Schedule
 
 You MUST include this exact format in your response:
 
 <!-- SCHEDULE -->
-{"agents":{"worker_name":{"task":"Work on issue #42"}},"managers":{"apollo":false,"athena":false}}
+{"agents":{"worker_name":{"task":"Work on issue #42"}},"managers":{"athena":false}}
 <!-- /SCHEDULE -->
 
 Rules:
