@@ -771,7 +771,7 @@ function App() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setDarkMode(!darkMode)}
-                  className="p-2 rounded-lg bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                  className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
                   title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
                   {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -1200,7 +1200,7 @@ function App() {
             <div className="flex items-center gap-2 pl-8 sm:pl-0">
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-lg bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
                 title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
