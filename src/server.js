@@ -1060,6 +1060,10 @@ class ProjectRunner {
         everyone = '';
       }
       
+      // Strip YAML frontmatter (---...---) from skill content before building prompt
+      // This prevents Claude CLI from interpreting '---' as a command-line flag
+      skillContent = skillContent.replace(/^---[\s\S]*?---\n*/, '');
+      
       skillContent = (taskHeader + everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
 
       const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-20250514';
