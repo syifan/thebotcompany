@@ -864,12 +864,12 @@ class ProjectRunner {
       const { managers, workers } = this.loadAgents();
       const nextCycle = (this.cycleCount || 0) + 1;
       
-      // Find Hermes — always runs first as scheduler
-      const hermes = managers.find(m => m.name === 'hermes');
-      const otherManagers = managers.filter(m => m.name !== 'hermes');
+      // Find the scheduler (ares) — always runs first
+      const scheduler = managers.find(m => m.name === 'ares');
+      const otherManagers = managers.filter(m => m.name !== 'ares');
       
-      // Default: all managers + all workers (used if Hermes doesn't produce a schedule)
-      let allAgents = [...(hermes ? [hermes] : []), ...otherManagers, ...workers];
+      // Default: all managers + all workers (used if scheduler doesn't produce a schedule)
+      let allAgents = [...(scheduler ? [scheduler] : []), ...otherManagers, ...workers];
 
       // Generate a cycle ID based on agent list to detect if agents changed
       const cycleId = allAgents.map(a => a.name).sort().join(',');
@@ -893,34 +893,34 @@ class ProjectRunner {
       let cycleTotal = 0;
       let schedule = null;
 
-      // Step 1: Run Hermes first (if not already completed) to get the schedule
-      if (hermes && !this.completedAgents.includes('hermes')) {
+      // Step 1: Run scheduler (ares) first to get the schedule
+      if (scheduler && !this.completedAgents.includes('ares')) {
         while (this.isPaused && this.running) {
           await sleep(1000);
         }
         if (this.running) {
-          const result = await this.runAgent(hermes, config);
+          const result = await this.runAgent(scheduler, config);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
           
           if (this.running) {
-            this.completedAgents.push('hermes');
+            this.completedAgents.push('ares');
             this.saveState();
           }
           
-          // Parse schedule from Hermes' response
+          // Parse schedule from scheduler's response
           if (result && result.resultText) {
             schedule = this.parseSchedule(result.resultText);
             if (schedule) {
-              log(`Hermes schedule: ${JSON.stringify(schedule)}`, this.id);
+              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
               this.currentSchedule = schedule;
             } else {
-              log(`No schedule found in Hermes response, using defaults`, this.id);
+              log(`No schedule found in scheduler response, using defaults`, this.id);
             }
           }
         }
-      } else if (this.completedAgents.includes('hermes')) {
-        log(`Skipping hermes (already completed)`, this.id);
+      } else if (this.completedAgents.includes('ares')) {
+        log(`Skipping ares (already completed)`, this.id);
         // Try to reload schedule from saved state
         schedule = this.currentSchedule || null;
       }
@@ -928,13 +928,13 @@ class ProjectRunner {
       // Step 2: Determine which agents to run based on schedule
       let scheduledAgents;
       if (schedule) {
-        // Build agent list from Hermes' schedule
+        // Build agent list from scheduler's schedule
         scheduledAgents = [];
         
         // Add scheduled managers (excluding hermes)
         if (schedule.managers) {
           for (const [name, shouldRun] of Object.entries(schedule.managers)) {
-            if (name.toLowerCase() === 'hermes') continue;
+            if (name.toLowerCase() === 'ares') continue;
             if (!shouldRun) continue;
             const mgr = otherManagers.find(m => m.name.toLowerCase() === name.toLowerCase());
             if (mgr) scheduledAgents.push({ ...mgr, mode: null });
@@ -1056,9 +1056,21 @@ class ProjectRunner {
         taskHeader = `> **Your assignment: ${task}**\n\n`;
       }
       
-      // Skip everyone.md for Hermes (saves tokens — Hermes only needs its own skill)
-      if (agent.name === 'hermes') {
+      // Skip everyone.md for the scheduler (saves tokens — only needs its own skill)
+      if (agent.name === 'ares') {
         everyone = '';
+        // Inject tracker issue description as the milestone
+        try {
+          const config = this.loadConfig();
+          if (this.repo && config.trackerIssue) {
+            const desc = execSync(`gh issue view ${config.trackerIssue} --json body --jq .body`, {
+              cwd: this.path, encoding: 'utf-8', timeout: 15000
+            }).trim();
+            if (desc) {
+              taskHeader = `> **Current Milestone (from tracker issue #${config.trackerIssue}):**\n> ${desc.split('\n').join('\n> ')}\n\n`;
+            }
+          }
+        } catch {}
       }
       
       // Strip YAML frontmatter (---...---) from skill content before building prompt

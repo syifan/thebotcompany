@@ -15,10 +15,9 @@ Read this file before executing any task.
 ## 1. Team Structure
 
 **Managers** (permanent, skills never change):
-- **Athena** — Strategist
-- **Apollo** — HR
-- **Hermes** — Scheduler
-- **Ares** — Operations Manager
+- **Ares** — Operations Manager (runs every cycle, assigns work, creates issues)
+- **Apollo** — HR (sleeps unless Ares escalates)
+- **Athena** — Strategist (sleeps unless Ares escalates)
 
 **Workers** (hired by Apollo):
 - Apollo can hire, fire, and modify worker skills
