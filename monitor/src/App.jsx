@@ -215,12 +215,32 @@ function App() {
     setConfigSaving(true)
     setConfigError(null)
     try {
-      const budgetLine = configForm.budgetPer24h > 0 ? `\nbudgetPer24h: ${configForm.budgetPer24h}` : ''
-      const yaml = `# ${selectedProject.id} - Orchestrator Configuration
-cycleIntervalMs: ${configForm.cycleIntervalMs}
-agentTimeoutMs: ${configForm.agentTimeoutMs}
-trackerIssue: ${configForm.trackerIssue}${budgetLine}
-`
+      // Merge form values into existing config to preserve keys like managers:
+      const existing = config.config || {}
+      const merged = { ...existing,
+        cycleIntervalMs: configForm.cycleIntervalMs,
+        agentTimeoutMs: configForm.agentTimeoutMs,
+        trackerIssue: configForm.trackerIssue,
+      }
+      if (configForm.budgetPer24h > 0) merged.budgetPer24h = configForm.budgetPer24h
+      else delete merged.budgetPer24h
+      // Build YAML: comment + sorted keys (simple scalars first, then objects)
+      const lines = [`# ${selectedProject.id} - Orchestrator Configuration`]
+      const scalarKeys = Object.keys(merged).filter(k => typeof merged[k] !== 'object' || merged[k] === null)
+      const objectKeys = Object.keys(merged).filter(k => typeof merged[k] === 'object' && merged[k] !== null)
+      for (const k of scalarKeys) lines.push(`${k}: ${merged[k]}`)
+      for (const k of objectKeys) {
+        lines.push(`${k}:`)
+        for (const [sk, sv] of Object.entries(merged[k])) {
+          if (typeof sv === 'object' && sv !== null) {
+            lines.push(`  ${sk}:`)
+            for (const [ssk, ssv] of Object.entries(sv)) lines.push(`    ${ssk}: ${ssv}`)
+          } else {
+            lines.push(`  ${sk}: ${sv}`)
+          }
+        }
+      }
+      const yaml = lines.join('\n') + '\n'
       const res = await fetch(projectApi('/config'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: yaml })
