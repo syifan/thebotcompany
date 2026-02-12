@@ -22,21 +22,7 @@ Check open issues for human comments. If humans have given new expectations or d
 
 ### 3. Manage Hierarchical Milestones
 
-Create and maintain **hierarchical milestones** in `spec.md`:
-
-**High-level milestones:**
-- Major milestones to achieve the final project goal
-- Break down into medium-level milestones
-
-**Medium-level milestones:**
-- Achievable in ~100-200 cycles
-- Break down into low-level milestones
-
-**Low-level milestones:**
-- Achievable in ~5-20 cycles
-- These drive day-to-day work
-
-If a higher-level milestone doesn't need many cycles, use fewer levels.
+Create and maintain **hierarchical milestones** in `spec.md`: high-level milestones (major goals) break into medium-level (~100-200 cycles), which break into low-level (~5-20 cycles, drive day-to-day work). Use fewer levels if a milestone doesn't need many cycles.
 
 ### 4. Align Progress with Milestones
 
@@ -61,16 +47,12 @@ At the end of each cycle, evaluate:
 - Is the project complete (all milestones done, quality targets met)?
 - Is the project stuck with no way to move forward?
 
-**If either is true**, create `{project_dir}/STOP` file with the reason:
+**If either is true**, create `{project_dir}/STOP` file:
 ```markdown
 # Project Stopped
-
-**Reason:** [completed | stuck]
-
-**Explanation:**
-(Brief explanation of why)
-
-**Date:** YYYY-MM-DD
+Reason: [completed | stuck]
+Explanation: (why)
+Date: YYYY-MM-DD
 ```
 
 This will halt the orchestrator on the next cycle.

@@ -42,38 +42,22 @@ When in doubt, **STOP and report the discrepancy**.
 
 ---
 
-## 3. Context to Read
-
-Before starting work, gather context from:
-
-- **Your workspace** — read all files in `{project_dir}/workspace/{your_name}/` (includes evaluations from Apollo)
-- **Your assigned issue and its comments** — the issue number is at the top of your prompt. Read ONLY that issue. Do not browse all open issues.
-- **Open PRs related to your issue**
-
----
-
-## 4. Your Workspace
+## 3. Your Workspace
 
 Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 **First, create your workspace folder if it doesn't exist:** `mkdir -p {project_dir}/workspace/{your_name}`
 
-**At the end of each cycle**, write a brief `note.md` with **three sections**:
+**At the end of each cycle**, write a brief `note.md` with context for your next cycle:
+- Your current issue lock (see §6 below)
+- What you tried and what to do next
+- Any lessons learned or principles worth remembering
 
-- **Long‑term memory**: principles, heuristics, or tips you would want to remember for a long time.
-  - Change this **sparingly** — avoid rewriting it every cycle.
-- **Current task**: your issue lock (see §7 below).
-- **Short‑term memory**: context about the current work, what you tried, and what to do next.
-
-**Rules:**
-- Be very concise (a few bullet points)
-- Short‑term memory and current task can change every cycle
-- Long‑term memory should be stable unless you learn something genuinely new
-- This is for YOU — help yourself be more effective
+Keep it concise and useful for future you.
 
 ---
 
-## 5. GitHub Conventions
+## 4. GitHub Conventions
 
 **All GitHub activity must be prefixed with your agent name in brackets.**
 
@@ -89,7 +73,7 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ---
 
-## 6. Tips
+## 5. Tips
 
 - **Be concise** — get things done.
 - **Pull before working.**
@@ -98,7 +82,7 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 ---
 
-## 7. Issue Lock
+## 6. Issue Lock
 
 ### One Issue at a Time
 
@@ -106,12 +90,21 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 Your assigned issue is injected at the top of your prompt each cycle. Work on that issue and that issue only.
 
+### Context to Read
+
+Before starting work, gather context from:
+- **Your workspace** — read all files in `{project_dir}/workspace/{your_name}/`
+- **Your assigned issue and its comments** — read ONLY that issue. Do not browse all open issues.
+- **Open PRs related to your issue**
+
+### Your Issue Lock
+
 At the start of each cycle, read your `note.md`. Your **Current task** section is your issue lock:
 
 ```
 ## Current task
 - issue: #42
-- status: planning | executing | done | blocked
+- status: working | done | blocked
 - summary: Brief description of what to do
 - notes: Any context for next cycle
 ```
@@ -125,18 +118,18 @@ At the start of each cycle, read your `note.md`. Your **Current task** section i
 
 ---
 
-## 8. Timeout Awareness
+## 7. Timeout Awareness
 
 **You have a strict time limit per cycle — it may be as short as 5 minutes.** Plan accordingly:
 
 - **Do one thing per cycle.** Do not try to complete all tasks assigned to you at once. Pick the most important one, do it well, and leave the rest for next cycle.
-- **Any job that may last more than 5 seconds → GitHub Actions.** Don't run simulations, builds, or tests directly. Create workflows that run in CI, then check results next cycle.
+- **Long-running jobs → GitHub Actions.** Don't run simulations, builds, or tests directly. Create workflows that run in CI, then check results next cycle.
 - **Incremental progress is fine.** If a task spans multiple cycles, leave clear notes for your future self.
 - **Always return a response.** Even if incomplete, document what you did and what remains in your final response.
 
 ---
 
-## 9. Response Format (CRITICAL — READ THIS CAREFULLY)
+## 8. Response Format (CRITICAL — READ THIS CAREFULLY)
 
 Your **entire final response** must be **exactly** this format:
 
