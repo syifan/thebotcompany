@@ -155,10 +155,10 @@ Your **entire final response** must be **exactly** this format:
 # [AgentName]
 
 ## Input
-(what you saw)
+(brief summary — do NOT repeat information already visible in issues, PRs, comments, or reports)
 
 ## Actions
-(what you did)
+(what you did — focus on NEW information, decisions, and changes only)
 ```
 
 **RULES:**
@@ -167,5 +167,6 @@ Your **entire final response** must be **exactly** this format:
 - **Nothing after Actions** — no sign-offs, no summaries, no next-step suggestions
 - The orchestrator posts your **entire response** verbatim to the tracker issue
 - Any text outside this format **will appear publicly** as noise
+- **Do NOT repeat information** that's already in issues, PRs, comments, or reports. Everyone can read those. Only add NEW insights, decisions, or status changes.
 
 **Think all you want during your cycle. But your final response is ONLY the formatted block above.**
