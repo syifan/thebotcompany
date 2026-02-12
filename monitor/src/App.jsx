@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Filter, Info } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -102,16 +102,25 @@ function App() {
 
 
   // Dark mode
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode')
-    if (saved !== null) return saved === 'true'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
+  // Theme: 'light' | 'dark' | 'system'
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
+  const darkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode)
-    localStorage.setItem('darkMode', darkMode)
-  }, [darkMode])
+    const apply = () => {
+      const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      document.documentElement.classList.toggle('dark', isDark)
+    }
+    apply()
+    localStorage.setItem('theme', theme)
+    if (theme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      mq.addEventListener('change', apply)
+      return () => mq.removeEventListener('change', apply)
+    }
+  }, [theme])
+
+  const cycleTheme = () => setTheme(t => t === 'light' ? 'dark' : t === 'dark' ? 'system' : 'light')
 
   const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
 
@@ -770,11 +779,11 @@ function App() {
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setDarkMode(!darkMode)}
+                  onClick={cycleTheme}
                   className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                  title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                  title={`Theme: ${theme} (click to cycle)`}
                 >
-                  {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
                 </button>
                 <div className="text-xs sm:text-sm text-neutral-400 dark:text-neutral-500 shrink-0">
                   {Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m
@@ -1199,11 +1208,11 @@ function App() {
             {/* Right: Actions */}
             <div className="flex items-center gap-2 pl-8 sm:pl-0">
               <button
-                onClick={() => setDarkMode(!darkMode)}
+                onClick={cycleTheme}
                 className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                title={`Theme: ${theme} (click to cycle)`}
               >
-                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
               </button>
               {repoUrl && (
                 <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center">
