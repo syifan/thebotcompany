@@ -89,7 +89,7 @@ function App() {
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', creating: false, error: null })
-  const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false })
+  const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
@@ -324,13 +324,13 @@ function App() {
   
   const openAgentModal = async (agentName) => {
     if (!selectedProject) return
-    setAgentModal({ open: true, agent: agentName, data: null, loading: true })
+    setAgentModal({ open: true, agent: agentName, data: null, loading: true, tab: 'skill' })
     try {
       const res = await fetch(projectApi(`/agents/${agentName}`))
       const data = await res.json()
-      setAgentModal({ open: true, agent: agentName, data, loading: false })
+      setAgentModal({ open: true, agent: agentName, data, loading: false, tab: 'skill' })
     } catch (err) {
-      setAgentModal({ open: true, agent: agentName, data: null, loading: false })
+      setAgentModal({ open: true, agent: agentName, data: null, loading: false, tab: 'skill' })
     }
   }
 
@@ -1643,12 +1643,34 @@ function App() {
                 <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300">Model</h3>
                 <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm rounded">{agentModal.data.model || 'inherited'}</span>
               </div>
+              {/* Tabs: Agent Skill | Shared Rules */}
+              <div className="flex border-b border-neutral-200 dark:border-neutral-700">
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'skill' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                  onClick={() => setAgentModal(prev => ({ ...prev, tab: 'skill' }))}
+                >Agent Skill</button>
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'shared' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                  onClick={() => setAgentModal(prev => ({ ...prev, tab: 'shared' }))}
+                >Shared Rules</button>
+              </div>
+              {agentModal.tab === 'skill' ? (
               <div>
-                <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Skill Definition</h3>
                 <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
                 </div>
               </div>
+              ) : (
+              <div>
+                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
+                  {agentModal.data.everyone ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.everyone}</ReactMarkdown>
+                  ) : (
+                    <p className="text-neutral-400 dark:text-neutral-500 italic">No shared rules (everyone.md not found)</p>
+                  )}
+                </div>
+              </div>
+              )}
               {agentModal.data.lastResponse && (
                 <div>
                   <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Last Response</h3>

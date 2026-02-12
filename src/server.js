@@ -285,7 +285,12 @@ class ProjectRunner {
     const modelMatch = skill.match(/^model:\s*(.+)$/m);
     const model = modelMatch ? modelMatch[1].trim() : null;
     
-    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model };
+    // Read everyone.md (shared rules)
+    let everyone = null;
+    const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
+    try { everyone = fs.readFileSync(everyonePath, 'utf-8'); } catch {}
+
+    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model, everyone };
   }
 
   getLogs(lines = 50) {
