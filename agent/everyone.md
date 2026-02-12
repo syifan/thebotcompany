@@ -34,6 +34,10 @@ Read this file before executing any task.
 
 When in doubt, **STOP and report the discrepancy**.
 
+### No @mentions
+
+**Do NOT @mention anyone** in issues, PRs, or comments. No `@username`, no `@team`. Ever.
+
 ### Protected Files
 
 **Do NOT modify anything in the `{project_dir}/` folder**, except:
