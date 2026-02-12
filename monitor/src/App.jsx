@@ -139,7 +139,7 @@ function App() {
             // Agent changed (finished or new one started) → refresh project data
             if (prevAgent !== null && prevAgent !== curAgent) {
               fetchProjectData()
-              fetchComments(1, null, false)
+              fetchComments(1, localStorage.getItem('selectedAgent') || null, false)
             }
             prevAgentRef.current = curAgent
           }
@@ -595,7 +595,7 @@ trackerIssue: ${configForm.trackerIssue}${budgetLine}
       
       // Separate intervals for different data
       const logsInterval = setInterval(fetchLogs, 10000) // Logs every 10s
-      const commentsInterval = setInterval(() => fetchComments(1, selectedAgent, false), 30000) // Comments every 30s
+      const commentsInterval = setInterval(() => fetchComments(1, localStorage.getItem('selectedAgent') || null, false), 30000) // Comments every 30s
       const projectDataInterval = setInterval(fetchProjectData, 30000) // Issues/PRs/agents every 30s
       
       return () => {
