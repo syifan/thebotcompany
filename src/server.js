@@ -946,11 +946,11 @@ class ProjectRunner {
           for (const [name, value] of Object.entries(schedule.agents)) {
             const worker = workers.find(w => w.name === name);
             if (!worker) continue;
-            // Support both old format (string mode) and new format ({mode, task})
+            // Support old format (string mode), mode+task object, or task-only object
             if (typeof value === 'string') {
-              scheduledAgents.push({ ...worker, mode: value, task: null });
+              scheduledAgents.push({ ...worker, mode: null, task: value });
             } else {
-              scheduledAgents.push({ ...worker, mode: value.mode, task: value.task || null });
+              scheduledAgents.push({ ...worker, mode: value.mode || null, task: value.task || null });
             }
           }
         }
@@ -1049,23 +1049,18 @@ class ProjectRunner {
       let everyone = '';
       try { everyone = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n'; } catch {}
       
-      // Inject mode as ambient context at the top
-      let modeHeader = '';
-      if (mode) {
-        const modeDescriptions = {
-          discuss: 'DISCUSS — Read issues, PRs, and comments. Participate in conversations. Do NOT write code, create PRs, or plan. ONLY discuss.',
-          research: 'RESEARCH — Gather information: web search, read docs, run experiments via CI. Do NOT write code, create PRs, or comment on issues. ONLY research.',
-          plan: 'PLAN — Decide what to do. Write a plan in your workspace notes. Do NOT write code, create PRs, or comment on issues. ONLY plan.',
-          execute: 'EXECUTE — Do the actual work: write code, create PRs, implement features, fix bugs.'
-        };
-        modeHeader = `> **Current mode: ${modeDescriptions[mode] || mode.toUpperCase()}**\n`;
-        if (task) {
-          modeHeader += `> **Task: ${task}**\n`;
-        }
-        modeHeader += '\n';
+      // Inject task assignment at the top
+      let taskHeader = '';
+      if (task) {
+        taskHeader = `> **Your assignment: ${task}**\n\n`;
       }
       
-      skillContent = (modeHeader + everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
+      // Skip everyone.md for Hermes (saves tokens — Hermes only needs its own skill)
+      if (agent.name === 'hermes') {
+        everyone = '';
+      }
+      
+      skillContent = (taskHeader + everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
 
       const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-20250514';
       const args = [

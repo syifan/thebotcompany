@@ -688,8 +688,7 @@ function App() {
     // Get mode from schedule
     const schedule = selectedProject?.schedule
     const agentSchedule = schedule?.agents?.[agent.name]
-    const mode = typeof agentSchedule === 'string' ? agentSchedule : agentSchedule?.mode || null
-    const task = typeof agentSchedule === 'object' ? agentSchedule?.task : null
+    const task = typeof agentSchedule === 'string' ? agentSchedule : agentSchedule?.task || null
     
     return (
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
@@ -731,13 +730,6 @@ function App() {
         {/* Row 3: Pills */}
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
           {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
-          {mode && <span className={`px-1.5 py-0.5 text-xs rounded-full ${
-            mode === 'execute' ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
-            mode === 'plan' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
-            mode === 'discuss' ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' :
-            mode === 'research' ? 'bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300' :
-            'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
-          }`}>{mode}</span>}
           {isActive && (
             <Badge variant="success" className="flex items-center gap-1">
               Active{runtime !== null && <span className="font-mono">{formatRuntime(runtime)}</span>}

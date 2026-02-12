@@ -47,8 +47,8 @@ When in doubt, **STOP and report the discrepancy**.
 Before starting work, gather context from:
 
 - **Your workspace** — read all files in `{project_dir}/workspace/{your_name}/` (includes evaluations from Apollo)
-- **Open issues and their comments**
-- **Open PRs**
+- **Your assigned issue and its comments** — the issue number is at the top of your prompt. Read ONLY that issue. Do not browse all open issues.
+- **Open PRs related to your issue**
 
 ---
 
@@ -95,44 +95,33 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 - **Pull before working.**
 - **See something, say something** — if you find a problem, raise an issue.
 - **Persist reports and documents.** If you write a report or document that other agents (or your future self) should see, save it in the `reports/` folder in the repository and commit + push it.
-- **Join the conversation.** Read open issues and leave comments if you have an opinion or useful input.
 
 ---
 
-## 7. Issue Lock & Cycle Mode
+## 7. Issue Lock
 
 ### One Issue at a Time
 
-**You work on ONE issue per plan→execute cycle.** No multitasking.
+**You work on ONE issue at a time.** No multitasking.
+
+Your assigned issue is injected at the top of your prompt each cycle. Work on that issue and that issue only.
 
 At the start of each cycle, read your `note.md`. Your **Current task** section is your issue lock:
 
 ```
 ## Current task
 - issue: #42
-- status: planning | researching | ready_to_execute | executing | done
+- status: planning | executing | done | blocked
 - summary: Brief description of what to do
 - notes: Any context for next cycle
 ```
 
 **Rules:**
-- **plan mode**: If no issue is locked, pick ONE from your assigned tasks. Write the lock to `note.md`. If an issue is already locked and not done, continue planning it.
-- **research mode**: Gather information for your locked issue only. Update notes with findings.
-- **execute mode**: Work ONLY on the locked issue. When finished, set status to `done`.
-- **discuss mode**: Comment on issues/PRs. No lock changes.
-- **Never switch issues mid-cycle.** If your locked issue is blocked, set status to `blocked` and explain why — Ares will reassign you.
-- **Multiple plan cycles are fine.** Complex tasks may need: plan → research → plan → execute. The lock persists across all of these.
-
-### Modes
-
-Each cycle, Hermes (the scheduler) assigns you a **mode** that determines what you should focus on:
-
-- **discuss** — Read issues, PRs, and comments. Participate in conversations. Do NOT write code, create PRs, or plan.
-- **research** — Gather information: web search, read docs, run experiments via CI. Do NOT write code, create PRs, or comment on issues. ONLY research.
-- **plan** — Decide what to do. Write a plan in your workspace notes. Do NOT write code, create PRs, or comment on issues. ONLY plan.
-- **execute** — Do the actual work: write code, create PRs, implement features, fix bugs.
-
-**Strictly do ONLY what your mode allows.** Your current mode is injected at the top of your prompt.
+- If you're assigned a new issue, update your lock.
+- If your locked issue is done, set status to `done`.
+- If blocked, set status to `blocked` and explain why.
+- **Never switch issues mid-cycle.**
+- Within a cycle, you can plan, research, discuss, AND execute — do whatever makes sense to make progress on your assigned issue.
 
 ---
 
