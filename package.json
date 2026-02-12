@@ -21,6 +21,7 @@
   "author": "Yifan Sun",
   "license": "MIT",
   "dependencies": {
+    "dotenv": "^17.2.4",
     "js-yaml": "^4.1.0"
   }
 }

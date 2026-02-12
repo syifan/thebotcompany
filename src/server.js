@@ -12,9 +12,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
+import { config as loadDotenv } from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
+
+// Load .env from TBC_HOME (~/.thebotcompany/.env)
+const TBC_HOME_EARLY = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
+loadDotenv({ path: path.join(TBC_HOME_EARLY, '.env') });
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 const MONITOR_DIST = path.join(ROOT, 'monitor', 'dist');
 

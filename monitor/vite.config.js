@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { config as loadDotenv } from 'dotenv'
+
+// Load .env from ~/.thebotcompany/
+loadDotenv({ path: path.join(process.env.HOME, '.thebotcompany', '.env') })
 
 const basicAuthPlugin = () => ({
   name: 'basic-auth',
