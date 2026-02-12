@@ -934,9 +934,9 @@ class ProjectRunner {
         // Add scheduled managers (excluding hermes)
         if (schedule.managers) {
           for (const [name, shouldRun] of Object.entries(schedule.managers)) {
-            if (name === 'hermes') continue;
+            if (name.toLowerCase() === 'hermes') continue;
             if (!shouldRun) continue;
-            const mgr = otherManagers.find(m => m.name === name);
+            const mgr = otherManagers.find(m => m.name.toLowerCase() === name.toLowerCase());
             if (mgr) scheduledAgents.push({ ...mgr, mode: null });
           }
         }
@@ -944,7 +944,7 @@ class ProjectRunner {
         // Add scheduled workers with their modes and tasks
         if (schedule.agents) {
           for (const [name, value] of Object.entries(schedule.agents)) {
-            const worker = workers.find(w => w.name === name);
+            const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
             if (!worker) continue;
             // Support old format (string mode), mode+task object, or task-only object
             if (typeof value === 'string') {
@@ -955,7 +955,8 @@ class ProjectRunner {
           }
         }
         
-        const skippedWorkers = workers.filter(w => !schedule.agents?.[w.name]).map(w => w.name);
+        const scheduledNames = new Set(Object.keys(schedule.agents || {}).map(n => n.toLowerCase()));
+        const skippedWorkers = workers.filter(w => !scheduledNames.has(w.name.toLowerCase())).map(w => w.name);
         if (skippedWorkers.length > 0) {
           log(`Hermes skipped workers: ${skippedWorkers.join(', ')}`, this.id);
         }
