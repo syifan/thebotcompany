@@ -1635,53 +1635,39 @@ function App() {
                 <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300">Model</h3>
                 <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm rounded">{agentModal.data.model || 'inherited'}</span>
               </div>
-              {/* Tabs: Agent Skill | Shared Rules */}
+              {/* Tabs: Skill | Workspace */}
               <div className="flex border-b border-neutral-200 dark:border-neutral-700">
                 <button
                   className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'skill' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
                   onClick={() => setAgentModal(prev => ({ ...prev, tab: 'skill' }))}
-                >Agent Skill</button>
+                >Skill</button>
                 <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'shared' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                  onClick={() => setAgentModal(prev => ({ ...prev, tab: 'shared' }))}
-                >Shared Rules</button>
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'workspace' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                  onClick={() => setAgentModal(prev => ({ ...prev, tab: 'workspace' }))}
+                >Workspace</button>
               </div>
               {agentModal.tab === 'skill' ? (
-              <div>
-                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase mb-1">Shared Rules (everyone.md)</h4>
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
+                    {agentModal.data.everyone ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.everyone}</ReactMarkdown>
+                    ) : (
+                      <p className="text-neutral-400 dark:text-neutral-500 italic">No shared rules found</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase mb-1">Agent Skill ({agentModal.agent}.md)</h4>
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
+                  </div>
                 </div>
               </div>
               ) : (
               <div>
-                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
-                  {agentModal.data.everyone ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.everyone}</ReactMarkdown>
-                  ) : (
-                    <p className="text-neutral-400 dark:text-neutral-500 italic">No shared rules (everyone.md not found)</p>
-                  )}
-                </div>
-              </div>
-              )}
-              {agentModal.data.lastResponse && (
-                <div>
-                  <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Last Response</h3>
-                  <div className="bg-neutral-900 rounded p-3 text-sm max-h-64 overflow-y-auto">
-                    <pre className="text-neutral-300 whitespace-pre-wrap text-xs font-mono">{agentModal.data.lastResponse}</pre>
-                  </div>
-                </div>
-              )}
-              {agentModal.data.lastRawOutput && (
-                <div>
-                  <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Raw CLI Output</h3>
-                  <div className="bg-neutral-900 rounded p-3 text-sm max-h-64 overflow-y-auto">
-                    <pre className="text-neutral-300 whitespace-pre-wrap text-xs font-mono">{agentModal.data.lastRawOutput}</pre>
-                  </div>
-                </div>
-              )}
-              {agentModal.data.workspaceFiles?.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300 mb-2">Workspace Files</h3>
+                {agentModal.data.workspaceFiles?.length > 0 ? (
                   <div className="space-y-2">
                     {agentModal.data.workspaceFiles.map((file) => (
                       <div key={file.name} className="bg-neutral-50 dark:bg-neutral-900 rounded p-3">
@@ -1690,12 +1676,15 @@ function App() {
                           <span className="text-xs text-neutral-400">{new Date(file.modified).toLocaleString()}</span>
                         </div>
                         {file.content && (
-                          <pre className="text-xs text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap max-h-32 overflow-y-auto">{file.content}</pre>
+                          <pre className="text-xs text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap max-h-48 overflow-y-auto">{file.content}</pre>
                         )}
                       </div>
                     ))}
                   </div>
-                </div>
+                ) : (
+                  <p className="text-neutral-400 dark:text-neutral-500 italic py-4 text-center">No workspace files</p>
+                )}
+              </div>
               )}
             </div>
           ) : (
