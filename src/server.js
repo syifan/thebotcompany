@@ -1188,18 +1188,9 @@ ${errorMsg}
 
 This is an automated message from the orchestrator.`;
             } else if (resultText) {
-              // Post agent's response — strip any preamble before "# [AgentName]"
-              const headerMatch = resultText.match(/^(# \[.+\])/m);
-              if (headerMatch) {
-                const headerIdx = resultText.indexOf(headerMatch[0]);
-                const preamble = resultText.slice(0, headerIdx).trim();
-                const structured = resultText.slice(headerIdx);
-                comment = preamble
-                  ? structured + '\n\n## Thoughts\n' + preamble
-                  : structured;
-              } else {
-                comment = resultText;
-              }
+              // Prepend agent name header and post response
+              const agentLabel = `# [${agent.name.charAt(0).toUpperCase() + agent.name.slice(1)}]`;
+              comment = `${agentLabel}\n\n${resultText.trim()}`;
             }
             
             if (comment) {

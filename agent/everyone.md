@@ -133,26 +133,11 @@ At the start of each cycle, read your `note.md`. Your **Current task** section i
 
 ---
 
-## 8. Response Format (CRITICAL — READ THIS CAREFULLY)
+## 8. Response Format
 
-Your **entire final response** must be **exactly** this format:
+At the end of your cycle, your final response should **briefly summarize what you completed**. Keep it concise — a few sentences or bullet points.
 
-```
-# [AgentName]
-
-## Input
-(brief summary — do NOT repeat information already visible in issues, PRs, comments, or reports)
-
-## Actions
-(what you did — focus on NEW information, decisions, and changes only)
-```
-
-**RULES:**
-- Your response **MUST start with `# [AgentName]`** as the very first line
-- **Nothing before it** — no thinking, no analysis, no preamble, no status checks
-- **Nothing after Actions** — no sign-offs, no summaries, no next-step suggestions
-- The orchestrator posts your **entire response** verbatim to the tracker issue
-- Any text outside this format **will appear publicly** as noise
-- **Do NOT repeat information** that's already in issues, PRs, comments, or reports. Everyone can read those. Only add NEW insights, decisions, or status changes.
-
-**Think all you want during your cycle. But your final response is ONLY the formatted block above.**
+**Rules:**
+- Focus on what's NEW — don't repeat information already in issues, PRs, or comments.
+- No preamble, no sign-offs, no thinking out loud.
+- The orchestrator will add your name and post it to the tracker automatically.
