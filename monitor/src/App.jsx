@@ -695,7 +695,7 @@ function App() {
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
         {/* Row 1: Name + action buttons */}
         <div className="flex items-center justify-between">
-          <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}</span>
+          <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}{agent.role && <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400 ml-1.5">({agent.role})</span>}</span>
           <div className="flex items-center gap-0.5">
             <button
               onClick={() => openAgentModal(agent.name)}
@@ -727,8 +727,6 @@ function App() {
             </button>
           </div>
         </div>
-        {/* Row 2: Role */}
-        {agent.role && <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{agent.role}</p>}
         {task && <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5 italic">{task}</p>}
         {/* Row 3: Pills */}
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
