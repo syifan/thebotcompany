@@ -95,7 +95,7 @@ class ProjectRunner {
     this.wakeNow = false;
     this.running = false;
     this.lastComputedSleepMs = null; // Cached sleep interval
-    this.currentSchedule = null; // Hermes' schedule for current cycle
+    this.currentSchedule = null; // Ares's schedule for current cycle
     this._repo = null;
   }
 
@@ -828,14 +828,14 @@ class ProjectRunner {
   }
 
   parseSchedule(resultText) {
-    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Hermes' response
+    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Ares's response
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
     try {
       const schedule = JSON.parse(match[1]);
       return schedule;
     } catch (e) {
-      log(`Failed to parse Hermes schedule: ${e.message}`, this.id);
+      log(`Failed to parse Ares schedule: ${e.message}`, this.id);
       return null;
     }
   }
@@ -873,7 +873,7 @@ class ProjectRunner {
 
       // Generate a cycle ID based on agent list to detect if agents changed
       const cycleId = allAgents.map(a => a.name).sort().join(',');
-      // Note: allAgents is the default list; actual run list may differ after Hermes schedules
+      // Note: allAgents is the default list; actual run list may differ after Ares schedules
       
       // Check if we're resuming an interrupted cycle or starting fresh
       const isResume = this.currentCycleId === cycleId && this.completedAgents.length > 0;
@@ -931,7 +931,7 @@ class ProjectRunner {
         // Build agent list from scheduler's schedule
         scheduledAgents = [];
         
-        // Add scheduled managers (excluding hermes)
+        // Add scheduled managers (excluding ares)
         if (schedule.managers) {
           for (const [name, shouldRun] of Object.entries(schedule.managers)) {
             if (name.toLowerCase() === 'ares') continue;
@@ -958,7 +958,7 @@ class ProjectRunner {
         const scheduledNames = new Set(Object.keys(schedule.agents || {}).map(n => n.toLowerCase()));
         const skippedWorkers = workers.filter(w => !scheduledNames.has(w.name.toLowerCase())).map(w => w.name);
         if (skippedWorkers.length > 0) {
-          log(`Hermes skipped workers: ${skippedWorkers.join(', ')}`, this.id);
+          log(`Ares skipped workers: ${skippedWorkers.join(', ')}`, this.id);
         }
       } else {
         // Fallback: run all managers + workers with no mode

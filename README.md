@@ -5,7 +5,7 @@ Human-free software development with self-organizing AI agent teams.
 ## Features
 
 - **Human-free execution** — Agents plan, discuss, research, and implement autonomously across full development cycles
-- **Self-organizing teams** — AI managers (Hermes, Athena, Apollo) hire, evaluate, schedule, and coordinate worker agents without human intervention
+- **Self-organizing teams** — AI managers (Ares, Athena) schedule, evaluate, and coordinate worker agents without human intervention
 - **Multi-project** — Manage multiple repos from one central orchestrator with independent cycles
 - **Full observability** — Watch agents work through GitHub PRs and issues; every decision, discussion, and code change is visible
 - **Async human intervention** — Agents escalate via GitHub issues when they need human input; step in at your convenience
@@ -64,23 +64,10 @@ TheBotCompany runs in cycles. Each cycle, a lightweight scheduler (**Hermes**) r
 
 Three AI managers oversee each project:
 
-- **Hermes** (Scheduler) — Runs first every cycle, reads project state, decides who runs and in what mode
-- **Ares** (Operations Manager) — Merges PRs, assigns tasks, maintains the task tracker
-- **Athena** (Strategist) — Sets project direction, manages milestones, creates issues from high-level goals
-- **Apollo** (HR) — Evaluates agent performance, tunes skill files, hires/disables agents
+- **Ares** (Operations Manager) — Runs every cycle as scheduler, assigns workers to issues, checks completed work, escalates to Athena when needed
+- **Athena** (Strategy & Team) — Sleeps unless Ares escalates; sets milestones, manages team composition (hire/fire/retune workers)
 
-Hermes runs first every cycle as a lightweight scheduler. Ares, Athena, and Apollo are called in by Hermes when needed.
-
-### Work Modes
-
-Each cycle, agents are assigned one of four modes:
-
-- **discuss** — Participate in issue/PR conversations (no code changes)
-- **research** — Gather information, run experiments via CI (no code changes)
-- **plan** — Decide approach and write a plan (no code changes)
-- **execute** — Write code, create PRs, implement changes
-
-Agents follow a natural lifecycle: plan → research → plan → execute, locking one issue at a time until it's done.
+Ares runs every cycle and outputs a schedule block that the orchestrator parses to determine which workers and managers run. Agents freely plan, research, discuss, and execute within each cycle — no rigid modes.
 
 ### Project Structure
 

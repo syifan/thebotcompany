@@ -18,8 +18,8 @@ Read this file before executing any task.
 - **Ares** — Operations Manager (runs every cycle, assigns work, creates issues, handles human requests)
 - **Athena** — Strategy & Team (sleeps unless Ares escalates; sets milestones, manages team composition)
 
-**Workers** (hired by Apollo):
-- Apollo can hire, fire, and modify worker skills
+**Workers** (managed by Athena):
+- Athena can hire, fire, and modify worker skills
 - Workers are discovered from `{project_dir}/workers/`
 
 ---
