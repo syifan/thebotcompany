@@ -1309,6 +1309,19 @@ This is an automated message from the orchestrator.`;
               } finally {
                 try { fs.unlinkSync(tmpFile); } catch {}
               }
+              // Also write to SQLite DB (issue_id 0 = tracker/cycle log)
+              try {
+                const db = this.getDb();
+                // Ensure tracker issue exists
+                const tracker = db.prepare('SELECT id FROM issues WHERE id = 0').get();
+                if (!tracker) {
+                  db.prepare("INSERT INTO issues (id, title, creator, body) VALUES (0, 'Agent Tracker', 'system', 'Cycle log')").run();
+                }
+                db.prepare('INSERT INTO comments (issue_id, author, body) VALUES (0, ?, ?)').run(agent.name, resultText.trim());
+                db.close();
+              } catch (dbErr) {
+                log(`Failed to write to SQLite: ${dbErr.message}`, this.id);
+              }
             }
           } catch (e) {
             log(`Failed to post tracker comment: ${e.message}`, this.id);
