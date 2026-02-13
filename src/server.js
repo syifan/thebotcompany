@@ -1851,6 +1851,29 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // GET /api/projects/:id/issues/:issueId — single issue + comments
+    const issueDetailMatch = req.method === 'GET' && subPath.match(/^issues\/(\d+)$/);
+    if (issueDetailMatch) {
+      try {
+        const issueId = parseInt(issueDetailMatch[1], 10);
+        const db = runner.getDb();
+        const issue = db.prepare('SELECT * FROM issues WHERE id = ?').get(issueId);
+        const comments = issue ? db.prepare('SELECT * FROM comments WHERE issue_id = ? ORDER BY created_at ASC').all(issueId) : [];
+        db.close();
+        if (!issue) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Issue not found' }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ issue, comments }));
+        }
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
     // GET /api/projects/:id/issues
     if (req.method === 'GET' && subPath === 'issues') {
       const issues = await runner.getIssues();

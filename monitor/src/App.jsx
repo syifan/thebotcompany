@@ -90,6 +90,7 @@ function App() {
   const [issues, setIssues] = useState([])
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', creating: false, error: null })
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
+  const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
@@ -387,6 +388,18 @@ function App() {
       }
     } catch (err) {
       setCreateIssueModal(prev => ({ ...prev, creating: false, error: err.message }))
+    }
+  }
+
+  const openIssueModal = async (issueId) => {
+    if (!selectedProject) return
+    setIssueModal({ open: true, issue: null, comments: [], loading: true })
+    try {
+      const res = await fetch(projectApi(`/issues/${issueId}`))
+      const data = await res.json()
+      setIssueModal({ open: true, issue: data.issue, comments: data.comments || [], loading: false })
+    } catch (err) {
+      setIssueModal({ open: true, issue: null, comments: [], loading: false })
     }
   }
 
@@ -1637,7 +1650,8 @@ function App() {
                   <div className="space-y-2 flex-1 overflow-y-auto">
                     {issues.map((issue) => (
                       <div key={issue.id}
-                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 rounded">
+                        onClick={() => openIssueModal(issue.id)}
+                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-neutral-400 dark:text-neutral-500">#{issue.id}</span>
                           <Badge variant={issue.status === 'open' ? 'success' : issue.status === 'closed' ? 'secondary' : 'default'} className="text-[10px] px-1.5 py-0">
@@ -2013,6 +2027,72 @@ function App() {
               </Button>
             </div>
           </div>
+        </ModalContent>
+      </Modal>
+
+      {/* Issue Detail Modal */}
+      <Modal open={issueModal.open} onClose={() => setIssueModal({ ...issueModal, open: false })}>
+        <ModalHeader onClose={() => setIssueModal({ ...issueModal, open: false })}>
+          {issueModal.issue ? `#${issueModal.issue.id} ${issueModal.issue.title}` : 'Issue'}
+        </ModalHeader>
+        <ModalContent>
+          {issueModal.loading ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
+            </div>
+          ) : issueModal.issue ? (
+            <div className="space-y-4">
+              {/* Meta */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={issueModal.issue.status === 'open' ? 'success' : 'secondary'}>{issueModal.issue.status || 'open'}</Badge>
+                {issueModal.issue.creator && (
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1"><User className="w-3 h-3" />{issueModal.issue.creator}</span>
+                )}
+                {issueModal.issue.assignee && (
+                  <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><UserCheck className="w-3 h-3" />{issueModal.issue.assignee}</span>
+                )}
+                {issueModal.issue.labels && (
+                  <span className="text-xs text-purple-500 dark:text-purple-400">{issueModal.issue.labels}</span>
+                )}
+                <span className="text-xs text-neutral-400 dark:text-neutral-500 flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(issueModal.issue.created_at).toLocaleString()}</span>
+              </div>
+
+              {/* Body */}
+              {issueModal.issue.body && (
+                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 prose prose-sm prose-neutral dark:prose-invert max-w-none max-h-[40vh] overflow-y-auto">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{issueModal.issue.body}</ReactMarkdown>
+                </div>
+              )}
+
+              {/* Comments */}
+              {issueModal.comments.length > 0 && (
+                <>
+                  <Separator />
+                  <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300">Comments ({issueModal.comments.length})</h3>
+                  <div className="space-y-3 max-h-[40vh] overflow-y-auto">
+                    {issueModal.comments.map((comment) => (
+                      <div key={comment.id} className="bg-neutral-50 dark:bg-neutral-900 rounded p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Avatar className="w-6 h-6">
+                            <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
+                              {(comment.author || '??').slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.author}</span>
+                          <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
+                        </div>
+                        <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load issue</p>
+          )}
         </ModalContent>
       </Modal>
 
