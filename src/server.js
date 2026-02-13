@@ -1068,7 +1068,11 @@ class ProjectRunner {
           // Process decision
           if (decision === 'pass') {
             log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
-            this.verificationFeedback = '__passed__';
+            this.milestoneDescription = null;
+            this.milestoneCyclesBudget = 0;
+            this.milestoneCyclesUsed = 0;
+            this.verificationFeedback = null;
+            this.isFixRound = false;
             this.phase = 'athena';
           } else if (decision === 'fail') {
             log(`❌ Verification failed — returning to Ares (${Math.floor(this.milestoneCyclesBudget / 2)} fix cycles)`, this.id);
