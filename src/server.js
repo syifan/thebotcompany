@@ -42,7 +42,7 @@ const startTime = Date.now();
 
 // --- Logging ---
 function log(msg, projectId = null) {
-  const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const ts = new Date().toLocaleString('sv-SE', { hour12: false }).replace(',', '');
   const prefix = projectId ? `[${projectId}]` : '[tbc]';
   const line = `${ts} ${prefix} ${msg}`;
   console.log(line);
