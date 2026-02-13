@@ -957,10 +957,8 @@ class ProjectRunner {
 
       // ===== PHASE: IMPLEMENTATION (Ares + his workers) =====
       else if (this.phase === 'implementation') {
-        this.milestoneCyclesUsed++;
-
-        // Check if deadline missed
-        if (this.milestoneCyclesUsed > this.milestoneCyclesBudget) {
+        // Check if deadline missed (before running)
+        if (this.milestoneCyclesUsed >= this.milestoneCyclesBudget) {
           log(`⏰ Implementation deadline missed (${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles)`, this.id);
           this.phase = 'athena';
           this.saveState();
@@ -969,8 +967,9 @@ class ProjectRunner {
 
         const ares = managers.find(m => m.name === 'ares');
         if (ares) {
-          // Build context for Ares
-          let aresContext = `> **Milestone:** ${this.milestoneDescription}\n> **Cycles remaining:** ${this.milestoneCyclesBudget - this.milestoneCyclesUsed} of ${this.milestoneCyclesBudget}\n\n`;
+          // Build context for Ares (remaining includes this cycle)
+          const cyclesRemaining = this.milestoneCyclesBudget - this.milestoneCyclesUsed;
+          let aresContext = `> **Milestone:** ${this.milestoneDescription}\n> **Cycles remaining:** ${cyclesRemaining} of ${this.milestoneCyclesBudget}\n\n`;
           if (this.isFixRound && this.verificationFeedback) {
             aresContext += `> **⚠️ Verification Failed — Fix Required:**\n> ${this.verificationFeedback}\n> You have ${this.milestoneCyclesBudget - this.milestoneCyclesUsed} cycles to fix and re-claim.\n\n`;
           }
@@ -1011,6 +1010,7 @@ class ProjectRunner {
             }
           }
         }
+        this.milestoneCyclesUsed++;
         this.saveState();
       }
 
