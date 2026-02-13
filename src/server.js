@@ -701,9 +701,9 @@ class ProjectRunner {
     let trackerIssue = null;
     if (this.repo) {
       try {
-        const issueBody = `# Agent Tracker\n\n## 📋 Task Queues\n\n(No tasks yet)\n\n## 📊 Status\n- **Action count:** 0\n- **Last cycle:** N/A\n`;
+        const issueBody = '(No milestone set yet — Athena will update this)';
         const output = execSync(
-          `gh issue create --title "Agent Tracker" --body ${JSON.stringify(issueBody)}`,
+          `gh issue create --title "Agent Tracker" --body "${issueBody}"`,
           { cwd: this.path, encoding: 'utf-8', timeout: 30000, stdio: 'pipe' }
         );
         const match = output.match(/\/issues\/(\d+)/);
