@@ -104,6 +104,7 @@ class ProjectRunner {
     this.milestoneCyclesUsed = 0;
     this.verificationFeedback = null;
     this.isFixRound = false; // true when returning from failed verification
+    this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
     this._repo = null;
   }
 
@@ -1061,11 +1062,15 @@ class ProjectRunner {
         }
       }
 
-      // Auto-pause if every agent in the cycle failed
-      if (cycleTotal > 0 && cycleFailures === cycleTotal && this.running) {
-        log(`⚠️ All ${cycleTotal} agents failed in cycle ${this.cycleCount} — auto-pausing (retry in 2h)`, this.id);
+      // Track consecutive agent failures — auto-pause after 10
+      this.consecutiveFailures = (cycleTotal > 0 && cycleFailures === cycleTotal)
+        ? this.consecutiveFailures + cycleFailures
+        : 0;
+      if (this.consecutiveFailures >= 10 && this.running) {
+        log(`⚠️ ${this.consecutiveFailures} consecutive agent failures — auto-pausing (retry in 2h)`, this.id);
         this.isPaused = true;
-        this.pauseReason = `All ${cycleTotal} agents failed in cycle ${this.cycleCount}`;
+        this.pauseReason = `${this.consecutiveFailures} consecutive agent failures`;
+        this.consecutiveFailures = 0;
         await this._autoPauseWait(2 * 60 * 60 * 1000);
         if (!this.running) break;
         continue;
