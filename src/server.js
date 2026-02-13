@@ -214,7 +214,8 @@ class ProjectRunner {
           const name = file.replace('.md', '');
           const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
           if (/^disabled:\s*true$/m.test(content)) continue;
-          workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: false });
+          const reportsTo = (content.match(/^reports_to:\s*(.+)$/m) || [])[1]?.trim() || null;
+          workers.push({ name, role: parseRole(content), model: parseModel(content), rawModel: (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null, isManager: false, reportsTo });
         }
       }
     }
@@ -889,12 +890,8 @@ class ProjectRunner {
       const { managers, workers } = this.loadAgents();
       const nextCycle = (this.cycleCount || 0) + 1;
       
-      // Find the scheduler (ares) — always runs first
-      const scheduler = managers.find(m => m.name === 'ares');
-      const otherManagers = managers.filter(m => m.name !== 'ares');
-      
-      // Default: all managers + all workers (used if scheduler doesn't produce a schedule)
-      let allAgents = [...(scheduler ? [scheduler] : []), ...otherManagers, ...workers];
+      // Both managers run every cycle, each scheduling their own workers
+      let allAgents = [...managers, ...workers];
 
       // Generate a cycle ID based on agent list to detect if agents changed
       const cycleId = allAgents.map(a => a.name).sort().join(',');
@@ -916,81 +913,69 @@ class ProjectRunner {
 
       let cycleFailures = 0;
       let cycleTotal = 0;
-      let schedule = null;
+      let combinedSchedule = {};
 
-      // Step 1: Run scheduler (ares) first to get the schedule
-      if (scheduler && !this.completedAgents.includes('ares')) {
+      // Step 1: Run all managers first (each produces a schedule for their workers)
+      for (const mgr of managers) {
+        if (!this.running) break;
+        if (this.completedAgents.includes(mgr.name)) {
+          log(`Skipping ${mgr.name} (already completed)`, this.id);
+          continue;
+        }
         while (this.isPaused && this.running) {
           await sleep(1000);
         }
+        if (!this.running) break;
+        
+        const result = await this.runAgent(mgr, config);
+        cycleTotal++;
+        if (!result || !result.success) cycleFailures++;
+        
         if (this.running) {
-          const result = await this.runAgent(scheduler, config);
-          cycleTotal++;
-          if (!result || !result.success) cycleFailures++;
-          
-          if (this.running) {
-            this.completedAgents.push('ares');
-            this.saveState();
-          }
-          
-          // Parse schedule from scheduler's response
-          if (result && result.resultText) {
-            schedule = this.parseSchedule(result.resultText);
-            if (schedule) {
-              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
-              this.currentSchedule = schedule;
-            } else {
-              log(`No schedule found in scheduler response, using defaults`, this.id);
+          this.completedAgents.push(mgr.name);
+          this.saveState();
+        }
+        
+        // Parse schedule from manager's response
+        if (result && result.resultText) {
+          const schedule = this.parseSchedule(result.resultText);
+          if (schedule) {
+            log(`Schedule from ${mgr.name}: ${JSON.stringify(schedule)}`, this.id);
+            // Merge worker schedules
+            if (schedule.agents) {
+              Object.assign(combinedSchedule, schedule.agents);
             }
           }
         }
-      } else if (this.completedAgents.includes('ares')) {
-        log(`Skipping ares (already completed)`, this.id);
-        // Try to reload schedule from saved state
-        schedule = this.currentSchedule || null;
       }
 
-      // Step 2: Determine which agents to run based on schedule
-      let scheduledAgents;
-      if (schedule) {
-        // Build agent list from scheduler's schedule
-        scheduledAgents = [];
-        
-        // Add scheduled managers (excluding ares)
-        if (schedule.managers) {
-          for (const [name, shouldRun] of Object.entries(schedule.managers)) {
-            if (name.toLowerCase() === 'ares') continue;
-            if (!shouldRun) continue;
-            const mgr = otherManagers.find(m => m.name.toLowerCase() === name.toLowerCase());
-            if (mgr) scheduledAgents.push({ ...mgr, mode: null });
+      // Save combined schedule
+      this.currentSchedule = { agents: combinedSchedule };
+      this.saveState();
+
+      // Step 2: Build worker run list from combined schedule
+      let scheduledAgents = [];
+      if (Object.keys(combinedSchedule).length > 0) {
+        for (const [name, value] of Object.entries(combinedSchedule)) {
+          const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
+          if (!worker) continue;
+          if (typeof value === 'string') {
+            scheduledAgents.push({ ...worker, mode: null, task: value });
+          } else {
+            scheduledAgents.push({ ...worker, mode: value.mode || null, task: value.task || null });
           }
         }
-        
-        // Add scheduled workers with their modes and tasks
-        if (schedule.agents) {
-          for (const [name, value] of Object.entries(schedule.agents)) {
-            const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
-            if (!worker) continue;
-            // Support old format (string mode), mode+task object, or task-only object
-            if (typeof value === 'string') {
-              scheduledAgents.push({ ...worker, mode: null, task: value });
-            } else {
-              scheduledAgents.push({ ...worker, mode: value.mode || null, task: value.task || null });
-            }
-          }
-        }
-        
-        const scheduledNames = new Set(Object.keys(schedule.agents || {}).map(n => n.toLowerCase()));
+        const scheduledNames = new Set(Object.keys(combinedSchedule).map(n => n.toLowerCase()));
         const skippedWorkers = workers.filter(w => !scheduledNames.has(w.name.toLowerCase())).map(w => w.name);
         if (skippedWorkers.length > 0) {
-          log(`Ares skipped workers: ${skippedWorkers.join(', ')}`, this.id);
+          log(`Skipped workers: ${skippedWorkers.join(', ')}`, this.id);
         }
       } else {
-        // Fallback: run all managers + workers with no mode
-        scheduledAgents = [...otherManagers, ...workers].map(a => ({ ...a, mode: null }));
+        // Fallback: run all workers
+        scheduledAgents = workers.map(a => ({ ...a, mode: null }));
       }
 
-      // Step 3: Run scheduled agents
+      // Step 3: Run scheduled workers
       for (const agent of scheduledAgents) {
         if (!this.running) break;
         
@@ -1091,10 +1076,8 @@ class ProjectRunner {
         taskHeader = `> **Your assignment: ${task}**\n\n`;
       }
       
-      // Skip shared rules for the scheduler (saves tokens — only needs its own skill)
-      if (agent.name === 'ares') {
-        sharedRules = '';
-        // Inject tracker issue description as the milestone
+            // Inject tracker milestone for managers
+      if (agent.isManager) {
         try {
           const config = this.loadConfig();
           if (this.repo && config.trackerIssue) {
@@ -1102,7 +1085,7 @@ class ProjectRunner {
               cwd: this.path, encoding: 'utf-8', timeout: 15000
             }).trim();
             if (desc) {
-              taskHeader = `> **Current Milestone (from tracker issue #${config.trackerIssue}):**\n> ${desc.split('\n').join('\n> ')}\n\n`;
+              taskHeader = `> **Current Milestone (from tracker issue #${config.trackerIssue}):**\n> ${desc.split('\n').join('\n> ')}\n\n` + taskHeader;
             }
           }
         } catch {}
