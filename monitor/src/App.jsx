@@ -1293,6 +1293,39 @@ function App() {
                         <SleepCountdown sleepUntil={selectedProject.sleepUntil} />
                       </div>
                     )}
+                    <Separator className="my-2" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-neutral-600 dark:text-neutral-300">Phase</span>
+                      <Badge variant={
+                        selectedProject.phase === 'athena' ? 'default' :
+                        selectedProject.phase === 'implementation' ? 'success' :
+                        selectedProject.phase === 'verification' ? 'warning' : 'secondary'
+                      }>
+                        {selectedProject.phase === 'athena' ? '🧠 Planning (Athena)' :
+                         selectedProject.phase === 'implementation' ? '🔨 Implementation' :
+                         selectedProject.phase === 'verification' ? '✅ Verification' :
+                         selectedProject.phase || 'Unknown'}
+                      </Badge>
+                    </div>
+                    {selectedProject.milestone && (
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="text-neutral-600 dark:text-neutral-300 shrink-0">Milestone</span>
+                        <span className="text-sm text-right">{selectedProject.milestone}</span>
+                      </div>
+                    )}
+                    {selectedProject.milestoneCyclesBudget > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-600 dark:text-neutral-300">Milestone Progress</span>
+                        <span className="text-sm font-mono">{selectedProject.milestoneCyclesUsed || 0} / {selectedProject.milestoneCyclesBudget} cycles</span>
+                      </div>
+                    )}
+                    {selectedProject.isFixRound && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-600 dark:text-neutral-300">Fix Round</span>
+                        <Badge variant="destructive">🔧 Fixing</Badge>
+                      </div>
+                    )}
+                    <Separator className="my-2" />
                     <div className="flex justify-between items-center">
                       <span className="text-neutral-600 dark:text-neutral-300">Last Cycle</span>
                       <span className="text-sm font-mono">
