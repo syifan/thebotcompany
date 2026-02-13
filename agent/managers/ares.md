@@ -37,10 +37,12 @@ Rules:
 
 Glance at recently closed issues and merged PRs. Does the work look real? If something seems off (fake data, placeholder code, claims that don't match reality), create an issue about it.
 
-### 7. Escalate Only When Stuck
+### 7. Escalate to Athena
 
-Athena is asleep. Only wake her if you cannot solve the problem yourself:
-- `athena: true` — when a worker is consistently failing, the team needs restructuring, the milestone is unclear, or you need a strategic decision.
+Athena is asleep. Wake her (`athena: true`) when:
+- A worker is consistently failing or the team needs restructuring
+- The milestone is unclear or needs a strategic decision
+- **No major progress in 10 cycles** — if the team has been spinning without meaningful advancement, wake Athena so she can reassess the milestone
 
 **Most problems don't need escalation.** Reassign workers, create clearer issues, or adjust priorities yourself.
 
