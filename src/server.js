@@ -95,7 +95,14 @@ class ProjectRunner {
     this.wakeNow = false;
     this.running = false;
     this.lastComputedSleepMs = null; // Cached sleep interval
-    this.currentSchedule = null; // Ares's schedule for current cycle
+    this.currentSchedule = null;
+    // Phase state machine: athena | implementation | verification
+    this.phase = 'athena'; // Start by asking Athena for first milestone
+    this.milestoneDescription = null;
+    this.milestoneCyclesBudget = 0;
+    this.milestoneCyclesUsed = 0;
+    this.verificationFeedback = null;
+    this.isFixRound = false; // true when returning from failed verification
     this._repo = null;
   }
 
@@ -661,6 +668,11 @@ class ProjectRunner {
       sleeping: this.sleepUntil !== null,
       sleepUntil: this.sleepUntil,
       schedule: this.currentSchedule || null,
+      phase: this.phase,
+      milestone: this.milestoneDescription,
+      milestoneCyclesBudget: this.milestoneCyclesBudget,
+      milestoneCyclesUsed: this.milestoneCyclesUsed,
+      isFixRound: this.isFixRound,
       config: this.loadConfig(),
       agents: this.loadAgents(),
       cost: this.getCostSummary(),
@@ -721,8 +733,14 @@ class ProjectRunner {
       }
     }
 
-    // 3. Reset cycle count and save state
+    // 3. Reset cycle count, phase, and save state
     this.cycleCount = 0;
+    this.phase = 'athena';
+    this.milestoneDescription = null;
+    this.milestoneCyclesBudget = 0;
+    this.milestoneCyclesUsed = 0;
+    this.verificationFeedback = null;
+    this.isFixRound = false;
     this.isPaused = true;
     this.pauseReason = 'Bootstrapped — resume when ready';
     this.saveState();
@@ -762,7 +780,14 @@ class ProjectRunner {
         this.currentCycleId = state.currentCycleId || null;
         this.currentSchedule = state.currentSchedule || null;
         if (state.isPaused !== undefined) this.isPaused = state.isPaused;
-        log(`Loaded state: cycle ${this.cycleCount}, completed: [${this.completedAgents.join(', ')}]${this.isPaused ? ', paused' : ''}`, this.id);
+        // Phase state
+        this.phase = state.phase || 'athena';
+        this.milestoneDescription = state.milestoneDescription || null;
+        this.milestoneCyclesBudget = state.milestoneCyclesBudget || 0;
+        this.milestoneCyclesUsed = state.milestoneCyclesUsed || 0;
+        this.verificationFeedback = state.verificationFeedback || null;
+        this.isFixRound = state.isFixRound || false;
+        log(`Loaded state: cycle ${this.cycleCount}, phase: ${this.phase}, completed: [${this.completedAgents.join(', ')}]${this.isPaused ? ', paused' : ''}`, this.id);
       } else {
         // New project — start paused
         this.isPaused = true;
@@ -788,6 +813,12 @@ class ProjectRunner {
         currentCycleId: this.currentCycleId,
         currentSchedule: this.currentSchedule || null,
         isPaused: this.isPaused || false,
+        phase: this.phase,
+        milestoneDescription: this.milestoneDescription,
+        milestoneCyclesBudget: this.milestoneCyclesBudget,
+        milestoneCyclesUsed: this.milestoneCyclesUsed,
+        verificationFeedback: this.verificationFeedback,
+        isFixRound: this.isFixRound,
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -888,133 +919,207 @@ class ProjectRunner {
       }
 
       const { managers, workers } = this.loadAgents();
-      const nextCycle = (this.cycleCount || 0) + 1;
       
-      // Both managers run every cycle, each scheduling their own workers
-      let allAgents = [...managers, ...workers];
-
-      // Generate a cycle ID based on agent list to detect if agents changed
-      const cycleId = allAgents.map(a => a.name).sort().join(',');
-      // Note: allAgents is the default list; actual run list may differ after Ares schedules
-      
-      // Check if we're resuming an interrupted cycle or starting fresh
-      const isResume = this.currentCycleId === cycleId && this.completedAgents.length > 0;
-      
-      if (!isResume) {
-        // Starting a new cycle
-        this.cycleCount++;
-        this.completedAgents = [];
-        this.currentCycleId = cycleId;
-        this.saveState();
-        log(`===== CYCLE ${this.cycleCount} (${workers.length} workers) =====`, this.id);
-      } else {
-        log(`===== RESUMING CYCLE ${this.cycleCount} (completed: ${this.completedAgents.length}/${allAgents.length}) =====`, this.id);
-      }
+      // Start new cycle
+      this.cycleCount++;
+      this.completedAgents = [];
+      this.currentSchedule = null;
+      this.saveState();
+      log(`===== CYCLE ${this.cycleCount} (phase: ${this.phase}) =====`, this.id);
 
       let cycleFailures = 0;
       let cycleTotal = 0;
-      let combinedSchedule = {};
 
-      // Step 1: Run all managers first (each produces a schedule for their workers)
-      for (const mgr of managers) {
-        if (!this.running) break;
-        if (this.completedAgents.includes(mgr.name)) {
-          log(`Skipping ${mgr.name} (already completed)`, this.id);
-          continue;
-        }
-        while (this.isPaused && this.running) {
-          await sleep(1000);
-        }
-        if (!this.running) break;
-        
-        const result = await this.runAgent(mgr, config);
-        cycleTotal++;
-        if (!result || !result.success) cycleFailures++;
-        
-        if (this.running) {
-          this.completedAgents.push(mgr.name);
+      // ===== PHASE: ATHENA (strategy) =====
+      if (this.phase === 'athena') {
+        const athena = managers.find(m => m.name === 'athena');
+        if (athena) {
+          // Build situation context for Athena
+          let situation = '';
+          if (!this.milestoneDescription) {
+            situation = '> **Situation: Project Just Started**\n\n';
+          } else if (this.verificationFeedback === '__passed__') {
+            situation = '> **Situation: Milestone Verified Complete**\n> Previous milestone was verified by Apollo\'s team.\n\n';
+          } else {
+            situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles without completing the milestone.\n\n`;
+          }
+
+          const result = await this.runAgent(athena, config, null, situation);
+          cycleTotal++;
+          if (!result || !result.success) cycleFailures++;
+
+          // Parse milestone from Athena's response
+          if (result && result.resultText) {
+            const milestoneMatch = result.resultText.match(/<!-- MILESTONE -->\s*([\s\S]*?)\s*<!-- \/MILESTONE -->/);
+            if (milestoneMatch) {
+              try {
+                const milestone = JSON.parse(milestoneMatch[1]);
+                this.milestoneDescription = milestone.description;
+                this.milestoneCyclesBudget = milestone.cycles || 20;
+                this.milestoneCyclesUsed = 0;
+                this.verificationFeedback = null;
+                this.isFixRound = false;
+                this.phase = 'implementation';
+                log(`New milestone (${this.milestoneCyclesBudget} cycles): ${this.milestoneDescription.slice(0, 100)}...`, this.id);
+
+                // Update tracker issue with new milestone
+                try {
+                  const cfg = this.loadConfig();
+                  if (this.repo && cfg.trackerIssue) {
+                    execSync(`gh issue edit ${cfg.trackerIssue} --body ${JSON.stringify(this.milestoneDescription)}`, {
+                      cwd: this.path, encoding: 'utf-8', timeout: 15000
+                    });
+                  }
+                } catch {}
+              } catch (e) {
+                log(`Failed to parse milestone: ${e.message}`, this.id);
+              }
+            }
+            // Check for STOP file
+            if (fs.existsSync(path.join(this.agentDir, 'STOP'))) {
+              log(`STOP file detected — pausing project`, this.id);
+              this.isPaused = true;
+              this.pauseReason = 'Project stopped by Athena';
+              this.saveState();
+              continue;
+            }
+          }
           this.saveState();
         }
-        
-        // Parse schedule from manager's response
-        if (result && result.resultText) {
-          const schedule = this.parseSchedule(result.resultText);
-          if (schedule) {
-            log(`Schedule from ${mgr.name}: ${JSON.stringify(schedule)}`, this.id);
-            // Merge worker schedules
-            if (schedule.agents) {
-              Object.assign(combinedSchedule, schedule.agents);
+      }
+
+      // ===== PHASE: IMPLEMENTATION (Ares + his workers) =====
+      else if (this.phase === 'implementation') {
+        this.milestoneCyclesUsed++;
+
+        // Check if deadline missed
+        if (this.milestoneCyclesUsed > this.milestoneCyclesBudget) {
+          log(`⏰ Implementation deadline missed (${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles)`, this.id);
+          this.phase = 'athena';
+          this.saveState();
+          continue;
+        }
+
+        const ares = managers.find(m => m.name === 'ares');
+        if (ares) {
+          // Build context for Ares
+          let aresContext = `> **Milestone:** ${this.milestoneDescription}\n> **Cycles remaining:** ${this.milestoneCyclesBudget - this.milestoneCyclesUsed} of ${this.milestoneCyclesBudget}\n\n`;
+          if (this.isFixRound && this.verificationFeedback) {
+            aresContext += `> **⚠️ Verification Failed — Fix Required:**\n> ${this.verificationFeedback}\n> You have ${this.milestoneCyclesBudget - this.milestoneCyclesUsed} cycles to fix and re-claim.\n\n`;
+          }
+
+          const result = await this.runAgent(ares, config, null, aresContext);
+          cycleTotal++;
+          if (!result || !result.success) cycleFailures++;
+
+          // Parse schedule and check for CLAIM_COMPLETE
+          let schedule = null;
+          if (result && result.resultText) {
+            schedule = this.parseSchedule(result.resultText);
+            if (schedule) {
+              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
+              this.currentSchedule = schedule;
+            }
+
+            // Check if Ares claims milestone complete
+            if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
+              log(`🎯 Ares claims milestone complete — switching to verification`, this.id);
+              this.phase = 'verification';
+              this.saveState();
+            }
+          }
+
+          // Run Ares's scheduled workers
+          if (schedule && schedule.agents) {
+            for (const [name, value] of Object.entries(schedule.agents)) {
+              if (!this.running) break;
+              const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
+              if (!worker) continue;
+              while (this.isPaused && this.running) { await sleep(1000); }
+              const task = typeof value === 'string' ? value : value.task || null;
+              const wResult = await this.runAgent(worker, config, null, task);
+              cycleTotal++;
+              if (!wResult || !wResult.success) cycleFailures++;
             }
           }
         }
+        this.saveState();
       }
 
-      // Save combined schedule
-      this.currentSchedule = { agents: combinedSchedule };
-      this.saveState();
+      // ===== PHASE: VERIFICATION (Apollo + his workers) =====
+      else if (this.phase === 'verification') {
+        const apollo = managers.find(m => m.name === 'apollo');
+        if (apollo) {
+          const apolloContext = `> **Milestone to verify:** ${this.milestoneDescription}\n\n`;
 
-      // Step 2: Build worker run list from combined schedule
-      let scheduledAgents = [];
-      if (Object.keys(combinedSchedule).length > 0) {
-        for (const [name, value] of Object.entries(combinedSchedule)) {
-          const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
-          if (!worker) continue;
-          if (typeof value === 'string') {
-            scheduledAgents.push({ ...worker, mode: null, task: value });
-          } else {
-            scheduledAgents.push({ ...worker, mode: value.mode || null, task: value.task || null });
+          const result = await this.runAgent(apollo, config, null, apolloContext);
+          cycleTotal++;
+          if (!result || !result.success) cycleFailures++;
+
+          let schedule = null;
+          let decision = null;
+          if (result && result.resultText) {
+            schedule = this.parseSchedule(result.resultText);
+            if (schedule) {
+              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
+            }
+
+            // Check for verification decision
+            if (result.resultText.includes('<!-- VERIFY_PASS -->')) {
+              decision = 'pass';
+            }
+            const failMatch = result.resultText.match(/<!-- VERIFY_FAIL -->\s*([\s\S]*?)\s*<!-- \/VERIFY_FAIL -->/);
+            if (failMatch) {
+              try {
+                const failData = JSON.parse(failMatch[1]);
+                decision = 'fail';
+                this.verificationFeedback = failData.feedback || 'Verification failed (no specific feedback)';
+              } catch {
+                decision = 'fail';
+                this.verificationFeedback = 'Verification failed (could not parse feedback)';
+              }
+            }
           }
-        }
-        const scheduledNames = new Set(Object.keys(combinedSchedule).map(n => n.toLowerCase()));
-        const skippedWorkers = workers.filter(w => !scheduledNames.has(w.name.toLowerCase())).map(w => w.name);
-        if (skippedWorkers.length > 0) {
-          log(`Skipped workers: ${skippedWorkers.join(', ')}`, this.id);
-        }
-      } else {
-        // Fallback: run all workers
-        scheduledAgents = workers.map(a => ({ ...a, mode: null }));
-      }
 
-      // Step 3: Run scheduled workers
-      for (const agent of scheduledAgents) {
-        if (!this.running) break;
-        
-        // Skip agents that already completed in this cycle
-        if (this.completedAgents.includes(agent.name)) {
-          log(`Skipping ${agent.name} (already completed)`, this.id);
-          continue;
-        }
-        
-        while (this.isPaused && this.running) {
-          await sleep(1000);
-        }
-        const result = await this.runAgent(agent, config, agent.mode, agent.task);
-        
-        // Track success/failure
-        cycleTotal++;
-        if (!result || !result.success) cycleFailures++;
+          // Run Apollo's scheduled workers
+          if (schedule && schedule.agents) {
+            for (const [name, value] of Object.entries(schedule.agents)) {
+              if (!this.running) break;
+              const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
+              if (!worker) continue;
+              while (this.isPaused && this.running) { await sleep(1000); }
+              const task = typeof value === 'string' ? value : value.task || null;
+              const wResult = await this.runAgent(worker, config, null, task);
+              cycleTotal++;
+              if (!wResult || !wResult.success) cycleFailures++;
+            }
+          }
 
-        // Mark agent as completed and save state
-        if (this.running) {
-          this.completedAgents.push(agent.name);
+          // Process decision
+          if (decision === 'pass') {
+            log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
+            this.verificationFeedback = '__passed__';
+            this.phase = 'athena';
+          } else if (decision === 'fail') {
+            log(`❌ Verification failed — returning to Ares (${Math.floor(this.milestoneCyclesBudget / 2)} fix cycles)`, this.id);
+            const fixBudget = Math.floor(this.milestoneCyclesBudget / 2);
+            this.milestoneCyclesBudget = this.milestoneCyclesUsed + fixBudget;
+            this.isFixRound = true;
+            this.phase = 'implementation';
+          }
+          // If no decision yet, stay in verification phase (Apollo gets more cycles)
           this.saveState();
         }
       }
 
-      // Cycle complete - clear completed agents for next cycle
-      this.completedAgents = [];
-      this.currentCycleId = null;
-      this.currentSchedule = null;
-      this.saveState();
-
-      // Auto-pause if every agent in the cycle failed — retry after 2 hours
+      // Auto-pause if every agent in the cycle failed
       if (cycleTotal > 0 && cycleFailures === cycleTotal && this.running) {
         log(`⚠️ All ${cycleTotal} agents failed in cycle ${this.cycleCount} — auto-pausing (retry in 2h)`, this.id);
         this.isPaused = true;
         this.pauseReason = `All ${cycleTotal} agents failed in cycle ${this.cycleCount}`;
         await this._autoPauseWait(2 * 60 * 60 * 1000);
         if (!this.running) break;
-        continue; // Retry one round
+        continue;
       }
 
       // Compute sleep: budget-derived or fixed interval
@@ -1076,20 +1181,6 @@ class ProjectRunner {
         taskHeader = `> **Your assignment: ${task}**\n\n`;
       }
       
-            // Inject tracker milestone for managers
-      if (agent.isManager) {
-        try {
-          const config = this.loadConfig();
-          if (this.repo && config.trackerIssue) {
-            const desc = execSync(`gh issue view ${config.trackerIssue} --json body --jq .body`, {
-              cwd: this.path, encoding: 'utf-8', timeout: 15000
-            }).trim();
-            if (desc) {
-              taskHeader = `> **Current Milestone (from tracker issue #${config.trackerIssue}):**\n> ${desc.split('\n').join('\n> ')}\n\n` + taskHeader;
-            }
-          }
-        } catch {}
-      }
       
       // Strip YAML frontmatter (---...---) from skill content before building prompt
       // This prevents Claude CLI from interpreting '---' as a command-line flag
