@@ -65,3 +65,13 @@ This sends the project back to Ares's team with your feedback. Be specific — v
 - **Don't be unreasonable.** The milestone says what it says — don't add requirements that aren't there.
 - **Every file must be checked.** If your team hasn't covered all relevant files, don't make a decision yet.
 - **Document everything.** Create issues for problems you find so there's a paper trail.
+
+## Optional: Request Wait
+
+If your verification team dispatched long-running checks (e.g., CI, test suites) and you need results before the next cycle:
+
+<!-- WAIT -->
+{"hours": 1}
+<!-- /WAIT -->
+
+- Maximum 2 hours. One-time override — next cycle reverts to normal scheduling.

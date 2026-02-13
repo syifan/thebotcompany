@@ -105,6 +105,7 @@ class ProjectRunner {
     this.verificationFeedback = null;
     this.isFixRound = false; // true when returning from failed verification
     this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
+    this._pendingWaitMs = 0; // One-time sleep override from manager WAIT tag
     this._repo = null;
   }
 
@@ -842,6 +843,22 @@ class ProjectRunner {
     }
   }
 
+  parseWait(resultText) {
+    // Parse <!-- WAIT -->{"hours": N}<!-- /WAIT --> from manager response (max 2h)
+    const match = resultText.match(/<!--\s*WAIT\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/WAIT\s*-->/);
+    if (!match) return;
+    try {
+      const data = JSON.parse(match[1]);
+      const hours = Math.min(Math.max(parseFloat(data.hours) || 0, 0), 2);
+      if (hours > 0) {
+        this._pendingWaitMs = Math.max(this._pendingWaitMs, hours * 3600000);
+        log(`Manager requested ${hours}h wait`, this.id);
+      }
+    } catch (e) {
+      log(`Failed to parse WAIT tag: ${e.message}`, this.id);
+    }
+  }
+
   parseSchedule(resultText) {
     // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Ares's response
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
@@ -962,9 +979,10 @@ class ProjectRunner {
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
-          // Parse schedule and check for CLAIM_COMPLETE
+          // Parse schedule, wait request, and check for CLAIM_COMPLETE
           let schedule = null;
           if (result && result.resultText) {
+            this.parseWait(result.resultText);
             schedule = this.parseSchedule(result.resultText);
             if (schedule) {
               log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
@@ -1009,6 +1027,7 @@ class ProjectRunner {
           let schedule = null;
           let decision = null;
           if (result && result.resultText) {
+            this.parseWait(result.resultText);
             schedule = this.parseSchedule(result.resultText);
             if (schedule) {
               log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
@@ -1076,8 +1095,13 @@ class ProjectRunner {
         continue;
       }
 
-      // Compute sleep: budget-derived or fixed interval
-      const sleepMs = this.computeSleepInterval();
+      // Compute sleep: budget-derived or fixed interval (with optional manager wait override)
+      let sleepMs = this.computeSleepInterval();
+      if (this._pendingWaitMs > 0) {
+        sleepMs = Math.max(sleepMs, this._pendingWaitMs);
+        log(`Manager requested wait: ${Math.round(this._pendingWaitMs / 60000)}m — overriding sleep`, this.id);
+        this._pendingWaitMs = 0;
+      }
       this.lastComputedSleepMs = sleepMs; // Cache for status requests
       if (this.running) {
         log(`Sleeping ${Math.round(sleepMs / 1000)}s...`, this.id);

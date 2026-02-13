@@ -63,3 +63,15 @@ Rules:
 - Only include workers that should run. Omitted workers are skipped.
 - Only schedule workers who report to you.
 - **ALWAYS use the <!-- SCHEDULE --> format. Never use code blocks.**
+
+## Optional: Request Wait
+
+If you dispatched long-running work (e.g., GitHub Actions CI, external builds) and need the orchestrator to wait before the next cycle, include:
+
+<!-- WAIT -->
+{"hours": 1.5}
+<!-- /WAIT -->
+
+- Maximum 2 hours. Values above 2 are capped.
+- This is a one-time override — the next cycle reverts to normal scheduling.
+- Use this when workers kicked off jobs that need time to complete.
