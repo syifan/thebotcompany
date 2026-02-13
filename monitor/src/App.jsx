@@ -88,6 +88,7 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState(() => localStorage.getItem('selectedAgent') || null)
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
+  const [issueFilter, setIssueFilter] = useState('open') // 'open' | 'closed' | 'all'
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', creating: false, error: null })
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
@@ -417,6 +418,7 @@ function App() {
     setCommentsPage(1)
     setPrs([])
     setIssues([])
+    setIssueFilter('open')
   }
 
   const goToProjectList = () => {
@@ -1645,10 +1647,22 @@ function App() {
 
               {/* Issues */}
               <Card className="flex flex-col h-[500px]">
-                <CardHeader className="shrink-0"><CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Issues ({issues.length})</CardTitle></CardHeader>
+                <CardHeader className="shrink-0">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Issues ({(issueFilter === 'all' ? issues : issues.filter(i => i.status === issueFilter)).length})</CardTitle>
+                    <div className="flex gap-1">
+                      {['open', 'closed', 'all'].map(f => (
+                        <button key={f} onClick={() => setIssueFilter(f)}
+                          className={`px-2 py-0.5 text-xs rounded-full transition-colors ${issueFilter === f ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}>
+                          {f.charAt(0).toUpperCase() + f.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </CardHeader>
                 <CardContent className="flex-1 flex flex-col overflow-hidden">
                   <div className="space-y-2 flex-1 overflow-y-auto">
-                    {issues.map((issue) => (
+                    {(issueFilter === 'all' ? issues : issues.filter(i => i.status === issueFilter)).map((issue) => (
                       <div key={issue.id}
                         onClick={() => openIssueModal(issue.id)}
                         className="block p-2 bg-neutral-50 dark:bg-neutral-900 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
