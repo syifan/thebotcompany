@@ -1309,8 +1309,21 @@ This is an automated message from the orchestrator.`;
               } finally {
                 try { fs.unlinkSync(tmpFile); } catch {}
               }
-              // Note: agents write their own comments to SQLite via tbc-db during execution.
-              // The orchestrator does NOT duplicate-write to avoid double comments.
+              // Write agent report to SQLite (separate from issue comments)
+              try {
+                const db = this.getDb();
+                db.exec(`CREATE TABLE IF NOT EXISTS reports (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  cycle INTEGER NOT NULL,
+                  agent TEXT NOT NULL,
+                  body TEXT NOT NULL,
+                  created_at TEXT DEFAULT (datetime('now'))
+                )`);
+                db.prepare('INSERT INTO reports (cycle, agent, body) VALUES (?, ?, ?)').run(this.cycleCount, agent.name, resultText.trim());
+                db.close();
+              } catch (dbErr) {
+                log(`Failed to write report to SQLite: ${dbErr.message}`, this.id);
+              }
             }
           } catch (e) {
             log(`Failed to post tracker comment: ${e.message}`, this.id);
@@ -1870,6 +1883,37 @@ const server = http.createServer(async (req, res) => {
       const prs = await runner.getPRs();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ prs }));
+      return;
+    }
+
+    // GET /api/projects/:id/reports — agent cycle reports (posted by orchestrator)
+    if (req.method === 'GET' && subPath === 'reports') {
+      try {
+        const db = runner.getDb();
+        db.exec(`CREATE TABLE IF NOT EXISTS reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cycle INTEGER NOT NULL,
+          agent TEXT NOT NULL,
+          body TEXT NOT NULL,
+          created_at TEXT DEFAULT (datetime('now'))
+        )`);
+        const agent = url.searchParams.get('agent');
+        const page = parseInt(url.searchParams.get('page')) || 1;
+        const perPage = parseInt(url.searchParams.get('per_page')) || 20;
+        let query = 'SELECT * FROM reports';
+        const params = [];
+        if (agent) { query += ' WHERE agent = ?'; params.push(agent); }
+        query += ' ORDER BY id DESC LIMIT ? OFFSET ?';
+        params.push(perPage, (page - 1) * perPage);
+        const reports = db.prepare(query).all(...params);
+        const total = db.prepare(`SELECT COUNT(*) as count FROM reports${agent ? ' WHERE agent = ?' : ''}`).get(...(agent ? [agent] : [])).count;
+        db.close();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ reports, total, page, perPage }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ reports: [], total: 0, page: 1, perPage: 20 }));
+      }
       return;
     }
 
