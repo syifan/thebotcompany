@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -1295,9 +1295,13 @@ function App() {
                   {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
                 </div>
                 {selectedProject.milestone && (
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400 truncate flex-1" title={selectedProject.milestone}>
-                    {selectedProject.milestone.length > 80 ? selectedProject.milestone.slice(0, 80) + '…' : selectedProject.milestone}
-                  </span>
+                  <details className="flex-1 min-w-0 group">
+                    <summary className="text-sm text-neutral-600 dark:text-neutral-400 cursor-pointer hover:text-neutral-800 dark:hover:text-neutral-200 flex items-center gap-1 [&::-webkit-details-marker]:hidden list-none">
+                      <ChevronDown className="w-3.5 h-3.5 shrink-0 transition-transform group-open:rotate-180" />
+                      <span className="truncate">{selectedProject.milestone.length > 80 ? selectedProject.milestone.slice(0, 80) + '…' : selectedProject.milestone}</span>
+                    </summary>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2 whitespace-pre-wrap pl-5">{selectedProject.milestone}</p>
+                  </details>
                 )}
                 {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
                   <div className="flex items-center gap-2 shrink-0">
