@@ -1648,22 +1648,31 @@ function App() {
               </div>
               {agentModal.tab === 'skill' ? (
               <div className="space-y-3">
-                <div>
-                  <h4 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase mb-1">Shared Rules (everyone.md)</h4>
-                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
-                    {agentModal.data.everyone ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.everyone}</ReactMarkdown>
-                    ) : (
-                      <p className="text-neutral-400 dark:text-neutral-500 italic">No shared rules found</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <h4 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase mb-1">Agent Skill ({agentModal.agent}.md)</h4>
-                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3 text-sm prose prose-sm dark:prose-invert max-w-none max-h-64 overflow-y-auto">
+                {/* Agent Skill - shown first and open by default */}
+                <details open>
+                  <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">Agent Skill — {agentModal.agent}.md</summary>
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none max-h-[60vh] overflow-y-auto mt-1">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
                   </div>
-                </div>
+                </details>
+                {/* Role Rules - collapsed by default */}
+                {agentModal.data.roleRules && (
+                <details>
+                  <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">{agentModal.data.isManager ? 'Manager' : 'Worker'} Rules — {agentModal.data.isManager ? 'manager' : 'worker'}.md</summary>
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none max-h-[60vh] overflow-y-auto mt-1">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.roleRules}</ReactMarkdown>
+                  </div>
+                </details>
+                )}
+                {/* Shared Rules - collapsed by default */}
+                {agentModal.data.everyone && (
+                <details>
+                  <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">Shared Rules — everyone.md</summary>
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none max-h-[60vh] overflow-y-auto mt-1">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.everyone}</ReactMarkdown>
+                  </div>
+                </details>
+                )}
               </div>
               ) : (
               <div>

@@ -290,12 +290,13 @@ class ProjectRunner {
     const modelMatch = skill.match(/^model:\s*(.+)$/m);
     const model = modelMatch ? modelMatch[1].trim() : null;
     
-    // Read everyone.md (shared rules)
+    // Read shared rules: everyone.md + role-specific (worker.md or manager.md)
     let everyone = null;
-    const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
-    try { everyone = fs.readFileSync(everyonePath, 'utf-8'); } catch {}
+    let roleRules = null;
+    try { everyone = fs.readFileSync(path.join(ROOT, 'agent', 'everyone.md'), 'utf-8'); } catch {}
+    try { roleRules = fs.readFileSync(path.join(ROOT, 'agent', isManager ? 'manager.md' : 'worker.md'), 'utf-8'); } catch {}
 
-    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model, everyone };
+    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model, everyone, roleRules };
   }
 
   getLogs(lines = 50) {
