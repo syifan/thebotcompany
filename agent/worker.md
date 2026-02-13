@@ -14,7 +14,7 @@ Your assigned issue is injected at the top of your prompt each cycle. Work on th
 
 Before starting work, gather context from:
 - **Your workspace** — read all files in `{project_dir}/workspace/{your_name}/`
-- **Your assigned issue and its comments** — read ONLY that issue. Do not browse all open issues.
+- **Your assigned issue and its comments** — `tbc-db issue-view <id>` (read ONLY your assigned issue)
 - **Open PRs related to your issue**
 
 ### Your Issue Lock

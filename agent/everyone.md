@@ -12,15 +12,11 @@ Read this before doing anything.
 
 **Before ANY action**, verify you are in the correct repository. If repo doesn't match, **ABORT immediately**.
 
-### No @mentions
-
-**Do NOT @mention anyone** in issues, PRs, or comments. No `@username`, no `@team`. Ever.
-
 ### Protected Files
 
 **Do NOT modify anything in the `{project_dir}/` folder**, except:
 - Your own workspace (`{project_dir}/workspace/{your_name}/`)
-- Ares can modify, add, or delete worker skills (`{project_dir}/workers/`)
+- Managers can modify worker skills in `{project_dir}/workers/`
 
 ## Your Workspace
 
@@ -30,22 +26,21 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 **At the end of each cycle**, write a brief `note.md` with context for your next cycle.
 
-## GitHub Conventions
+## Communication
 
-**All GitHub activity must be prefixed with your agent name in brackets.**
+**Use `tbc-db` for all task tracking and communication.** See `db.md` for the full CLI reference.
 
-| Type | Format |
-|------|--------|
-| Issue title | `[Creator] -> [Assignee] Title` |
-| PR title | `[AgentName] Description` |
-| Comments | `# [AgentName]` header |
-| Commits | `[AgentName] Message` |
-| Branch names | `agentname/description` |
+**Use GitHub only for:**
+- Pull requests and code review
+- Commits (prefix with `[AgentName] message`)
+- Branch names (`agentname/description`)
+
+**Do NOT use GitHub Issues** — use `tbc-db issue-create` instead.
 
 ## Response Format
 
 Your final response should **briefly summarize what you completed**. Keep it concise — a few sentences or bullet points.
 
-- Focus on what's NEW — don't repeat information already in issues, PRs, or comments.
+- Focus on what's NEW — don't repeat information already in issues or comments.
 - No preamble, no sign-offs, no thinking out loud.
 - The orchestrator will add your name and post it to the tracker automatically.

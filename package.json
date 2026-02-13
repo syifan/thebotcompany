@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/server.js",
   "bin": {
-    "tbc": "./bin/cli.js"
+    "tbc": "./bin/cli.js",
+    "tbc-db": "./bin/tbc-db.js"
   },
   "scripts": {
     "start": "node src/server.js",
@@ -21,6 +22,7 @@
   "author": "Yifan Sun",
   "license": "MIT",
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "dotenv": "^17.2.4",
     "js-yaml": "^4.1.0"
   }

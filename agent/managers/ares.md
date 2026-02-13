@@ -23,7 +23,7 @@ Read `{project_dir}/workspace/{agent_name}/note.md` for each of your workers.
 
 ### 4. Check Open Issues
 
-Run `gh issue list --state open` to see what's available. Create new issues if needed — small, actionable, 1-3 cycles each.
+Run `tbc-db issue-list` to see open issues. Create new issues if needed — small, actionable, 1-3 cycles each.
 
 ### 5. Assign Workers
 

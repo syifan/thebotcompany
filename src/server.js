@@ -1166,11 +1166,13 @@ class ProjectRunner {
       }
       let skillContent = fs.readFileSync(skillPath, 'utf-8');
       
-      // Build shared rules: everyone.md + role-specific rules (worker.md or manager.md)
+      // Build shared rules: everyone.md + db.md + role-specific rules (worker.md or manager.md)
       let sharedRules = '';
       try {
         const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
         sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
+        const dbPath = path.join(ROOT, 'agent', 'db.md');
+        try { sharedRules += fs.readFileSync(dbPath, 'utf-8') + '\n\n---\n\n'; } catch {}
         const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
         sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
       } catch {}
@@ -1199,7 +1201,7 @@ class ProjectRunner {
       this.currentAgentProcess = spawn('claude', args, {
         cwd: this.path,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'cli' }
+        env: { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'cli', TBC_DB: path.join(this.agentDir, 'project.db') }
       });
 
       let stdout = '';
