@@ -104,8 +104,9 @@ const commands = {
       console.error('Usage: tbc-db issue-create --title "..." --creator agent_name [--body "..."] [--assignee name] [--labels "label1,label2"]');
       process.exit(1);
     }
-    const stmt = db.prepare('INSERT INTO issues (title, body, creator, assignee, labels) VALUES (?, ?, ?, ?, ?)');
-    const result = stmt.run(values.title, values.body || '', values.creator, values.assignee || null, values.labels || '');
+    const now = new Date().toISOString();
+    const stmt = db.prepare('INSERT INTO issues (title, body, creator, assignee, labels, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const result = stmt.run(values.title, values.body || '', values.creator, values.assignee || null, values.labels || '', now, now);
     console.log(`Created issue #${result.lastInsertRowid}`);
   },
 
@@ -173,7 +174,8 @@ const commands = {
   'issue-close'() {
     const id = args[0];
     if (!id) { console.error('Usage: tbc-db issue-close <id>'); process.exit(1); }
-    db.prepare("UPDATE issues SET status = 'closed', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").run(id);
+    const now = new Date().toISOString();
+    db.prepare("UPDATE issues SET status = 'closed', closed_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
     console.log(`Closed issue #${id}`);
   },
 
@@ -197,7 +199,7 @@ const commands = {
     if (values.assignee !== undefined) { sets.push('assignee = ?'); params.push(values.assignee); }
     if (values.labels !== undefined) { sets.push('labels = ?'); params.push(values.labels); }
     if (sets.length === 0) { console.error('Nothing to update'); process.exit(1); }
-    sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')");
+    sets.push("updated_at = ?"); params.push(new Date().toISOString());
     params.push(id);
     db.prepare(`UPDATE issues SET ${sets.join(', ')} WHERE id = ?`).run(...params);
     console.log(`Updated issue #${id}`);
@@ -218,8 +220,8 @@ const commands = {
       console.error('Usage: tbc-db comment --issue <id> --author agent_name --body "..."');
       process.exit(1);
     }
-    const result = db.prepare('INSERT INTO comments (issue_id, author, body) VALUES (?, ?, ?)').run(values.issue, values.author, values.body);
-    db.prepare("UPDATE issues SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").run(values.issue);
+    const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.issue, values.author, values.body, new Date().toISOString());
+    db.prepare("UPDATE issues SET updated_at = ? WHERE id = ?").run(new Date().toISOString(), values.issue);
     console.log(`Added comment #${result.lastInsertRowid} to issue #${values.issue}`);
   },
 

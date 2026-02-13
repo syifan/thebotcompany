@@ -622,9 +622,10 @@ class ProjectRunner {
     if (!title?.trim()) throw new Error('Missing issue title');
     try {
       const db = this.getDb();
+      const now = new Date().toISOString();
       const result = db.prepare(
-        `INSERT INTO issues (title, body, creator, assignee) VALUES (?, ?, ?, ?)`
-      ).run(title.trim(), body.trim(), creator, assignee || null);
+        `INSERT INTO issues (title, body, creator, assignee, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(title.trim(), body.trim(), creator, assignee || null, now, now);
       db.close();
       return { success: true, issueId: result.lastInsertRowid };
     } catch (e) {
@@ -1285,7 +1286,7 @@ class ProjectRunner {
               body TEXT NOT NULL,
               created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
             )`);
-            db.prepare('INSERT INTO reports (cycle, agent, body) VALUES (?, ?, ?)').run(this.cycleCount, agent.name, reportBody);
+            db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(this.cycleCount, agent.name, reportBody, new Date().toISOString());
             db.close();
             log(`Saved report for ${agent.name}`, this.id);
           } catch (dbErr) {
