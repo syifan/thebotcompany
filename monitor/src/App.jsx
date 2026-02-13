@@ -1307,12 +1307,6 @@ function App() {
                          selectedProject.phase || 'Unknown'}
                       </Badge>
                     </div>
-                    {selectedProject.milestone && (
-                      <div className="flex justify-between items-start gap-2">
-                        <span className="text-neutral-600 dark:text-neutral-300 shrink-0">Milestone</span>
-                        <span className="text-sm text-right">{selectedProject.milestone}</span>
-                      </div>
-                    )}
                     {selectedProject.milestoneCyclesBudget > 0 && (
                       <div className="flex justify-between items-center">
                         <span className="text-neutral-600 dark:text-neutral-300">Milestone Progress</span>
