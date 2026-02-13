@@ -295,7 +295,7 @@ function App() {
     setCommentsLoading(true)
     try {
       const params = new URLSearchParams({ page, per_page: 10 })
-      if (agent) params.set('author', agent)
+      if (agent) params.set('agent', agent)
       const res = await fetch(`${baseApi}/reports?${params}`)
       if (!res.ok) return
       if (selectedProjectRef.current?.id !== currentProject.id) return
