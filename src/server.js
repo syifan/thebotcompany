@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
+import Database from 'better-sqlite3';
 import { config as loadDotenv } from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -541,43 +542,42 @@ class ProjectRunner {
     };
   }
 
+  getDb() {
+    const dbPath = path.join(this.agentDir, 'project.db');
+    const db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, role TEXT, reports_to TEXT, model TEXT, disabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')), closed_at TEXT);
+      CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now')), completed_at TEXT);
+    `);
+    return db;
+  }
+
   async getComments(author, page = 1, perPage = 20) {
-    const config = this.loadConfig();
-    const issueNumber = config.trackerIssue || 1;
-    if (!this.repo) return { comments: [], total: 0 };
-    
     try {
-      const output = execSync(
-        `gh api repos/${this.repo}/issues/${issueNumber}/comments --paginate -q '.[] | {id, author: .user.login, body, created_at, updated_at}'`,
-        { cwd: this.path, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
-      );
-      
-      let comments = output.trim().split('\n')
-        .filter(line => line.trim())
-        .map(line => {
-          const comment = JSON.parse(line);
-          const agentMatch = comment.body.match(/^#{1,2}\s*\[([^\]]+)\]\s*\n*/);
-          if (agentMatch) {
-            comment.agent = agentMatch[1];
-            comment.body = comment.body.slice(agentMatch[0].length).trim();
-          } else {
-            comment.agent = comment.author;
-          }
-          return comment;
-        })
-        .reverse();
-      
+      const db = this.getDb();
+      let query, countQuery, params;
       if (author) {
-        comments = comments.filter(c => c.agent.toLowerCase() === author.toLowerCase());
+        query = `SELECT c.id, c.issue_id, c.author, c.body, c.created_at FROM comments c WHERE c.author = ? ORDER BY c.created_at DESC LIMIT ? OFFSET ?`;
+        countQuery = `SELECT COUNT(*) as total FROM comments WHERE author = ?`;
+        params = [author, perPage, (page - 1) * perPage];
+      } else {
+        query = `SELECT c.id, c.issue_id, c.author, c.body, c.created_at FROM comments c ORDER BY c.created_at DESC LIMIT ? OFFSET ?`;
+        countQuery = `SELECT COUNT(*) as total FROM comments`;
+        params = [perPage, (page - 1) * perPage];
       }
-      
-      const startIdx = (page - 1) * perPage;
+      const comments = db.prepare(query).all(...params).map(c => ({ ...c, agent: c.author }));
+      const { total } = author ? db.prepare(countQuery).get(author) : db.prepare(countQuery).get();
+      db.close();
       return {
-        comments: comments.slice(startIdx, startIdx + perPage),
-        total: comments.length,
+        comments,
+        total,
         page,
         perPage,
-        hasMore: startIdx + perPage < comments.length
+        hasMore: page * perPage < total
       };
     } catch (e) {
       return { comments: [], total: 0, error: e.message };
@@ -603,51 +603,30 @@ class ProjectRunner {
   }
 
   async getIssues() {
-    if (!this.repo) return [];
     try {
-      const output = execSync(
-        'gh issue list --state open --json number,title,createdAt,labels --limit 50',
-        { cwd: this.path, encoding: 'utf-8', timeout: 30000 }
-      );
-      return JSON.parse(output).map(issue => {
-        // Match [creator] -> [assignee] title
-        const fullMatch = issue.title.match(/^\[([^\]]+)\]\s*->\s*\[([^\]]+)\]\s*(.*)$/);
-        if (fullMatch) {
-          return { ...issue, creator: fullMatch[1], assignee: fullMatch[2], shortTitle: fullMatch[3] };
-        }
-        // Match [creator] title (no assignee)
-        const creatorMatch = issue.title.match(/^\[([^\]]+)\]\s*(.*)$/);
-        if (creatorMatch) {
-          return { ...issue, creator: creatorMatch[1], assignee: null, shortTitle: creatorMatch[2] };
-        }
-        return { ...issue, creator: null, assignee: null, shortTitle: issue.title };
-      });
+      const db = this.getDb();
+      const issues = db.prepare(`
+        SELECT i.*, (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id) as comment_count
+        FROM issues i ORDER BY i.created_at DESC
+      `).all();
+      db.close();
+      return issues;
     } catch {
       return [];
     }
   }
 
-  async createIssue(text) {
-    if (!this.repo) throw new Error('No repo configured');
-    if (!text?.trim()) throw new Error('Missing issue description');
-    
-    // First line = title, rest = body
-    const lines = text.trim().split('\n');
-    const title = `[Human] -> [Athena] ${lines[0].trim()}`;
-    const body = lines.length > 1 ? lines.slice(1).join('\n').trim() : '';
-    
-    const tmpFile = path.join(this.projectDir, '.tmp_issue_body.md');
-    fs.writeFileSync(tmpFile, body || title);
+  async createIssue(title, body = '', creator = 'human', assignee = null) {
+    if (!title?.trim()) throw new Error('Missing issue title');
     try {
-      const output = execSync(`gh issue create --title ${JSON.stringify(title)} --body-file ${tmpFile}`, {
-        cwd: this.path,
-        encoding: 'utf-8',
-        timeout: 15000
-      });
-      const match = output.match(/\/issues\/(\d+)/);
-      return { success: true, issueNumber: match ? parseInt(match[1]) : null };
-    } finally {
-      try { fs.unlinkSync(tmpFile); } catch {}
+      const db = this.getDb();
+      const result = db.prepare(
+        `INSERT INTO issues (title, body, creator, assignee) VALUES (?, ?, ?, ?)`
+      ).run(title.trim(), body.trim(), creator, assignee || null);
+      db.close();
+      return { success: true, issueId: result.lastInsertRowid };
+    } catch (e) {
+      throw new Error(`Failed to create issue: ${e.message}`);
     }
   }
 
@@ -1906,10 +1885,20 @@ const server = http.createServer(async (req, res) => {
       req.on('data', c => body += c);
       req.on('end', async () => {
         try {
-          const { text } = JSON.parse(body);
-          await runner.createIssue(text);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true }));
+          const { title, body: issueBody, creator, assignee, text } = JSON.parse(body);
+          // Support both new format (title/body/creator) and legacy (text)
+          if (title) {
+            const result = await runner.createIssue(title, issueBody, creator, assignee);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } else if (text) {
+            const lines = text.trim().split('\n');
+            const result = await runner.createIssue(lines[0], lines.slice(1).join('\n'), 'human');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } else {
+            throw new Error('Missing title or text');
+          }
         } catch (e) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));

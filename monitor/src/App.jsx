@@ -178,7 +178,7 @@ function App() {
         fetch(`${baseApi}/agents`),
         fetch(`${baseApi}/config`),
         fetch(`${baseApi}/prs`),
-        fetch(`${baseApi}/issues`),
+        fetch(`${baseApi}/issues`).catch(() => ({ ok: false })),
         fetch(`${baseApi}/repo`)
       ])
       
@@ -200,7 +200,9 @@ function App() {
       }
       
       setPrs((await prsRes.json()).prs || [])
-      setIssues((await issuesRes.json()).issues || [])
+      if (issuesRes.ok) {
+        setIssues((await issuesRes.json()).issues || [])
+      }
       setRepoUrl((await repoRes.json()).url)
     } catch (err) {
       console.error('Failed to fetch project data:', err)
@@ -366,13 +368,15 @@ function App() {
     if (!createIssueModal.title.trim()) return
     setCreateIssueModal(prev => ({ ...prev, creating: true, error: null }))
     try {
-      const text = createIssueModal.body.trim()
-        ? `${createIssueModal.title.trim()}\n${createIssueModal.body.trim()}`
-        : createIssueModal.title.trim()
       const res = await fetch(projectApi('/issues/create'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({
+          title: createIssueModal.title.trim(),
+          body: createIssueModal.body.trim(),
+          creator: 'human',
+          assignee: null
+        })
       })
       const data = await res.json()
       if (data.success) {
@@ -1259,6 +1263,46 @@ function App() {
 
         {selectedProject && !projectLoading && (
           <>
+            {/* Phase Indicator */}
+            {selectedProject.phase && (
+              <div className="mb-4 p-3 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">
+                    {selectedProject.phase === 'athena' ? '🧠' : selectedProject.phase === 'implementation' ? '🔨' : selectedProject.phase === 'verification' ? '✅' : '❓'}
+                  </span>
+                  <Badge variant={
+                    selectedProject.phase === 'athena' ? 'default' :
+                    selectedProject.phase === 'implementation' ? 'success' :
+                    selectedProject.phase === 'verification' ? 'warning' : 'secondary'
+                  } className="text-sm capitalize">
+                    {selectedProject.phase}
+                  </Badge>
+                  {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
+                </div>
+                {selectedProject.milestone && (
+                  <span className="text-sm text-neutral-600 dark:text-neutral-400 truncate flex-1" title={selectedProject.milestone}>
+                    {selectedProject.milestone.length > 80 ? selectedProject.milestone.slice(0, 80) + '…' : selectedProject.milestone}
+                  </span>
+                )}
+                {selectedProject.milestoneCyclesBudget > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="w-24 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.8 ? 'bg-red-500' :
+                          (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.5 ? 'bg-yellow-500' : 'bg-green-500'
+                        }`}
+                        style={{ width: `${Math.min(100, (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">
+                      {selectedProject.milestoneCyclesUsed}/{selectedProject.milestoneCyclesBudget} cycles
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Row 1: State, Cost & Budget, Config */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* State */}
@@ -1588,23 +1632,28 @@ function App() {
 
               {/* Issues */}
               <Card className="flex flex-col h-[500px]">
-                <CardHeader className="shrink-0"><CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Open Issues ({issues.length})</CardTitle></CardHeader>
+                <CardHeader className="shrink-0"><CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Issues ({issues.length})</CardTitle></CardHeader>
                 <CardContent className="flex-1 flex flex-col overflow-hidden">
                   <div className="space-y-2 flex-1 overflow-y-auto">
                     {issues.map((issue) => (
-                      <a key={issue.number} href={`${repoUrl}/issues/${issue.number}`} target="_blank" rel="noopener noreferrer"
-                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer transition-colors">
+                      <div key={issue.id}
+                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 rounded">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-neutral-400 dark:text-neutral-500">#{issue.number}</span>
-                          <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{issue.shortTitle || issue.title}</span>
+                          <span className="text-xs text-neutral-400 dark:text-neutral-500">#{issue.id}</span>
+                          <Badge variant={issue.status === 'open' ? 'success' : issue.status === 'closed' ? 'secondary' : 'default'} className="text-[10px] px-1.5 py-0">
+                            {issue.status || 'open'}
+                          </Badge>
+                          <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{issue.title}</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                           {issue.creator && <span className="flex items-center gap-1"><User className="w-3 h-3" />{issue.creator}</span>}
-                          {issue.assignee && <span className="flex items-center gap-1 text-green-600"><UserCheck className="w-3 h-3" />{issue.assignee}</span>}
+                          {issue.assignee && <span className="flex items-center gap-1 text-green-600 dark:text-green-400"><UserCheck className="w-3 h-3" />{issue.assignee}</span>}
+                          {issue.comment_count > 0 && <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{issue.comment_count}</span>}
+                          {issue.labels && <span className="text-purple-500 dark:text-purple-400">{issue.labels}</span>}
                         </div>
-                      </a>
+                      </div>
                     ))}
-                    {issues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open issues</p>}
+                    {issues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No issues</p>}
                   </div>
                   <Separator className="my-3 shrink-0" />
                   <div className="shrink-0">
@@ -1945,7 +1994,7 @@ function App() {
                 disabled={createIssueModal.creating}
                 autoFocus
               />
-              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Will be prefixed with [Human] → [Athena]</p>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Created as a human issue in the project database</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
