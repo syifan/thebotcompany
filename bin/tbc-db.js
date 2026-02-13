@@ -31,7 +31,7 @@ db.exec(`
     reports_to TEXT,
     model TEXT,
     disabled INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
 
   CREATE TABLE IF NOT EXISTS issues (
@@ -42,8 +42,8 @@ db.exec(`
     creator TEXT NOT NULL,
     assignee TEXT,
     labels TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     closed_at TEXT
   );
 
@@ -52,7 +52,7 @@ db.exec(`
     issue_id INTEGER NOT NULL REFERENCES issues(id),
     author TEXT NOT NULL,
     body TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
 
   CREATE TABLE IF NOT EXISTS milestones (
@@ -62,7 +62,7 @@ db.exec(`
     cycles_used INTEGER DEFAULT 0,
     phase TEXT DEFAULT 'implementation',
     status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed', 'failed')),
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     completed_at TEXT
   );
 `);
@@ -173,7 +173,7 @@ const commands = {
   'issue-close'() {
     const id = args[0];
     if (!id) { console.error('Usage: tbc-db issue-close <id>'); process.exit(1); }
-    db.prepare("UPDATE issues SET status = 'closed', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(id);
+    db.prepare("UPDATE issues SET status = 'closed', closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").run(id);
     console.log(`Closed issue #${id}`);
   },
 
@@ -197,7 +197,7 @@ const commands = {
     if (values.assignee !== undefined) { sets.push('assignee = ?'); params.push(values.assignee); }
     if (values.labels !== undefined) { sets.push('labels = ?'); params.push(values.labels); }
     if (sets.length === 0) { console.error('Nothing to update'); process.exit(1); }
-    sets.push("updated_at = datetime('now')");
+    sets.push("updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')");
     params.push(id);
     db.prepare(`UPDATE issues SET ${sets.join(', ')} WHERE id = ?`).run(...params);
     console.log(`Updated issue #${id}`);
@@ -219,7 +219,7 @@ const commands = {
       process.exit(1);
     }
     const result = db.prepare('INSERT INTO comments (issue_id, author, body) VALUES (?, ?, ?)').run(values.issue, values.author, values.body);
-    db.prepare("UPDATE issues SET updated_at = datetime('now') WHERE id = ?").run(values.issue);
+    db.prepare("UPDATE issues SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?").run(values.issue);
     console.log(`Added comment #${result.lastInsertRowid} to issue #${values.issue}`);
   },
 

@@ -550,10 +550,10 @@ class ProjectRunner {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.exec(`
-      CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, role TEXT, reports_to TEXT, model TEXT, disabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));
-      CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')), closed_at TEXT);
-      CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')));
-      CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now')), completed_at TEXT);
+      CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, role TEXT, reports_to TEXT, model TEXT, disabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
+      CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), closed_at TEXT);
+      CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
+      CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
     `);
     return db;
   }
@@ -1237,7 +1237,7 @@ class ProjectRunner {
         try {
           const responsesDir = path.join(this.agentDir, 'responses');
           fs.mkdirSync(responsesDir, { recursive: true });
-          const timestamp = new Date().toISOString();
+          const timestamp = new Date().toLocaleString('sv-SE', { hour12: false }).replace(',', '');
           const header = `\n${'='.repeat(60)}\n[${timestamp}] Cycle ${this.cycleCount} | Exit code: ${code}\n${'='.repeat(60)}\n`;
           
           // Always log raw output for debugging
@@ -1283,7 +1283,7 @@ class ProjectRunner {
               cycle INTEGER NOT NULL,
               agent TEXT NOT NULL,
               body TEXT NOT NULL,
-              created_at TEXT DEFAULT (datetime('now'))
+              created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
             )`);
             db.prepare('INSERT INTO reports (cycle, agent, body) VALUES (?, ?, ?)').run(this.cycleCount, agent.name, reportBody);
             db.close();
@@ -1858,7 +1858,7 @@ const server = http.createServer(async (req, res) => {
           cycle INTEGER NOT NULL,
           agent TEXT NOT NULL,
           body TEXT NOT NULL,
-          created_at TEXT DEFAULT (datetime('now'))
+          created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         )`);
         const agent = url.searchParams.get('agent');
         const page = parseInt(url.searchParams.get('page')) || 1;
