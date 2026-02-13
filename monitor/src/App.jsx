@@ -1299,7 +1299,7 @@ function App() {
                     {selectedProject.milestone.length > 80 ? selectedProject.milestone.slice(0, 80) + '…' : selectedProject.milestone}
                   </span>
                 )}
-                {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase !== 'verification' && (
+                {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="w-24 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
                       <div
@@ -1366,14 +1366,10 @@ function App() {
                          selectedProject.phase || 'Unknown'}
                       </Badge>
                     </div>
-                    {selectedProject.milestoneCyclesBudget > 0 && (
+                    {selectedProject.phase === 'implementation' && selectedProject.milestoneCyclesBudget > 0 && (
                       <div className="flex justify-between items-center">
                         <span className="text-neutral-600 dark:text-neutral-300">Milestone Progress</span>
-                        <span className="text-sm font-mono">
-                          {selectedProject.phase === 'verification'
-                            ? `${selectedProject.milestoneCyclesUsed || 0} cycles used (verifying)`
-                            : `${selectedProject.milestoneCyclesUsed || 0} / ${selectedProject.milestoneCyclesBudget} cycles`}
-                        </span>
+                        <span className="text-sm font-mono">{selectedProject.milestoneCyclesUsed || 0} / {selectedProject.milestoneCyclesBudget} cycles</span>
                       </div>
                     )}
                     {selectedProject.isFixRound && (
