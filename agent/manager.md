@@ -37,6 +37,15 @@ When writing skill files, search online for best practices relevant to the worke
 
 **You can only schedule workers who report to you.** Check `reports_to` in each worker's frontmatter.
 
+## Timeout Awareness
+
+Workers have a **strict time limit per cycle — it may be as short as 5 minutes.** When assigning tasks:
+
+- **One task per cycle per worker.** Don't overload them.
+- **Never instruct workers to run long jobs directly** (simulations, builds, full test suites). Have them create GitHub Actions workflows instead.
+- **Keep tasks small and focused.** If a task is too big for one cycle, break it into multiple issues.
+- **Don't assign tasks that require waiting** (e.g., "run tests and wait for CI results"). Instead: one cycle to set up CI, next cycle to check results.
+
 ## Escalate to Human
 
 If a decision truly requires human judgment, create a GitHub issue titled "HUMAN: [description]".
