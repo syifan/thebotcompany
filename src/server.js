@@ -690,29 +690,7 @@ class ProjectRunner {
     }
     fs.mkdirSync(this.agentDir, { recursive: true });
 
-    // 2. Create a new tracker issue on GitHub and update config
-    let trackerIssue = null;
-    if (this.repo) {
-      try {
-        const issueBody = '(No milestone set yet — Athena will update this)';
-        const output = execSync(
-          `gh issue create --title "Agent Tracker" --body "${issueBody}"`,
-          { cwd: this.path, encoding: 'utf-8', timeout: 30000, stdio: 'pipe' }
-        );
-        const match = output.match(/\/issues\/(\d+)/);
-        if (match) {
-          trackerIssue = parseInt(match[1]);
-          const config = this.loadConfig();
-          config.trackerIssue = trackerIssue;
-          fs.writeFileSync(this.configPath, yaml.dump(config, { lineWidth: -1 }));
-          log(`Created tracker issue #${trackerIssue}`, this.id);
-        }
-      } catch (e) {
-        log(`Failed to create tracker issue: ${e.message}`, this.id);
-      }
-    }
-
-    // 3. Reset cycle count, phase, and save state
+    // 2. Reset cycle count, phase, and save state
     this.cycleCount = 0;
     this.phase = 'athena';
     this.milestoneDescription = null;
@@ -725,7 +703,7 @@ class ProjectRunner {
     this.saveState();
     log(`Reset cycle count, project paused`, this.id);
 
-    return { bootstrapped: true, trackerIssue };
+    return { bootstrapped: true };
   }
 
   async start() {
@@ -941,15 +919,7 @@ class ProjectRunner {
                 this.phase = 'implementation';
                 log(`New milestone (${this.milestoneCyclesBudget} cycles): ${this.milestoneDescription.slice(0, 100)}...`, this.id);
 
-                // Update tracker issue with new milestone
-                try {
-                  const cfg = this.loadConfig();
-                  if (this.repo && cfg.trackerIssue) {
-                    execSync(`gh issue edit ${cfg.trackerIssue} --body ${JSON.stringify(this.milestoneDescription)}`, {
-                      cwd: this.path, encoding: 'utf-8', timeout: 15000
-                    });
-                  }
-                } catch {}
+                // Milestone is persisted in state.json and exposed via status API
               } catch (e) {
                 log(`Failed to parse milestone: ${e.message}`, this.id);
               }
@@ -1265,68 +1235,32 @@ class ProjectRunner {
           } catch {}
         }
 
-        // Post to tracker
-        if (this.repo && config.trackerIssue) {
+        // Write agent report to SQLite
+        if (resultText || killedByTimeout || code !== 0) {
           try {
-            let comment;
+            let reportBody;
             if (killedByTimeout || code !== 0) {
-              // Error/timeout message
-              let errorType, errorMsg;
-              if (killedByTimeout) {
-                errorType = '⏰ Timeout';
-                errorMsg = `Agent **${agent.name}** was killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`;
-              } else {
-                errorType = '❌ Error';
-                errorMsg = `Agent **${agent.name}** exited with code ${code}.`;
-              }
-              
-              comment = `## [Orchestrator] ${errorType}
-
-${errorMsg}
-
-- **Cycle:** ${this.cycleCount}
-- **Duration:** ${durationStr}
-- **Exit code:** ${code}
-
-This is an automated message from the orchestrator.`;
-            } else if (resultText) {
-              // Prepend agent name header and post response
-              const agentLabel = `# [${agent.name.charAt(0).toUpperCase() + agent.name.slice(1)}]`;
-              comment = `${agentLabel}\n\n${resultText.trim()}`;
+              const errorType = killedByTimeout ? '⏰ Timeout' : '❌ Error';
+              const errorMsg = killedByTimeout
+                ? `Killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`
+                : `Exited with code ${code}.`;
+              reportBody = `## ${errorType}\n\n${errorMsg}\n\n- Duration: ${durationStr}\n- Exit code: ${code}`;
+            } else {
+              reportBody = resultText.trim();
             }
-            
-            if (comment) {
-              // Write to temp file to avoid shell escaping issues
-              const tmpFile = path.join(this.agentDir, '.tmp_comment.md');
-              fs.writeFileSync(tmpFile, comment);
-              try {
-                execSync(`gh issue comment ${config.trackerIssue} --body-file ${tmpFile}`, {
-                  cwd: this.path,
-                  encoding: 'utf-8',
-                  timeout: 30000
-                });
-                log(`Posted comment to tracker #${config.trackerIssue}`, this.id);
-              } finally {
-                try { fs.unlinkSync(tmpFile); } catch {}
-              }
-              // Write agent report to SQLite (separate from issue comments)
-              try {
-                const db = this.getDb();
-                db.exec(`CREATE TABLE IF NOT EXISTS reports (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  cycle INTEGER NOT NULL,
-                  agent TEXT NOT NULL,
-                  body TEXT NOT NULL,
-                  created_at TEXT DEFAULT (datetime('now'))
-                )`);
-                db.prepare('INSERT INTO reports (cycle, agent, body) VALUES (?, ?, ?)').run(this.cycleCount, agent.name, resultText.trim());
-                db.close();
-              } catch (dbErr) {
-                log(`Failed to write report to SQLite: ${dbErr.message}`, this.id);
-              }
-            }
-          } catch (e) {
-            log(`Failed to post tracker comment: ${e.message}`, this.id);
+            const db = this.getDb();
+            db.exec(`CREATE TABLE IF NOT EXISTS reports (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              cycle INTEGER NOT NULL,
+              agent TEXT NOT NULL,
+              body TEXT NOT NULL,
+              created_at TEXT DEFAULT (datetime('now'))
+            )`);
+            db.prepare('INSERT INTO reports (cycle, agent, body) VALUES (?, ?, ?)').run(this.cycleCount, agent.name, reportBody);
+            db.close();
+            log(`Saved report for ${agent.name}`, this.id);
+          } catch (dbErr) {
+            log(`Failed to write report: ${dbErr.message}`, this.id);
           }
         }
 
