@@ -48,7 +48,7 @@ You control team composition. If the team lacks skills for the current milestone
 
 **Model selection:** Default workers to **claude-opus-4-6**. Downgrade to sonnet only for simple/repetitive tasks. Use haiku for trivial, high-volume work.
 
-**Writing skill files:** Search online for best practices, tools, and techniques relevant to the worker's role. Write clear, specific skill files that give the agent what it needs to succeed.
+**Writing skill files:** When hiring, search online for best practices, tools, and techniques relevant to the worker's role only if you're unsure what skills they need. Write clear, specific skill files that give the agent what it needs to succeed. **You must create the skill file before scheduling the worker** — workers without a skill file will be skipped.
 
 ### 8. Escalate to Athena
 
