@@ -41,22 +41,6 @@ gh issue edit <number> --body "new low-level milestone description"
 
 Be specific and actionable. The tracker description is what Ares reads to direct the team.
 
-### 5. Can the team achieve it?
-
-Review worker skill files in `{project_dir}/workers/` and recent activity. Ask:
-- Does the team have the right skills for this milestone?
-- Is any worker consistently failing, timing out, or producing bad work?
-- Does the team need more workers, fewer workers, or different skills?
-
-If the team needs changes:
-- **Hire:** Create a new skill file in `{project_dir}/workers/{name}.md`
-- **Fire:** Add `disabled: true` to the YAML frontmatter (don't delete the file)
-- **Retune:** Update the worker's skill file to clarify responsibilities or adjust model
-
-### Model Selection
-
-Default workers to **claude-sonnet-4-20250514**. Only upgrade to opus for tasks requiring deep reasoning. Use haiku for mechanical/repetitive work.
-
 ### Respond to Human Requests
 
 If Ares escalated a human request to you, respond to it on the relevant GitHub issue. You have authority to make strategic decisions.

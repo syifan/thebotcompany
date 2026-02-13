@@ -18,8 +18,8 @@ Read this file before executing any task.
 - **Ares** — Operations Manager (runs every cycle, assigns work, creates issues, handles human requests)
 - **Athena** — Strategy & Team (sleeps unless Ares escalates; sets milestones, manages team composition)
 
-**Workers** (managed by Athena):
-- Athena can hire, fire, and modify worker skills
+**Workers** (managed by Ares):
+- Ares can hire, fire, and modify worker skills
 - Workers are discovered from `{project_dir}/workers/`
 
 ---
@@ -40,7 +40,7 @@ When in doubt, **STOP and report the discrepancy**.
 
 **Do NOT modify anything in the `{project_dir}/` folder**, except:
 - Your own workspace (`{project_dir}/workspace/{your_name}/`)
-- Athena can modify, add, or delete worker skills (`{project_dir}/workers/`)
+- Ares can modify, add, or delete worker skills (`{project_dir}/workers/`)
 
 ---
 
