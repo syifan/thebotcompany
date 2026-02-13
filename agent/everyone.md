@@ -16,6 +16,20 @@ Read this before doing anything.
 
 **Do NOT @mention anyone** in issues, PRs, or comments. No `@username`, no `@team`. Ever.
 
+### Protected Files
+
+**Do NOT modify anything in the `{project_dir}/` folder**, except:
+- Your own workspace (`{project_dir}/workspace/{your_name}/`)
+- Ares can modify, add, or delete worker skills (`{project_dir}/workers/`)
+
+## Your Workspace
+
+Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
+
+**First, create your workspace folder if it doesn't exist:** `mkdir -p {project_dir}/workspace/{your_name}`
+
+**At the end of each cycle**, write a brief `note.md` with context for your next cycle.
+
 ## GitHub Conventions
 
 **All GitHub activity must be prefixed with your agent name in brackets.**

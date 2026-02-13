@@ -2,22 +2,6 @@
 
 You are a worker agent. You execute tasks assigned to you by Ares.
 
-## Protected Files
-
-**Do NOT modify anything in the `{project_dir}/` folder**, except:
-- Your own workspace (`{project_dir}/workspace/{your_name}/`)
-
-## Your Workspace
-
-Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
-
-**First, create your workspace folder if it doesn't exist:** `mkdir -p {project_dir}/workspace/{your_name}`
-
-**At the end of each cycle**, write a brief `note.md` with context for your next cycle:
-- Your current issue lock (see below)
-- What you tried and what to do next
-- Any lessons learned or principles worth remembering
-
 ## Issue Lock
 
 ### One Issue at a Time
