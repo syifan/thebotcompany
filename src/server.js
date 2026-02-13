@@ -851,7 +851,7 @@ class ProjectRunner {
 
       // Check budget before starting cycle
       const budgetStatus = this.getBudgetStatus();
-      if (budgetStatus.exhausted) {
+      if (budgetStatus && budgetStatus.exhausted) {
         log(`Budget exhausted ($${budgetStatus.spent24h.toFixed(2)}/$${budgetStatus.budgetPer24h}), waiting for budget to roll off`, this.id);
         this.isPaused = true;
         this.pauseReason = `Budget exhausted: $${budgetStatus.spent24h.toFixed(2)} / $${budgetStatus.budgetPer24h} (24h)`;
