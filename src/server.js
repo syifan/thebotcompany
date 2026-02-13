@@ -132,7 +132,7 @@ class ProjectRunner {
   }
 
   loadConfig() {
-    const defaults = { cycleIntervalMs: 1800000, agentTimeoutMs: 900000, model: 'claude-sonnet-4-20250514', budgetPer24h: 0 };
+    const defaults = { cycleIntervalMs: 0, agentTimeoutMs: 3600000, model: 'claude-sonnet-4-20250514', budgetPer24h: 0 };
     try {
       const raw = fs.readFileSync(this.configPath, 'utf-8');
       const config = yaml.load(raw) || {};
@@ -742,8 +742,12 @@ class ProjectRunner {
         this.completedAgents = state.completedAgents || [];
         this.currentCycleId = state.currentCycleId || null;
         this.currentSchedule = state.currentSchedule || null;
-        log(`Loaded state: cycle ${this.cycleCount}, completed: [${this.completedAgents.join(', ')}]`, this.id);
+        if (state.isPaused !== undefined) this.isPaused = state.isPaused;
+        log(`Loaded state: cycle ${this.cycleCount}, completed: [${this.completedAgents.join(', ')}]${this.isPaused ? ', paused' : ''}`, this.id);
       } else {
+        // New project — start paused
+        this.isPaused = true;
+        this.pauseReason = 'New project (paused by default)';
         this.completedAgents = [];
         this.currentCycleId = null;
         this.currentSchedule = null;
@@ -764,6 +768,7 @@ class ProjectRunner {
         completedAgents: this.completedAgents || [],
         currentCycleId: this.currentCycleId,
         currentSchedule: this.currentSchedule || null,
+        isPaused: this.isPaused || false,
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -784,6 +789,7 @@ class ProjectRunner {
     this.isPaused = true;
     this.pauseReason = null;
     log(`Paused`, this.id);
+    this.saveState();
   }
 
   resume() {
@@ -791,6 +797,7 @@ class ProjectRunner {
     this.pauseReason = null;
     this.wakeNow = true;
     log(`Resumed`, this.id);
+    this.saveState();
   }
 
   skip() {
