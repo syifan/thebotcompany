@@ -676,6 +676,20 @@ class ProjectRunner {
   }
 
   bootstrap() {
+    // 0. Kill any running agent and pause the project
+    if (this.currentAgentProcess) {
+      try { this.currentAgentProcess.kill('SIGKILL'); } catch {}
+      log(`Killed running agent ${this.currentAgent} for bootstrap`, this.id);
+      this.currentAgentProcess = null;
+      this.currentAgent = null;
+      this.currentAgentStartTime = null;
+    }
+    this.isPaused = true;
+    this.pauseReason = 'Bootstrapping';
+    this.completedAgents = [];
+    this.currentCycleId = null;
+    this.currentSchedule = null;
+
     // 1. Wipe the entire workspace folder
     if (fs.existsSync(this.agentDir)) {
       fs.rmSync(this.agentDir, { recursive: true });
@@ -705,9 +719,12 @@ class ProjectRunner {
       }
     }
 
-    // 3. Reset cycle count
+    // 3. Reset cycle count and save state
     this.cycleCount = 0;
-    log(`Reset cycle count`, this.id);
+    this.isPaused = true;
+    this.pauseReason = 'Bootstrapped — resume when ready';
+    this.saveState();
+    log(`Reset cycle count, project paused`, this.id);
 
     return { bootstrapped: true, trackerIssue };
   }
