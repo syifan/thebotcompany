@@ -1074,9 +1074,15 @@ class ProjectRunner {
         return resolve({ code: 1, stdout: '', stderr: `Skill file not found: ${skillPath}`, tokens: { in: 0, out: 0, cache_read: 0 } });
       }
       let skillContent = fs.readFileSync(skillPath, 'utf-8');
-      const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
-      let everyone = '';
-      try { everyone = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n'; } catch {}
+      
+      // Build shared rules: everyone.md + role-specific rules (worker.md or manager.md)
+      let sharedRules = '';
+      try {
+        const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
+        sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
+        const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
+        sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
+      } catch {}
       
       // Inject task assignment at the top
       let taskHeader = '';
@@ -1084,9 +1090,9 @@ class ProjectRunner {
         taskHeader = `> **Your assignment: ${task}**\n\n`;
       }
       
-      // Skip everyone.md for the scheduler (saves tokens — only needs its own skill)
+      // Skip shared rules for the scheduler (saves tokens — only needs its own skill)
       if (agent.name === 'ares') {
-        everyone = '';
+        sharedRules = '';
         // Inject tracker issue description as the milestone
         try {
           const config = this.loadConfig();
@@ -1105,7 +1111,7 @@ class ProjectRunner {
       // This prevents Claude CLI from interpreting '---' as a command-line flag
       skillContent = skillContent.replace(/^---[\s\S]*?---\n*/, '');
       
-      skillContent = (taskHeader + everyone + skillContent).replaceAll('{project_dir}', this.agentDir);
+      skillContent = (taskHeader + sharedRules + skillContent).replaceAll('{project_dir}', this.agentDir);
 
       const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-20250514';
       const args = [
