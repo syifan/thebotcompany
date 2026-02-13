@@ -46,7 +46,7 @@ You control team composition. If the team lacks skills for the current milestone
 - **Fire:** Add `disabled: true` to the YAML frontmatter (don't delete the file)
 - **Retune:** Update a worker's skill file to clarify responsibilities or adjust model
 
-**Model selection:** Default workers to **claude-sonnet-4-20250514**. Only upgrade to opus for tasks requiring deep reasoning. Use haiku for mechanical/repetitive work.
+**Model selection:** Default workers to **claude-opus-4-6**. Downgrade to sonnet only for simple/repetitive tasks. Use haiku for trivial, high-volume work.
 
 **Writing skill files:** Search online for best practices, tools, and techniques relevant to the worker's role. Write clear, specific skill files that give the agent what it needs to succeed.
 
