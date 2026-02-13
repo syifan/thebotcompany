@@ -71,7 +71,7 @@ This sends the project back to Ares's team with your feedback. Be specific — v
 If your verification team dispatched long-running checks (e.g., CI, test suites) and you need results before the next cycle:
 
 <!-- WAIT -->
-{"hours": 1}
+{"minutes": 30}
 <!-- /WAIT -->
 
-- Maximum 2 hours. One-time override — next cycle reverts to normal scheduling.
+- Maximum 120 minutes. One-time override — next cycle reverts to normal scheduling.

@@ -844,15 +844,15 @@ class ProjectRunner {
   }
 
   parseWait(resultText) {
-    // Parse <!-- WAIT -->{"hours": N}<!-- /WAIT --> from manager response (max 2h)
+    // Parse <!-- WAIT -->{"minutes": N}<!-- /WAIT --> from manager response (max 120min)
     const match = resultText.match(/<!--\s*WAIT\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/WAIT\s*-->/);
     if (!match) return;
     try {
       const data = JSON.parse(match[1]);
-      const hours = Math.min(Math.max(parseFloat(data.hours) || 0, 0), 2);
-      if (hours > 0) {
-        this._pendingWaitMs = Math.max(this._pendingWaitMs, hours * 3600000);
-        log(`Manager requested ${hours}h wait`, this.id);
+      const minutes = Math.min(Math.max(parseFloat(data.minutes) || 0, 0), 120);
+      if (minutes > 0) {
+        this._pendingWaitMs = Math.max(this._pendingWaitMs, minutes * 60000);
+        log(`Manager requested ${minutes}m wait`, this.id);
       }
     } catch (e) {
       log(`Failed to parse WAIT tag: ${e.message}`, this.id);
