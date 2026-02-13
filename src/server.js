@@ -1052,6 +1052,10 @@ class ProjectRunner {
 
     return new Promise((resolve) => {
       // Build prompt: mode header + everyone.md + skill file, with {project_dir} replaced
+      if (!fs.existsSync(skillPath)) {
+        log(`Skill file not found: ${skillPath}, skipping ${agent.name}`, this.id);
+        return resolve({ code: 1, stdout: '', stderr: `Skill file not found: ${skillPath}`, tokens: { in: 0, out: 0, cache_read: 0 } });
+      }
       let skillContent = fs.readFileSync(skillPath, 'utf-8');
       const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
       let everyone = '';
