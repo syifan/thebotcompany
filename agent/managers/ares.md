@@ -48,6 +48,8 @@ You control team composition. If the team lacks skills for the current milestone
 
 **Model selection:** Default workers to **claude-sonnet-4-20250514**. Only upgrade to opus for tasks requiring deep reasoning. Use haiku for mechanical/repetitive work.
 
+**Writing skill files:** Search online for best practices, tools, and techniques relevant to the worker's role. Write clear, specific skill files that give the agent what it needs to succeed.
+
 ### 8. Escalate to Athena
 
 Athena is asleep. Wake her (`athena: true`) when:
