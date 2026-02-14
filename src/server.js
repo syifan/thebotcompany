@@ -1908,6 +1908,32 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // POST /api/projects/:id/issues/:issueId/comments — add comment
+    const commentPostMatch = req.method === 'POST' && subPath.match(/^issues\/(\d+)\/comments$/);
+    if (commentPostMatch) {
+      try {
+        const issueId = parseInt(commentPostMatch[1], 10);
+        const body = await readBody(req);
+        const { author, body: commentBody } = JSON.parse(body);
+        if (!commentBody?.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Comment body required' }));
+          return;
+        }
+        const db = runner.getDb();
+        const now = new Date().toISOString();
+        const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, author || 'user', commentBody.trim(), now);
+        db.prepare('UPDATE issues SET updated_at = ? WHERE id = ?').run(now, issueId);
+        db.close();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: result.lastInsertRowid }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
     // GET /api/projects/:id/issues
     if (req.method === 'GET' && subPath === 'issues') {
       const issues = await runner.getIssues();

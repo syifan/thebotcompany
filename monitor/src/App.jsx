@@ -404,6 +404,27 @@ function App() {
     }
   }
 
+  const submitIssueComment = async () => {
+    if (!issueModal.issue || !issueModal.newComment?.trim()) return
+    setIssueModal(prev => ({ ...prev, commenting: true }))
+    try {
+      const res = await fetch(projectApi(`/issues/${issueModal.issue.id}/comments`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: 'user', body: issueModal.newComment.trim() })
+      })
+      if (res.ok) {
+        // Refresh issue modal
+        const data = await (await fetch(projectApi(`/issues/${issueModal.issue.id}`))).json()
+        setIssueModal(prev => ({ ...prev, issue: data.issue, comments: data.comments || [], newComment: '', commenting: false }))
+      } else {
+        setIssueModal(prev => ({ ...prev, commenting: false }))
+      }
+    } catch {
+      setIssueModal(prev => ({ ...prev, commenting: false }))
+    }
+  }
+
   const projectToPath = (project) => {
     if (project.repo) return `/github.com/${project.repo}`
     return `/${project.id}`
@@ -2107,6 +2128,31 @@ function App() {
                   </div>
                 </>
               )}
+              {/* Add Comment */}
+              <Separator />
+              <div className="flex gap-2">
+                <textarea
+                  className="flex-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded p-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-neutral-800 dark:text-neutral-100"
+                  rows={2}
+                  placeholder="Add a comment..."
+                  value={issueModal.newComment || ''}
+                  onChange={(e) => setIssueModal(prev => ({ ...prev, newComment: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      submitIssueComment()
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  disabled={!issueModal.newComment?.trim() || issueModal.commenting}
+                  onClick={submitIssueComment}
+                  className="self-end"
+                >
+                  {issueModal.commenting ? '...' : 'Post'}
+                </Button>
+              </div>
             </div>
           ) : (
             <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load issue</p>
