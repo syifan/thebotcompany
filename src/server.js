@@ -99,6 +99,7 @@ class ProjectRunner {
     this.currentSchedule = null;
     // Phase state machine: athena | implementation | verification
     this.phase = 'athena'; // Start by asking Athena for first milestone
+    this.milestoneTitle = null;
     this.milestoneDescription = null;
     this.milestoneCyclesBudget = 0;
     this.milestoneCyclesUsed = 0;
@@ -653,6 +654,7 @@ class ProjectRunner {
       sleepUntil: this.sleepUntil,
       schedule: this.currentSchedule || null,
       phase: this.phase,
+      milestoneTitle: this.milestoneTitle,
       milestone: this.milestoneDescription,
       milestoneCyclesBudget: this.milestoneCyclesBudget,
       milestoneCyclesUsed: this.milestoneCyclesUsed,
@@ -698,6 +700,7 @@ class ProjectRunner {
     // 2. Reset cycle count, phase, and save state
     this.cycleCount = 0;
     this.phase = 'athena';
+    this.milestoneTitle = null;
     this.milestoneDescription = null;
     this.milestoneCyclesBudget = 0;
     this.milestoneCyclesUsed = 0;
@@ -744,6 +747,7 @@ class ProjectRunner {
         if (state.isPaused !== undefined) this.isPaused = state.isPaused;
         // Phase state
         this.phase = state.phase || 'athena';
+        this.milestoneTitle = state.milestoneTitle || null;
         this.milestoneDescription = state.milestoneDescription || null;
         this.milestoneCyclesBudget = state.milestoneCyclesBudget || 0;
         this.milestoneCyclesUsed = state.milestoneCyclesUsed || 0;
@@ -776,6 +780,7 @@ class ProjectRunner {
         currentSchedule: this.currentSchedule || null,
         isPaused: this.isPaused || false,
         phase: this.phase,
+        milestoneTitle: this.milestoneTitle,
         milestoneDescription: this.milestoneDescription,
         milestoneCyclesBudget: this.milestoneCyclesBudget,
         milestoneCyclesUsed: this.milestoneCyclesUsed,
@@ -936,6 +941,7 @@ class ProjectRunner {
             if (milestoneMatch) {
               try {
                 const milestone = JSON.parse(milestoneMatch[1]);
+                this.milestoneTitle = milestone.title || milestone.description.slice(0, 80);
                 this.milestoneDescription = milestone.description;
                 this.milestoneCyclesBudget = milestone.cycles || 20;
                 this.milestoneCyclesUsed = 0;
@@ -1109,6 +1115,7 @@ class ProjectRunner {
           // Process decision
           if (decision === 'pass') {
             log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
+            this.milestoneTitle = null;
             this.milestoneDescription = null;
             this.milestoneCyclesBudget = 0;
             this.milestoneCyclesUsed = 0;

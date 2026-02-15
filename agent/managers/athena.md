@@ -55,10 +55,11 @@ You wake in one of these situations (injected at the top of your prompt):
 You MUST include this exact format in your response:
 
 <!-- MILESTONE -->
-{"description":"Clear, specific description of what must be achieved","cycles":20}
+{"title":"Short milestone title (≤80 chars)","description":"Clear, specific description of what must be achieved","cycles":20}
 <!-- /MILESTONE -->
 
 Rules:
+- `title` is a short, human-readable label shown on the dashboard (e.g., "Add RISC-V branch predictor support")
 - `description` should be specific and verifiable — Apollo's team will check every claim
 - `cycles` is the number of cycles Ares's team gets to complete this milestone
 - Keep milestones achievable in the estimated cycles — if unsure, go smaller

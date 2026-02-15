@@ -1428,11 +1428,11 @@ function App() {
                   </div>
                 )}
                 {/* Row 2: Milestone description */}
-                {selectedProject.milestone && (
+                {(selectedProject.milestoneTitle || selectedProject.milestone) && (
                   <details className="group">
                     <summary className="text-sm text-neutral-700 dark:text-neutral-300 cursor-pointer hover:text-neutral-900 dark:hover:text-neutral-100 flex items-start gap-1.5 [&::-webkit-details-marker]:hidden list-none">
                       <ChevronDown className="w-3.5 h-3.5 shrink-0 mt-0.5 transition-transform group-open:rotate-180 text-neutral-400" />
-                      <span className="line-clamp-1">{selectedProject.milestone}</span>
+                      <span className="line-clamp-1">📌 {selectedProject.milestoneTitle || selectedProject.milestone}</span>
                     </summary>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2 pl-5 whitespace-pre-wrap leading-relaxed">{selectedProject.milestone}</p>
                   </details>
