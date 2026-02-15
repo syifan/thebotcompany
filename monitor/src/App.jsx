@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -98,6 +98,49 @@ function App() {
   const [loginModal, setLoginModal] = useState(false)
   const [loginInput, setLoginInput] = useState('')
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('tbc_notifications') === 'true')
+
+  // SSE connection for real-time notifications
+  useEffect(() => {
+    if (!notificationsEnabled) return
+    const evtSource = new EventSource('/api/events')
+    evtSource.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data)
+        if (event.type === 'connected') return
+        if (Notification.permission === 'granted') {
+          const messages = {
+            milestone: `📌 New milestone: ${event.title}`,
+            verified: `✅ Milestone verified: ${event.title}`,
+            'verify-fail': `❌ Verification failed: ${event.title}`,
+            phase: `🔄 ${event.project}: → ${event.phase}`,
+            error: `⚠️ ${event.project}: ${event.message}`,
+          }
+          new Notification('TheBotCompany', {
+            body: messages[event.type] || JSON.stringify(event),
+            tag: `tbc-${event.type}-${event.project}`,
+          })
+        }
+      } catch {}
+    }
+    return () => evtSource.close()
+  }, [notificationsEnabled])
+
+  const toggleNotifications = async () => {
+    if (!notificationsEnabled) {
+      if (Notification.permission === 'default') {
+        const perm = await Notification.requestPermission()
+        if (perm !== 'granted') return
+      } else if (Notification.permission === 'denied') {
+        return // can't enable if denied
+      }
+      localStorage.setItem('tbc_notifications', 'true')
+      setNotificationsEnabled(true)
+    } else {
+      localStorage.setItem('tbc_notifications', 'false')
+      setNotificationsEnabled(false)
+    }
+  }
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
@@ -853,6 +896,13 @@ function App() {
               </div>
               <div className="flex items-center gap-3">
                 <button
+                  onClick={toggleNotifications}
+                  className={`px-2 py-1.5 rounded transition-colors ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
+                  title={notificationsEnabled ? 'Notifications on (click to disable)' : 'Notifications off (click to enable)'}
+                >
+                  {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                </button>
+                <button
                   onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
                   className={`px-2 py-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
                   title={isWriteMode ? 'Write mode (click to lock)' : 'Read-only (click to unlock)'}
@@ -1327,6 +1377,13 @@ function App() {
             
             {/* Right: Actions */}
             <div className="flex items-center gap-2 pl-8 sm:pl-0">
+              <button
+                onClick={toggleNotifications}
+                className={`px-2 py-1.5 rounded transition-colors ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
+                title={notificationsEnabled ? 'Notifications on (click to disable)' : 'Notifications off (click to enable)'}
+              >
+                {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+              </button>
               <button
                 onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
                 className={`px-2 py-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}

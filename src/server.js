@@ -38,6 +38,16 @@ if (!fs.existsSync(path.join(TBC_HOME, 'logs'))) {
 
 // --- State ---
 const projects = new Map(); // projectId -> ProjectRunner
+
+// --- SSE notification system ---
+const sseClients = new Set();
+
+function broadcastEvent(event) {
+  const data = JSON.stringify(event);
+  for (const client of sseClients) {
+    client.write(`data: ${data}\n\n`);
+  }
+}
 const startTime = Date.now();
 
 // --- Logging ---
@@ -949,6 +959,7 @@ class ProjectRunner {
                 this.isFixRound = false;
                 this.phase = 'implementation';
                 log(`New milestone (${this.milestoneCyclesBudget} cycles): ${this.milestoneDescription.slice(0, 100)}...`, this.id);
+                broadcastEvent({ type: 'milestone', project: this.id, title: this.milestoneTitle, cycles: this.milestoneCyclesBudget });
               } catch (e) {
                 log(`Failed to parse milestone: ${e.message}`, this.id);
               }
@@ -1025,6 +1036,7 @@ class ProjectRunner {
             if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
               log(`🎯 Ares claims milestone complete — switching to verification`, this.id);
               this.phase = 'verification';
+              broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: this.milestoneTitle });
               this.saveState();
             }
           }
@@ -1115,6 +1127,7 @@ class ProjectRunner {
           // Process decision
           if (decision === 'pass') {
             log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
+            broadcastEvent({ type: 'verified', project: this.id, title: this.milestoneTitle });
             this.milestoneTitle = null;
             this.milestoneDescription = null;
             this.milestoneCyclesBudget = 0;
@@ -1124,6 +1137,7 @@ class ProjectRunner {
             this.phase = 'athena';
           } else if (decision === 'fail') {
             log(`❌ Verification failed — returning to Ares (${Math.floor(this.milestoneCyclesBudget / 2)} fix cycles)`, this.id);
+            broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
             const fixBudget = Math.floor(this.milestoneCyclesBudget / 2);
             this.milestoneCyclesBudget = this.milestoneCyclesUsed + fixBudget;
             this.isFixRound = true;
@@ -1140,6 +1154,7 @@ class ProjectRunner {
         : 0;
       if (this.consecutiveFailures >= 10 && this.running) {
         log(`⚠️ ${this.consecutiveFailures} consecutive agent failures — auto-pausing (retry in 2h)`, this.id);
+        broadcastEvent({ type: 'error', project: this.id, message: `${this.consecutiveFailures} consecutive failures — auto-paused` });
         this.isPaused = true;
         this.pauseReason = `${this.consecutiveFailures} consecutive agent failures`;
         this.consecutiveFailures = 0;
@@ -1458,6 +1473,19 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // --- SSE endpoint ---
+  if (req.method === 'GET' && url.pathname === '/api/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    res.write('data: {"type":"connected"}\n\n');
+    sseClients.add(res);
+    req.on('close', () => sseClients.delete(res));
     return;
   }
 
