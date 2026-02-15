@@ -1325,32 +1325,32 @@ function App() {
                 {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
               </button>
               {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center">
-                  <Github className="w-3 h-3 mr-1.5" />
-                  GitHub
+                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="GitHub">
+                  <Github className="w-3.5 h-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">GitHub</span>
                 </a>
               )}
               {isWriteMode && (selectedProject.paused ? (
-                <button onClick={() => controlAction('resume')} className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium inline-flex items-center">
-                  <Play className="w-3 h-3 mr-1.5" />
-                  Resume
+                <button onClick={() => controlAction('resume')} className="px-2 sm:px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium inline-flex items-center" title="Resume">
+                  <Play className="w-3.5 h-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Resume</span>
                 </button>
               ) : (
-                <button onClick={() => controlAction('pause')} className="px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center">
-                  <Pause className="w-3 h-3 mr-1.5" />
-                  Pause
+                <button onClick={() => controlAction('pause')} className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="Pause">
+                  <Pause className="w-3.5 h-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Pause</span>
                 </button>
               ))}
-              {isWriteMode && <button onClick={openBootstrapModal} className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium inline-flex items-center">
-                <RotateCcw className="w-3 h-3 mr-1.5" />
-                Bootstrap
+              {isWriteMode && <button onClick={openBootstrapModal} className="px-2 sm:px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium inline-flex items-center" title="Bootstrap">
+                <RotateCcw className="w-3.5 h-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline">Bootstrap</span>
               </button>}
             </div>
           </div>
           
-          {/* Project tabs - horizontal scroll on mobile */}
+          {/* Project tabs - hidden on mobile */}
           {projects.length > 1 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto pb-1">
               {projects.map(project => (
                 <button
                   key={project.id}
