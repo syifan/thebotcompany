@@ -41,9 +41,28 @@ const projects = new Map(); // projectId -> ProjectRunner
 
 // --- SSE notification system ---
 const sseClients = new Set();
+const notifications = []; // In-memory notification store
+const MAX_NOTIFICATIONS = 200;
 
 function broadcastEvent(event) {
-  const data = JSON.stringify(event);
+  const messages = {
+    milestone: `📌 New milestone: ${event.title}`,
+    verified: `✅ Milestone verified: ${event.title}`,
+    'verify-fail': `❌ Verification failed: ${event.title}`,
+    phase: `🔄 Phase → ${event.phase}`,
+    error: `⚠️ ${event.message}`,
+  };
+  const notification = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    type: event.type,
+    project: event.project,
+    message: messages[event.type] || JSON.stringify(event),
+    timestamp: new Date().toISOString(),
+    read: false,
+  };
+  notifications.unshift(notification);
+  if (notifications.length > MAX_NOTIFICATIONS) notifications.length = MAX_NOTIFICATIONS;
+  const data = JSON.stringify({ ...event, notification });
   for (const client of sseClients) {
     client.write(`data: ${data}\n\n`);
   }
@@ -1473,6 +1492,29 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // --- Notifications API ---
+  if (req.method === 'GET' && url.pathname === '/api/notifications') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(notifications));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/notifications/read-all') {
+    for (const n of notifications) n.read = true;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (req.method === 'POST' && /^\/api\/notifications\/[^/]+\/read$/.test(url.pathname)) {
+    const id = url.pathname.split('/')[3];
+    const n = notifications.find(x => x.id === id);
+    if (n) n.read = true;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 

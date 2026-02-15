@@ -99,11 +99,28 @@ function App() {
   const [loginInput, setLoginInput] = useState('')
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('tbc_notifications') === 'true')
+  const [notifCenter, setNotifCenter] = useState(false)
+  const [notifList, setNotifList] = useState([])
 
   // Register service worker
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {})
+    }
+  }, [])
+
+  // Fetch notifications on mount + open center if redirected from push notification
+  useEffect(() => {
+    fetch('/api/notifications').then(r => r.json()).then(setNotifList).catch(() => {})
+    if (new URLSearchParams(window.location.search).has('notif')) {
+      setNotifCenter(true)
+      window.history.replaceState({}, '', '/')
+    }
+    // Listen for SW messages to open notification center
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data?.action === 'openNotifCenter') setNotifCenter(true)
+      })
     }
   }, [])
 
@@ -124,6 +141,10 @@ function App() {
         }
         const body = messages[event.type] || JSON.stringify(event)
         const tag = `tbc-${event.type}-${event.project}`
+        // Add to in-app notification list
+        if (event.notification) {
+          setNotifList(prev => [event.notification, ...prev].slice(0, 200))
+        }
         // Try service worker notification first (works on iOS PWA), fall back to Notification API
         if (navigator.serviceWorker && navigator.serviceWorker.controller) {
           navigator.serviceWorker.ready.then(reg => {
@@ -157,6 +178,18 @@ function App() {
       setNotificationsEnabled(false)
     }
   }
+  const markAllRead = () => {
+    fetch('/api/notifications/read-all', { method: 'POST' }).catch(() => {})
+    setNotifList(prev => prev.map(n => ({ ...n, read: true })))
+  }
+
+  const markRead = (id) => {
+    fetch(`/api/notifications/${id}/read`, { method: 'POST' }).catch(() => {})
+    setNotifList(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+  }
+
+  const unreadCount = notifList.filter(n => !n.read).length
+
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
@@ -912,11 +945,16 @@ function App() {
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={toggleNotifications}
-                  className={`px-2 py-1.5 rounded transition-colors ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
-                  title={notificationsEnabled ? 'Notifications on (click to disable)' : 'Notifications off (click to enable)'}
+                  onClick={() => setNotifCenter(true)}
+                  className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
+                  title="Notification Center"
                 >
-                  {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
@@ -1392,11 +1430,16 @@ function App() {
             {/* Right: Actions */}
             <div className="flex items-center gap-2 pl-8 sm:pl-0">
               <button
-                onClick={toggleNotifications}
-                className={`px-2 py-1.5 rounded transition-colors ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
-                title={notificationsEnabled ? 'Notifications on (click to disable)' : 'Notifications off (click to enable)'}
+                onClick={() => setNotifCenter(true)}
+                className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
+                title="Notification Center"
               >
-                {notificationsEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
@@ -2354,6 +2397,65 @@ function App() {
           </div>
         </ModalContent>
       </Modal>
+
+      {/* Notification Center */}
+      {notifCenter && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setNotifCenter(false)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div
+            className="relative w-full max-w-md h-full bg-white dark:bg-neutral-900 shadow-xl overflow-y-auto animate-in slide-in-from-right"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 p-4 flex items-center justify-between z-10">
+              <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Notifications</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleNotifications}
+                  className={`px-2 py-1 text-xs rounded ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-500'}`}
+                  title={notificationsEnabled ? 'Push notifications on' : 'Push notifications off'}
+                >
+                  {notificationsEnabled ? '🔔 Push On' : '🔕 Push Off'}
+                </button>
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">
+                    Mark all read
+                  </button>
+                )}
+                <button onClick={() => setNotifCenter(false)} className="p-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded">
+                  <X className="w-4 h-4 text-neutral-500" />
+                </button>
+              </div>
+            </div>
+            <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              {notifList.length === 0 ? (
+                <div className="p-8 text-center text-neutral-400 dark:text-neutral-500">
+                  <BellOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No notifications yet</p>
+                </div>
+              ) : notifList.map(n => (
+                <div
+                  key={n.id}
+                  className={`p-4 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
+                  onClick={() => markRead(n.id)}
+                >
+                  <div className="flex items-start gap-3">
+                    {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
+                    {n.read && <span className="mt-1.5 w-2 h-2 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm ${!n.read ? 'font-medium text-neutral-800 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-400'}`}>
+                        {n.message}
+                      </p>
+                      <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
+                        {n.project} · {new Date(n.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast notifications */}
       {toast && (

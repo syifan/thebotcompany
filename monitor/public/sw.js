@@ -14,13 +14,16 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Click notification to open/focus the app
+// Click notification to open/focus the app and open notification center
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     self.clients.matchAll({ type: 'window' }).then((clients) => {
-      if (clients.length > 0) return clients[0].focus();
-      return self.clients.openWindow('/');
+      if (clients.length > 0) {
+        clients[0].postMessage({ action: 'openNotifCenter' });
+        return clients[0].focus();
+      }
+      return self.clients.openWindow('/?notif=1');
     })
   );
 });
