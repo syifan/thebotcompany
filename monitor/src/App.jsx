@@ -102,6 +102,9 @@ function App() {
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [detailedNotifs, setDetailedNotifs] = useState(() => localStorage.getItem('tbc_detailed_notifs') === 'true')
+  const detailedNotifsRef = useRef(detailedNotifs)
+  useEffect(() => { detailedNotifsRef.current = detailedNotifs }, [detailedNotifs])
 
   // Register service worker
   useEffect(() => {
@@ -146,15 +149,18 @@ function App() {
         if (event.notification) {
           setNotifList(prev => [event.notification, ...prev].slice(0, 200))
         }
-        // Try service worker notification first (works on iOS PWA), fall back to Notification API
-        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.ready.then(reg => {
-            reg.showNotification('TheBotCompany', { body, tag, icon: '/icon-192.png' })
-          }).catch(() => {
-            if ('Notification' in window && Notification.permission === 'granted') new Notification('TheBotCompany', { body, tag })
-          })
-        } else if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('TheBotCompany', { body, tag })
+        // Send push notification (skip detailed events unless detailed mode is on)
+        const shouldPush = !(event.notification?.detailed) || detailedNotifsRef.current
+        if (shouldPush) {
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.ready.then(reg => {
+              reg.showNotification('TheBotCompany', { body, tag, icon: '/icon-192.png' })
+            }).catch(() => {
+              if ('Notification' in window && Notification.permission === 'granted') new Notification('TheBotCompany', { body, tag })
+            })
+          } else if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('TheBotCompany', { body, tag })
+          }
         }
       } catch {}
     }
@@ -983,6 +989,24 @@ function App() {
               className={`relative w-11 h-6 rounded-full transition-colors ${notificationsEnabled ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${notificationsEnabled ? 'translate-x-5' : ''}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between py-2 mt-1">
+            <div>
+              <span className="text-sm text-neutral-700 dark:text-neutral-300">Detailed Notifications</span>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                Push notification for every agent response
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const next = !detailedNotifs
+                setDetailedNotifs(next)
+                localStorage.setItem('tbc_detailed_notifs', String(next))
+              }}
+              className={`relative w-11 h-6 rounded-full transition-colors ${detailedNotifs ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${detailedNotifs ? 'translate-x-5' : ''}`} />
             </button>
           </div>
         </div>

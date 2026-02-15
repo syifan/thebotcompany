@@ -51,6 +51,7 @@ function broadcastEvent(event) {
     'verify-fail': `❌ Verification failed: ${event.title}`,
     phase: `🔄 Phase → ${event.phase}`,
     error: `⚠️ ${event.message}`,
+    'agent-done': `${event.success ? '✓' : '✗'} ${event.agent} finished${event.cost ? ` ($${event.cost})` : ''}`,
   };
   const notification = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -59,6 +60,7 @@ function broadcastEvent(event) {
     message: messages[event.type] || JSON.stringify(event),
     timestamp: new Date().toISOString(),
     read: false,
+    detailed: event.type === 'agent-done',
   };
   notifications.unshift(notification);
   if (notifications.length > MAX_NOTIFICATIONS) notifications.length = MAX_NOTIFICATIONS;
@@ -1376,6 +1378,7 @@ class ProjectRunner {
         }
 
         log(`${agent.name} done (code ${code})${tokenInfo}`, this.id);
+        broadcastEvent({ type: 'agent-done', project: this.id, agent: agent.name, success: code === 0 && !killedByTimeout, cost: cost ? cost.toFixed(4) : null });
         this.currentAgent = null;
         this.currentAgentProcess = null;
         this.currentAgentStartTime = null;
