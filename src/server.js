@@ -921,8 +921,14 @@ class ProjectRunner {
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
-          // Parse milestone from Athena's response
+          // Parse schedule and milestone from Athena's response
+          let schedule = null;
           if (result && result.resultText) {
+            schedule = this.parseSchedule(result.resultText);
+            if (schedule) {
+              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
+            }
+
             const milestoneMatch = result.resultText.match(/<!-- MILESTONE -->\s*([\s\S]*?)\s*<!-- \/MILESTONE -->/);
             if (milestoneMatch) {
               try {
@@ -934,8 +940,6 @@ class ProjectRunner {
                 this.isFixRound = false;
                 this.phase = 'implementation';
                 log(`New milestone (${this.milestoneCyclesBudget} cycles): ${this.milestoneDescription.slice(0, 100)}...`, this.id);
-
-                // Milestone is persisted in state.json and exposed via status API
               } catch (e) {
                 log(`Failed to parse milestone: ${e.message}`, this.id);
               }
@@ -949,6 +953,29 @@ class ProjectRunner {
               continue;
             }
           }
+
+          // Delay after Athena if requested
+          if (schedule && schedule.delay) {
+            await this.sleepDelay(schedule.delay, 'athena');
+          }
+
+          // Run Athena's scheduled workers (research, evaluation, review)
+          if (schedule && schedule.agents) {
+            for (const [name, value] of Object.entries(schedule.agents)) {
+              if (!this.running) break;
+              const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
+              if (!worker) continue;
+              while (this.isPaused && this.running) { await sleep(1000); }
+              const task = typeof value === 'string' ? value : value.task || null;
+              const wResult = await this.runAgent(worker, config, null, task);
+              cycleTotal++;
+              if (!wResult || !wResult.success) cycleFailures++;
+              // Per-agent delay
+              const agentDelay = typeof value === 'object' ? value.delay : null;
+              if (agentDelay) await this.sleepDelay(agentDelay, name);
+            }
+          }
+
           this.saveState();
         }
       }
