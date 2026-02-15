@@ -2,14 +2,17 @@
 self.addEventListener('install', (e) => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
-// Listen for push events
+// Listen for push events from server
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : { title: 'TheBotCompany', body: 'New event' };
+  // Check detailed preference from IndexedDB or just show all
+  // (filtering is done server-side in a future version; for now show all push events)
   event.waitUntil(
     self.registration.showNotification(data.title || 'TheBotCompany', {
       body: data.body,
       tag: data.tag || 'tbc-notification',
       icon: '/icon-192.png',
+      data: { detailed: data.detailed },
     })
   );
 });

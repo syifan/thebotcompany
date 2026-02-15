@@ -24,6 +24,7 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.2.4",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "web-push": "^3.6.7"
   }
 }

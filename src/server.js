@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
+import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,15 @@ const TBC_HOME_EARLY = process.env.TBC_HOME || path.join(process.env.HOME, '.the
 loadDotenv({ path: path.join(TBC_HOME_EARLY, '.env') });
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 const MONITOR_DIST = path.join(ROOT, 'monitor', 'dist');
+
+// --- Web Push (VAPID) ---
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@example.com';
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
+}
+const pushSubscriptions = new Map(); // endpoint -> subscription
 
 // --- Configuration ---
 const PORT = process.env.TBC_PORT || 3100;
@@ -67,6 +77,22 @@ function broadcastEvent(event) {
   const data = JSON.stringify({ ...event, notification });
   for (const client of sseClients) {
     client.write(`data: ${data}\n\n`);
+  }
+  // Web Push
+  if (VAPID_PUBLIC && pushSubscriptions.size > 0) {
+    const pushPayload = JSON.stringify({
+      title: `TBC: ${event.project || ''}`,
+      body: notification.message,
+      tag: `tbc-${event.type}-${event.project}`,
+      detailed: notification.detailed || false,
+    });
+    for (const [endpoint, sub] of pushSubscriptions) {
+      webpush.sendNotification(sub, pushPayload).catch(err => {
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          pushSubscriptions.delete(endpoint);
+        }
+      });
+    }
   }
 }
 const startTime = Date.now();
@@ -1496,6 +1522,50 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // --- VAPID public key ---
+  if (req.method === 'GET' && url.pathname === '/api/push/vapid-key') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ key: VAPID_PUBLIC || null }));
+    return;
+  }
+
+  // --- Push subscription ---
+  if (req.method === 'POST' && url.pathname === '/api/push/subscribe') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const sub = JSON.parse(body);
+        if (sub.endpoint) {
+          pushSubscriptions.set(sub.endpoint, sub);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        } else {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing endpoint' }));
+        }
+      } catch {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON' }));
+      }
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/push/unsubscribe') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { endpoint } = JSON.parse(body);
+        pushSubscriptions.delete(endpoint);
+      } catch {}
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
     return;
   }
 

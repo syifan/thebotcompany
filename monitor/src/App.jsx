@@ -167,24 +167,70 @@ function App() {
     return () => evtSource.close()
   }, [notificationsEnabled])
 
+  const subscribeToPush = async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const res = await fetch('/api/push/vapid-key')
+      const { key } = await res.json()
+      if (!key) return
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key,
+      })
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub.toJSON()),
+      })
+    } catch (e) {
+      console.warn('Push subscription failed:', e)
+    }
+  }
+
+  const unsubscribeFromPush = async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      if (sub) {
+        await fetch('/api/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        })
+        await sub.unsubscribe()
+      }
+    } catch {}
+  }
+
   const toggleNotifications = async () => {
-    if (!('Notification' in window)) {
+    if (!('Notification' in window) && !('serviceWorker' in navigator)) {
       alert('This browser does not support notifications')
       return
     }
     if (!notificationsEnabled) {
-      const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
-      if (perm !== 'granted') {
-        alert('Notification permission denied. Please enable in browser settings.')
-        return
+      if ('Notification' in window) {
+        const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+        if (perm !== 'granted') {
+          alert('Notification permission denied. Please enable in browser settings.')
+          return
+        }
       }
       localStorage.setItem('tbc_notifications', 'true')
       setNotificationsEnabled(true)
+      await subscribeToPush()
     } else {
       localStorage.setItem('tbc_notifications', 'false')
       setNotificationsEnabled(false)
+      await unsubscribeFromPush()
     }
   }
+
+  // Auto-subscribe on load if notifications were previously enabled
+  useEffect(() => {
+    if (notificationsEnabled && 'serviceWorker' in navigator) {
+      subscribeToPush()
+    }
+  }, [])
   const markAllRead = () => {
     fetch('/api/notifications/read-all', { method: 'POST' }).catch(() => {})
     setNotifList(prev => prev.map(n => ({ ...n, read: true })))
