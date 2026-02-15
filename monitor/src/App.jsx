@@ -778,7 +778,7 @@ function App() {
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
         {/* Row 1: Name + action buttons */}
         <div className="flex items-center justify-between">
-          <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}{agent.role && <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400 ml-1.5">({agent.role})</span>}</span>
+          <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}{agent.role && <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400 ml-1.5">({agent.role})</span>}{agent.reportsTo && <span className="text-xs font-normal text-neutral-400 dark:text-neutral-500 ml-1.5">→ {agent.reportsTo}</span>}</span>
           <div className="flex items-center gap-0.5">
             <button
               onClick={() => openAgentModal(agent.name)}
