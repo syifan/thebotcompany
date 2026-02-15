@@ -1398,7 +1398,7 @@ function App() {
                     {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
                   </div>
                   {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0 ml-auto">
                       <div className="w-24 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all ${
