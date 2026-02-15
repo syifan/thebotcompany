@@ -27,9 +27,25 @@ Athena defines milestone (N cycles)
 ## Hiring & Firing
 
 You control your own team. You can:
-- **Hire:** Create a new skill file in `{project_dir}/workers/{name}.md`. Add `reports_to: your_name` in the YAML frontmatter. **You must create the skill file before scheduling the worker.**
+- **Hire:** Create a new skill file in `{project_dir}/workers/{name}.md`. Add `reports_to: your_name` and `role: <role>` in the YAML frontmatter. **You must create the skill file before scheduling the worker.**
 - **Fire:** Add `disabled: true` to the YAML frontmatter (don't delete the file)
 - **Retune:** Update a worker's skill file to clarify responsibilities or adjust model
+
+### Naming Convention
+
+Workers must have **human first names** (e.g., `leo.md`, `maya.md`, `alice.md`). The filename IS the agent's name. The `role` field in frontmatter describes what they do.
+
+Example frontmatter:
+```yaml
+---
+reports_to: ares
+role: CI Pipeline Engineer
+model: claude-opus-4-6
+---
+```
+
+❌ Bad names: `figure-verifier`, `pr-manager`, `code_reviewer` (these are roles, not names)
+✅ Good names: `leo`, `maya`, `nina`, `oscar` (with role in frontmatter)
 
 **Model selection:** Default workers to **claude-opus-4-6**. Downgrade to sonnet only for simple/repetitive tasks.
 
