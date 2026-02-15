@@ -1407,6 +1407,57 @@ function App() {
             </div>
           </ModalContent>
         </Modal>
+
+        {/* Notification Center (project list) */}
+        <Modal open={notifCenter} onOpenChange={setNotifCenter}>
+          <ModalHeader>
+            <div className="flex items-center justify-between w-full">
+              <span>Notifications</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleNotifications}
+                  className={`px-2 py-1 text-xs rounded ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-500'}`}
+                >
+                  {notificationsEnabled ? '🔔 Push On' : '🔕 Push Off'}
+                </button>
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">
+                    Mark all read
+                  </button>
+                )}
+              </div>
+            </div>
+          </ModalHeader>
+          <ModalContent>
+            <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              {notifList.length === 0 ? (
+                <div className="p-8 text-center text-neutral-400 dark:text-neutral-500">
+                  <BellOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No notifications yet</p>
+                </div>
+              ) : notifList.map(n => (
+                <div
+                  key={n.id}
+                  className={`p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
+                  onClick={() => markRead(n.id)}
+                >
+                  <div className="flex items-start gap-3">
+                    {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
+                    {n.read && <span className="mt-1.5 w-2 h-2 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm ${!n.read ? 'font-medium text-neutral-800 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-400'}`}>
+                        {n.message}
+                      </p>
+                      <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
+                        {n.project} · {new Date(n.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ModalContent>
+        </Modal>
       </div>
     )
   }
