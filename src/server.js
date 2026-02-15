@@ -1548,15 +1548,18 @@ const server = http.createServer(async (req, res) => {
         }
         cmd += isPrivate ? ' --private' : ' --public';
         if (description) cmd += ` --description ${JSON.stringify(description)}`;
-        cmd += ' --clone';
-        
         // Create in TBC_HOME
         const repoId = `${owner || currentUser}/${name}`;
         const projectDir = path.join(TBC_HOME, 'dev', 'src', 'github.com', owner || currentUser, name);
         fs.mkdirSync(projectDir, { recursive: true });
         const repoDir = path.join(projectDir, 'repo');
         
-        execSync(cmd, { cwd: projectDir, encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
+        // Create the repo on GitHub (without --clone)
+        execSync(cmd, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
+        
+        // Clone into the 'repo' subdirectory
+        const cloneUrl = `https://github.com/${owner || currentUser}/${name}.git`;
+        execSync(`git clone ${cloneUrl} repo`, { cwd: projectDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, id: repoId, path: repoDir }));
