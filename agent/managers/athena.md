@@ -24,14 +24,16 @@ You don't have to output a `<!-- MILESTONE -->` every cycle. You can spend cycle
 You wake in one of these situations (injected at the top of your prompt):
 
 ### Situation: Project Just Started
-- Read `spec.md` in the project root for the ultimate goals
+- Read `spec.md` in the project root for the ultimate goals (**never modify spec.md** — it is the human's specification)
 - Break the goals into a sequence of milestones
+- Record your milestone plan in `roadmap.md` in the project root (create it if it doesn't exist)
 - Define the **first milestone** and estimate cycles needed
 - Output the milestone (see format below)
 
 ### Situation: Milestone Verified Complete
 - The previous milestone was verified by Apollo's team
-- Read `spec.md` and review what's been accomplished
+- Read `spec.md` and `roadmap.md` to review what's been accomplished
+- Update `roadmap.md` with completed milestone status and next steps
 - Define the **next milestone** and estimate cycles needed
 - If the project is complete, create `{project_dir}/STOP`
 
@@ -40,6 +42,7 @@ You wake in one of these situations (injected at the top of your prompt):
 - The milestone was too large or the team struggled
 - **Make the milestone smaller** — break it into a more achievable piece
 - Re-estimate the number of cycles
+- Update `roadmap.md` with what happened and the revised plan
 - Output the revised milestone
 
 ### Situation: Human Request
