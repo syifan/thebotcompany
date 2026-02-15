@@ -101,6 +101,7 @@ function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('tbc_notifications') === 'true')
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Register service worker
   useEffect(() => {
@@ -189,6 +190,62 @@ function App() {
   }
 
   const unreadCount = notifList.filter(n => !n.read).length
+
+  const settingsModal = (
+    <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+      <ModalHeader>Settings</ModalHeader>
+      <ModalContent>
+        {/* Display Section */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Display</h3>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Theme</span>
+            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700 rounded-lg p-0.5">
+              <button
+                onClick={() => setTheme('light')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'light' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
+              >
+                <Sun className="w-3.5 h-3.5 inline mr-1" />Light
+              </button>
+              <button
+                onClick={() => setTheme('dark')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'dark' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
+              >
+                <Moon className="w-3.5 h-3.5 inline mr-1" />Dark
+              </button>
+              <button
+                onClick={() => setTheme('system')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'system' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
+              >
+                <Monitor className="w-3.5 h-3.5 inline mr-1" />System
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Notifications Section */}
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="text-sm text-neutral-700 dark:text-neutral-300">Push Notifications</span>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                {!('Notification' in window) ? 'Not supported in this browser' :
+                 Notification.permission === 'denied' ? 'Blocked by browser — enable in settings' :
+                 'Get notified about milestones, verifications, and errors'}
+              </p>
+            </div>
+            <button
+              onClick={toggleNotifications}
+              className={`relative w-11 h-6 rounded-full transition-colors ${notificationsEnabled ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${notificationsEnabled ? 'translate-x-5' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </ModalContent>
+    </Modal>
+  )
 
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
@@ -945,7 +1002,7 @@ function App() {
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => { console.log('bell clicked'); setNotifCenter(true); }}
+                  onClick={() => setNotifCenter(true)}
                   className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
                   title="Notification Center"
                 >
@@ -964,13 +1021,12 @@ function App() {
                   {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                 </button>
                 <button
-                  onClick={cycleTheme}
+                  onClick={() => setSettingsOpen(true)}
                   className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                  title={`Theme: ${theme} (click to cycle)`}
+                  title="Settings"
                 >
-                  {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+                  <Settings className="w-4 h-4" />
                 </button>
-{/* uptime removed */}
               </div>
             </div>
           </div>
@@ -1408,24 +1464,17 @@ function App() {
           </ModalContent>
         </Modal>
 
+        {settingsModal}
         {/* Notification Center (project list) */}
         <Modal open={notifCenter} onClose={() => setNotifCenter(false)}>
           <ModalHeader>
             <div className="flex items-center justify-between w-full">
               <span>Notifications</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleNotifications}
-                  className={`px-2 py-1 text-xs rounded ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-500'}`}
-                >
-                  {notificationsEnabled ? '🔔 Push On' : '🔕 Push Off'}
+              {unreadCount > 0 && (
+                <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">
+                  Mark all read
                 </button>
-                {unreadCount > 0 && (
-                  <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">
-                    Mark all read
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           </ModalHeader>
           <ModalContent>
@@ -1500,11 +1549,11 @@ function App() {
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
               <button
-                onClick={cycleTheme}
+                onClick={() => setSettingsOpen(true)}
                 className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                title={`Theme: ${theme} (click to cycle)`}
+                title="Settings"
               >
-                {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
+                <Settings className="w-4 h-4" />
               </button>
               {repoUrl && (
                 <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="GitHub">
@@ -2449,24 +2498,17 @@ function App() {
         </ModalContent>
       </Modal>
 
+      {settingsModal}
       {/* Notification Center */}
       <Modal open={notifCenter} onClose={() => setNotifCenter(false)}>
         <ModalHeader>
           <div className="flex items-center justify-between w-full">
             <span>Notifications</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={toggleNotifications}
-                className={`px-2 py-1 text-xs rounded ${notificationsEnabled ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-500'}`}
-              >
-                {notificationsEnabled ? '🔔 Push On' : '🔕 Push Off'}
+            {unreadCount > 0 && (
+              <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">
+                Mark all read
               </button>
-              {unreadCount > 0 && (
-                <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">
-                  Mark all read
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </ModalHeader>
         <ModalContent>
