@@ -10,7 +10,8 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn, execSync } from 'child_process';
+import { spawn, execSync, execFileSync } from 'child_process';
+import crypto from 'crypto';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
 import { config as loadDotenv } from 'dotenv';
@@ -1422,22 +1423,96 @@ function serveStatic(req, res, urlPath) {
 // --- Basic Auth ---
 const TBC_PASSWORD = process.env.TBC_PASSWORD || null;
 
+// Rate limiting for failed auth attempts (per IP)
+const authAttempts = new Map(); // ip -> { count, resetAt }
+const AUTH_MAX_ATTEMPTS = 10;
+const AUTH_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function isRateLimited(req) {
+  if (!TBC_PASSWORD) return false;
+  const ip = req.socket.remoteAddress || 'unknown';
+  const entry = authAttempts.get(ip);
+  if (!entry) return false;
+  if (Date.now() > entry.resetAt) {
+    authAttempts.delete(ip);
+    return false;
+  }
+  return entry.count >= AUTH_MAX_ATTEMPTS;
+}
+
+function recordFailedAuth(req) {
+  const ip = req.socket.remoteAddress || 'unknown';
+  const entry = authAttempts.get(ip) || { count: 0, resetAt: Date.now() + AUTH_WINDOW_MS };
+  entry.count++;
+  authAttempts.set(ip, entry);
+}
+
+function clearFailedAuth(req) {
+  const ip = req.socket.remoteAddress || 'unknown';
+  authAttempts.delete(ip);
+}
+
+function safeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Compare against self to keep constant time, then return false
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 function isAuthenticated(req) {
   if (!TBC_PASSWORD) return true;
   const auth = req.headers.authorization;
   if (auth && auth.startsWith('Basic ')) {
     const decoded = Buffer.from(auth.slice(6), 'base64').toString();
     const [, pass] = decoded.split(':');
-    if (pass === TBC_PASSWORD) return true;
+    if (safeCompare(pass, TBC_PASSWORD)) {
+      clearFailedAuth(req);
+      return true;
+    }
   }
   return false;
 }
 
-function requireWrite(req, res) {
+function requireAuth(req, res) {
+  if (isRateLimited(req)) {
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Too many failed attempts. Try again later.' }));
+    return false;
+  }
   if (isAuthenticated(req)) return true;
+  recordFailedAuth(req);
   res.writeHead(403, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ error: 'Authentication required for write operations' }));
+  res.end(JSON.stringify({ error: 'Authentication required' }));
   return false;
+}
+
+function requireWrite(req, res) {
+  return requireAuth(req, res);
+}
+
+// --- Request body helper with size limit ---
+const MAX_BODY_SIZE = 1024 * 1024; // 1 MB
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new Error('Request body too large'));
+        return;
+      }
+      body += chunk;
+    });
+    req.on('end', () => resolve(body));
+    req.on('error', reject);
+  });
 }
 
 // --- HTTP API ---
@@ -1498,6 +1573,7 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/github/orgs - List GitHub orgs + current user
   if (req.method === 'GET' && url.pathname === '/api/github/orgs') {
+    if (!requireAuth(req, res)) return;
     try {
       const user = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
       let orgs = [];
@@ -1516,17 +1592,22 @@ const server = http.createServer(async (req, res) => {
 
   // GET /api/github/repos?owner=xxx - List repos for an owner
   if (req.method === 'GET' && url.pathname === '/api/github/repos') {
+    if (!requireAuth(req, res)) return;
     const owner = url.searchParams.get('owner');
     if (!owner) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Missing owner parameter' }));
       return;
     }
+    if (!/^[a-zA-Z0-9_.-]+$/.test(owner)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid owner format' }));
+      return;
+    }
     try {
-      const output = execSync(
-        `gh repo list ${owner} --json nameWithOwner,name,description --limit 100`,
-        { encoding: 'utf-8', timeout: 30000 }
-      );
+      const output = execFileSync('gh', [
+        'repo', 'list', owner, '--json', 'nameWithOwner,name,description', '--limit', '100'
+      ], { encoding: 'utf-8', timeout: 30000 });
       const repos = JSON.parse(output);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ repos }));
@@ -1540,9 +1621,8 @@ const server = http.createServer(async (req, res) => {
   // POST /api/github/create-repo - Create a new GitHub repo
   if (req.method === 'POST' && url.pathname === '/api/github/create-repo') {
     if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', () => {
+    try {
+      const body = await readBody(req);
       try {
         const { name, owner, isPrivate, description } = JSON.parse(body);
         if (!name) {
@@ -1550,31 +1630,33 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: 'Missing repo name' }));
           return;
         }
-        
-        // Get current user to check if owner is user or org
-        const currentUser = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
-        const isOrg = owner && owner !== currentUser;
-        
-        let cmd = `gh repo create`;
-        if (isOrg) {
-          cmd += ` ${owner}/${name}`;
-        } else {
-          cmd += ` ${name}`;
+        // Validate inputs to prevent command injection
+        const safeNameRe = /^[a-zA-Z0-9_.-]+$/;
+        if (!safeNameRe.test(name) || (owner && !safeNameRe.test(owner))) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid characters in name or owner' }));
+          return;
         }
-        cmd += isPrivate ? ' --private' : ' --public';
-        if (description) cmd += ` --description ${JSON.stringify(description)}`;
+
+        // Get current user to check if owner is user or org
+        const currentUser = execFileSync('gh', ['api', 'user', '--jq', '.login'], { encoding: 'utf-8', timeout: 15000 }).trim();
+        const isOrg = owner && owner !== currentUser;
+
+        const ghArgs = ['repo', 'create'];
+        ghArgs.push(isOrg ? `${owner}/${name}` : name);
+        ghArgs.push(isPrivate ? '--private' : '--public');
+        if (description) { ghArgs.push('--description', description); }
         // Create in TBC_HOME
         const repoId = `${owner || currentUser}/${name}`;
         const projectDir = path.join(TBC_HOME, 'dev', 'src', 'github.com', owner || currentUser, name);
         fs.mkdirSync(projectDir, { recursive: true });
         const repoDir = path.join(projectDir, 'repo');
-        
+
         // Create the repo on GitHub (without --clone)
-        execSync(cmd, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
-        
+        execFileSync('gh', ghArgs, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
+
         // Clone into the 'repo' subdirectory
-        const cloneUrl = `https://github.com/${owner || currentUser}/${name}.git`;
-        execSync(`git clone ${cloneUrl} repo`, { cwd: projectDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
+        execFileSync('git', ['clone', `https://github.com/${owner || currentUser}/${name}.git`, 'repo'], { cwd: projectDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, id: repoId, path: repoDir }));
@@ -1582,16 +1664,18 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    } catch (e) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
     return;
   }
 
   // POST /api/projects/clone - Clone a GitHub repo and check for spec.md
   if (req.method === 'POST' && url.pathname === '/api/projects/clone') {
     if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', async () => {
+    try {
+      const body = await readBody(req);
       try {
         const { url: repoUrl } = JSON.parse(body);
         if (!repoUrl) {
@@ -1624,7 +1708,7 @@ const server = http.createServer(async (req, res) => {
           }
         } else {
           try {
-            execSync(`git clone ${parsed.cloneUrl} repo`, {
+            execFileSync('git', ['clone', parsed.cloneUrl, 'repo'], {
               cwd: parsed.projectDir,
               encoding: 'utf-8',
               timeout: 120000,
@@ -1657,16 +1741,18 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    } catch (e) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
     return;
   }
 
   // POST /api/projects/add - Add a new project
   if (req.method === 'POST' && url.pathname === '/api/projects/add') {
     if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', () => {
+    try {
+      const body = await readBody(req);
       try {
         const { id, path: projectPath, spec, budgetPer24h } = JSON.parse(body);
         if (!id || !projectPath) {
@@ -1716,7 +1802,10 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       }
-    });
+    } catch (e) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
     return;
   }
 
@@ -1814,9 +1903,8 @@ const server = http.createServer(async (req, res) => {
     // PATCH /api/projects/:id/agents/:name - Update agent settings
     if (req.method === 'PATCH' && subPath.startsWith('agents/') && subPath.split('/')[1]) {
       const agentName = subPath.split('/')[1];
-      let body = '';
-      req.on('data', chunk => body += chunk);
-      req.on('end', () => {
+      try {
+        const body = await readBody(req);
         try {
           const { model } = JSON.parse(body);
           if (!model && model !== '') throw new Error('Missing model');
@@ -1871,7 +1959,10 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));
         }
-      });
+      } catch (e) {
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 
@@ -1886,19 +1977,17 @@ const server = http.createServer(async (req, res) => {
     // POST /api/projects/:id/config
     if (req.method === 'POST' && subPath === 'config') {
       if (!requireWrite(req, res)) return;
-      let body = '';
-      req.on('data', c => body += c);
-      req.on('end', () => {
-        try {
-          const { content } = JSON.parse(body);
-          runner.saveConfig(content);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true }));
-        } catch (e) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: e.message }));
-        }
-      });
+      try {
+        const body = await readBody(req);
+        const { content } = JSON.parse(body);
+        runner.saveConfig(content);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        const status = e.message === 'Request body too large' ? 413 : 400;
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 
@@ -2013,29 +2102,27 @@ const server = http.createServer(async (req, res) => {
     // POST /api/projects/:id/issues/create
     if (req.method === 'POST' && subPath === 'issues/create') {
       if (!requireWrite(req, res)) return;
-      let body = '';
-      req.on('data', c => body += c);
-      req.on('end', async () => {
-        try {
-          const { title, body: issueBody, creator, assignee, text } = JSON.parse(body);
-          // Support both new format (title/body/creator) and legacy (text)
-          if (title) {
-            const result = await runner.createIssue(title, issueBody, creator, assignee);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));
-          } else if (text) {
-            const lines = text.trim().split('\n');
-            const result = await runner.createIssue(lines[0], lines.slice(1).join('\n'), 'human');
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));
-          } else {
-            throw new Error('Missing title or text');
-          }
-        } catch (e) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: e.message }));
+      try {
+        const body = await readBody(req);
+        const { title, body: issueBody, creator, assignee, text } = JSON.parse(body);
+        // Support both new format (title/body/creator) and legacy (text)
+        if (title) {
+          const result = await runner.createIssue(title, issueBody, creator, assignee);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        } else if (text) {
+          const lines = text.trim().split('\n');
+          const result = await runner.createIssue(lines[0], lines.slice(1).join('\n'), 'human');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        } else {
+          throw new Error('Missing title or text');
         }
-      });
+      } catch (e) {
+        const status = e.message === 'Request body too large' ? 413 : 500;
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 
