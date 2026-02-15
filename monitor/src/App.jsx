@@ -191,62 +191,6 @@ function App() {
 
   const unreadCount = notifList.filter(n => !n.read).length
 
-  const settingsModal = (
-    <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-      <ModalHeader>Settings</ModalHeader>
-      <ModalContent>
-        {/* Display Section */}
-        <div className="mb-6">
-          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Display</h3>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-neutral-700 dark:text-neutral-300">Theme</span>
-            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700 rounded-lg p-0.5">
-              <button
-                onClick={() => setTheme('light')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'light' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
-              >
-                <Sun className="w-3.5 h-3.5 inline mr-1" />Light
-              </button>
-              <button
-                onClick={() => setTheme('dark')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'dark' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
-              >
-                <Moon className="w-3.5 h-3.5 inline mr-1" />Dark
-              </button>
-              <button
-                onClick={() => setTheme('system')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'system' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
-              >
-                <Monitor className="w-3.5 h-3.5 inline mr-1" />System
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Notifications Section */}
-        <div>
-          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <span className="text-sm text-neutral-700 dark:text-neutral-300">Push Notifications</span>
-              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-                {!('Notification' in window) ? 'Not supported in this browser' :
-                 (typeof Notification !== 'undefined' && Notification.permission === 'denied') ? 'Blocked by browser — enable in settings' :
-                 'Get notified about milestones, verifications, and errors'}
-              </p>
-            </div>
-            <button
-              onClick={toggleNotifications}
-              className={`relative w-11 h-6 rounded-full transition-colors ${notificationsEnabled ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${notificationsEnabled ? 'translate-x-5' : ''}`} />
-            </button>
-          </div>
-        </div>
-      </ModalContent>
-    </Modal>
-  )
-
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
@@ -990,6 +934,62 @@ function App() {
   }
 
   // Project listing page (when no project is selected)
+  const notifSupported = typeof window !== 'undefined' && 'Notification' in window
+  const notifPermission = notifSupported ? Notification.permission : 'default'
+
+  const settingsModal = (
+    <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+      <ModalHeader>Settings</ModalHeader>
+      <ModalContent>
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Display</h3>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Theme</span>
+            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700 rounded-lg p-0.5">
+              <button
+                onClick={() => setTheme('light')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'light' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
+              >
+                <Sun className="w-3.5 h-3.5 inline mr-1" />Light
+              </button>
+              <button
+                onClick={() => setTheme('dark')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'dark' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
+              >
+                <Moon className="w-3.5 h-3.5 inline mr-1" />Dark
+              </button>
+              <button
+                onClick={() => setTheme('system')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'system' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
+              >
+                <Monitor className="w-3.5 h-3.5 inline mr-1" />System
+              </button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="text-sm text-neutral-700 dark:text-neutral-300">Push Notifications</span>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                {!notifSupported ? 'Not supported in this browser' :
+                 notifPermission === 'denied' ? 'Blocked by browser — enable in settings' :
+                 'Get notified about milestones, verifications, and errors'}
+              </p>
+            </div>
+            <button
+              onClick={toggleNotifications}
+              className={`relative w-11 h-6 rounded-full transition-colors ${notificationsEnabled ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${notificationsEnabled ? 'translate-x-5' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </ModalContent>
+    </Modal>
+  )
+
   if (!selectedProject) {
     return (
       <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6">
