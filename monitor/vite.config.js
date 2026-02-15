@@ -16,6 +16,7 @@ export default defineConfig({
   server: {
     port: 5173,
     allowedHosts: true,  // Allow any host for dev tunnels
+    hmr: false,  // Disable HMR — causes reload loops through tunnels on Safari iOS
     proxy: {
       '/api': {
         target: 'http://localhost:3100',
