@@ -6,26 +6,8 @@ import { config as loadDotenv } from 'dotenv'
 // Load .env from ~/.thebotcompany/
 loadDotenv({ path: path.join(process.env.HOME, '.thebotcompany', '.env') })
 
-const basicAuthPlugin = () => ({
-  name: 'basic-auth',
-  configureServer(server) {
-    const password = process.env.TBC_PASSWORD
-    if (!password) return
-    server.middlewares.use((req, res, next) => {
-      const auth = req.headers.authorization
-      if (auth && auth.startsWith('Basic ')) {
-        const decoded = Buffer.from(auth.slice(6), 'base64').toString()
-        const [, pass] = decoded.split(':')
-        if (pass === password) return next()
-      }
-      res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="TheBotCompany"' })
-      res.end('Unauthorized')
-    })
-  }
-})
-
 export default defineConfig({
-  plugins: [react(), basicAuthPlugin()],
+  plugins: [react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
