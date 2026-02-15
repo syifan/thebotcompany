@@ -932,9 +932,7 @@ function App() {
                 >
                   {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <Monitor className="w-4 h-4" />}
                 </button>
-                <div className="text-xs sm:text-sm text-neutral-400 dark:text-neutral-500 shrink-0">
-                  {Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m
-                </div>
+{/* uptime removed */}
               </div>
             </div>
           </div>
