@@ -127,12 +127,15 @@ function App() {
   }, [notificationsEnabled])
 
   const toggleNotifications = async () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support notifications')
+      return
+    }
     if (!notificationsEnabled) {
-      if (Notification.permission === 'default') {
-        const perm = await Notification.requestPermission()
-        if (perm !== 'granted') return
-      } else if (Notification.permission === 'denied') {
-        return // can't enable if denied
+      const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+      if (perm !== 'granted') {
+        alert('Notification permission denied. Please enable in browser settings.')
+        return
       }
       localStorage.setItem('tbc_notifications', 'true')
       setNotificationsEnabled(true)

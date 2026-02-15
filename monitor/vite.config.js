@@ -18,6 +18,11 @@ export default defineConfig({
     allowedHosts: true,  // Allow any host for dev tunnels
     hmr: false,  // Disable HMR — causes reload loops through tunnels on Safari iOS
     proxy: {
+      '/api/events': {
+        target: 'http://localhost:3100',
+        changeOrigin: true,
+        headers: { 'Cache-Control': 'no-transform' },
+      },
       '/api': {
         target: 'http://localhost:3100',
         changeOrigin: true,
