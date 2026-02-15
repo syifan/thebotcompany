@@ -1409,7 +1409,7 @@ function App() {
         </Modal>
 
         {/* Notification Center (project list) */}
-        <Modal open={notifCenter} onOpenChange={setNotifCenter}>
+        <Modal open={notifCenter} onClose={() => setNotifCenter(false)}>
           <ModalHeader>
             <div className="flex items-center justify-between w-full">
               <span>Notifications</span>
@@ -2450,7 +2450,7 @@ function App() {
       </Modal>
 
       {/* Notification Center */}
-      <Modal open={notifCenter} onOpenChange={setNotifCenter}>
+      <Modal open={notifCenter} onClose={() => setNotifCenter(false)}>
         <ModalHeader>
           <div className="flex items-center justify-between w-full">
             <span>Notifications</span>
