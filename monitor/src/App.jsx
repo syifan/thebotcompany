@@ -151,7 +151,7 @@ function App() {
           navigator.serviceWorker.ready.then(reg => {
             reg.showNotification('TheBotCompany', { body, tag, icon: '/icon-192.png' })
           }).catch(() => {
-            if (Notification.permission === 'granted') new Notification('TheBotCompany', { body, tag })
+            if ('Notification' in window && Notification.permission === 'granted') new Notification('TheBotCompany', { body, tag })
           })
         } else if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('TheBotCompany', { body, tag })
@@ -231,7 +231,7 @@ function App() {
               <span className="text-sm text-neutral-700 dark:text-neutral-300">Push Notifications</span>
               <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
                 {!('Notification' in window) ? 'Not supported in this browser' :
-                 Notification.permission === 'denied' ? 'Blocked by browser — enable in settings' :
+                 (typeof Notification !== 'undefined' && Notification.permission === 'denied') ? 'Blocked by browser — enable in settings' :
                  'Get notified about milestones, verifications, and errors'}
               </p>
             </div>
