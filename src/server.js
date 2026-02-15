@@ -1385,7 +1385,7 @@ function serveStatic(req, res, urlPath) {
 // --- Basic Auth ---
 const TBC_PASSWORD = process.env.TBC_PASSWORD || null;
 
-function checkAuth(req, res) {
+function isAuthenticated(req) {
   if (!TBC_PASSWORD) return true;
   const auth = req.headers.authorization;
   if (auth && auth.startsWith('Basic ')) {
@@ -1393,14 +1393,18 @@ function checkAuth(req, res) {
     const [, pass] = decoded.split(':');
     if (pass === TBC_PASSWORD) return true;
   }
-  res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="TheBotCompany"' });
-  res.end('Unauthorized');
+  return false;
+}
+
+function requireWrite(req, res) {
+  if (isAuthenticated(req)) return true;
+  res.writeHead(403, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Authentication required for write operations' }));
   return false;
 }
 
 // --- HTTP API ---
 const server = http.createServer(async (req, res) => {
-  if (!checkAuth(req, res)) return;
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathParts = url.pathname.split('/').filter(Boolean);
@@ -1412,6 +1416,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // --- Auth status ---
+  if (req.method === 'GET' && url.pathname === '/api/auth') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ authenticated: isAuthenticated(req), passwordRequired: !!TBC_PASSWORD }));
     return;
   }
 
@@ -1436,6 +1447,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/reload') {
+    if (!requireWrite(req, res)) return;
     syncProjects();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, projectCount: projects.size }));
@@ -1485,6 +1497,7 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/github/create-repo - Create a new GitHub repo
   if (req.method === 'POST' && url.pathname === '/api/github/create-repo') {
+    if (!requireWrite(req, res)) return;
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
@@ -1530,6 +1543,7 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/projects/clone - Clone a GitHub repo and check for spec.md
   if (req.method === 'POST' && url.pathname === '/api/projects/clone') {
+    if (!requireWrite(req, res)) return;
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
@@ -1604,6 +1618,7 @@ const server = http.createServer(async (req, res) => {
 
   // POST /api/projects/add - Add a new project
   if (req.method === 'POST' && url.pathname === '/api/projects/add') {
+    if (!requireWrite(req, res)) return;
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
@@ -1825,6 +1840,7 @@ const server = http.createServer(async (req, res) => {
 
     // POST /api/projects/:id/config
     if (req.method === 'POST' && subPath === 'config') {
+      if (!requireWrite(req, res)) return;
       let body = '';
       req.on('data', c => body += c);
       req.on('end', () => {
@@ -1917,6 +1933,7 @@ const server = http.createServer(async (req, res) => {
     // POST /api/projects/:id/issues/:issueId/comments — add comment
     const commentPostMatch = req.method === 'POST' && subPath.match(/^issues\/(\d+)\/comments$/);
     if (commentPostMatch) {
+      if (!requireWrite(req, res)) return;
       try {
         const issueId = parseInt(commentPostMatch[1], 10);
         const body = await readBody(req);
@@ -1950,6 +1967,7 @@ const server = http.createServer(async (req, res) => {
 
     // POST /api/projects/:id/issues/create
     if (req.method === 'POST' && subPath === 'issues/create') {
+      if (!requireWrite(req, res)) return;
       let body = '';
       req.on('data', c => body += c);
       req.on('end', async () => {
@@ -1988,6 +2006,7 @@ const server = http.createServer(async (req, res) => {
 
     // GET /api/projects/:id/bootstrap - preview what bootstrap will do
     if (req.method === 'GET' && subPath === 'bootstrap') {
+      if (!requireWrite(req, res)) return;
       try {
         const result = runner.bootstrapPreview();
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2001,6 +2020,7 @@ const server = http.createServer(async (req, res) => {
 
     // POST /api/projects/:id/bootstrap - execute bootstrap
     if (req.method === 'POST' && subPath === 'bootstrap') {
+      if (!requireWrite(req, res)) return;
       try {
         fs.mkdirSync(runner.agentDir, { recursive: true });
         const result = runner.bootstrap();
@@ -2015,6 +2035,7 @@ const server = http.createServer(async (req, res) => {
 
     // POST /api/projects/:id/:action (pause, resume, skip, start, stop)
     if (req.method === 'POST' && ['pause', 'resume', 'skip', 'start', 'stop'].includes(subPath)) {
+      if (!requireWrite(req, res)) return;
       switch (subPath) {
         case 'pause': runner.pause(); break;
         case 'resume': runner.resume(); break;

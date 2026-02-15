@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown } from 'lucide-react'
+import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -93,6 +93,10 @@ function App() {
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
+  const [authPassword, setAuthPassword] = useState(() => localStorage.getItem('tbc_password') || '')
+  const [isWriteMode, setIsWriteMode] = useState(false)
+  const [loginModal, setLoginModal] = useState(false)
+  const [loginInput, setLoginInput] = useState('')
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
@@ -125,6 +129,46 @@ function App() {
   const cycleTheme = () => setTheme(t => t === 'light' ? 'dark' : t === 'dark' ? 'system' : 'light')
 
   const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
+
+  const authHeaders = () => {
+    if (!authPassword) return {}
+    return { 'Authorization': 'Basic ' + btoa(':' + authPassword) }
+  }
+
+  const authFetch = (url, opts = {}) => {
+    const headers = { ...opts.headers, ...authHeaders() }
+    return fetch(url, { ...opts, headers })
+  }
+
+  const checkAuth = async (password) => {
+    try {
+      const headers = password ? { 'Authorization': 'Basic ' + btoa(':' + password) } : {}
+      const res = await fetch('/api/auth', { headers })
+      const data = await res.json()
+      setIsWriteMode(data.authenticated)
+      return data.authenticated
+    } catch { return false }
+  }
+
+  useEffect(() => { checkAuth(authPassword) }, [])
+
+  const handleLogin = async () => {
+    const ok = await checkAuth(loginInput)
+    if (ok) {
+      setAuthPassword(loginInput)
+      localStorage.setItem('tbc_password', loginInput)
+      setLoginModal(false)
+      setLoginInput('')
+    } else {
+      setLoginInput('')
+    }
+  }
+
+  const handleLogout = () => {
+    setAuthPassword('')
+    setIsWriteMode(false)
+    localStorage.removeItem('tbc_password')
+  }
 
   const showToast = (message, type = 'error') => {
     setToast({ message, type })
@@ -217,7 +261,7 @@ function App() {
   const controlAction = async (action) => {
     if (!selectedProject) return
     try {
-      const res = await fetch(projectApi(`/${action}`), { method: 'POST' })
+      const res = await authFetch(projectApi(`/${action}`), { method: 'POST' })
       if (res.ok) await fetchGlobalStatus()
       else showToast(`Action "${action}" failed`)
     } catch (err) { showToast(`Action "${action}" failed: ${err.message}`) }
@@ -254,7 +298,7 @@ function App() {
         }
       }
       const yaml = lines.join('\n') + '\n'
-      const res = await fetch(projectApi('/config'), {
+      const res = await authFetch(projectApi('/config'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: yaml })
       })
@@ -354,7 +398,7 @@ function App() {
     if (!selectedProject) return
     setBootstrapModal(prev => ({ ...prev, executing: true, error: null }))
     try {
-      const res = await fetch(projectApi('/bootstrap'), { method: 'POST' })
+      const res = await authFetch(projectApi('/bootstrap'), { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false })
@@ -370,7 +414,7 @@ function App() {
     if (!createIssueModal.title.trim()) return
     setCreateIssueModal(prev => ({ ...prev, creating: true, error: null }))
     try {
-      const res = await fetch(projectApi('/issues/create'), {
+      const res = await authFetch(projectApi('/issues/create'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -408,7 +452,7 @@ function App() {
     if (!issueModal.issue || !issueModal.newComment?.trim()) return
     setIssueModal(prev => ({ ...prev, commenting: true }))
     try {
-      const res = await fetch(projectApi(`/issues/${issueModal.issue.id}/comments`), {
+      const res = await authFetch(projectApi(`/issues/${issueModal.issue.id}/comments`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ author: 'user', body: issueModal.newComment.trim() })
@@ -489,7 +533,7 @@ function App() {
     if (!newRepoName.trim()) return
     setAddProjectModal(prev => ({ ...prev, creatingRepo: true, error: null }))
     try {
-      const res = await fetch('/api/github/create-repo', {
+      const res = await authFetch('/api/github/create-repo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newRepoName.trim(), owner: selectedOrg, isPrivate: newRepoPrivate, description: newRepoDescription.trim() })
@@ -512,7 +556,7 @@ function App() {
     setAddProjectModal(prev => ({ ...prev, githubUrl: url }))
     // Trigger clone with this URL
     setAddProjectModal(prev => ({ ...prev, step: 'cloning', error: null, githubUrl: url }))
-    fetch('/api/projects/clone', {
+    authFetch('/api/projects/clone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
@@ -535,7 +579,7 @@ function App() {
     if (!url) return
     setAddProjectModal(prev => ({ ...prev, step: 'cloning', error: null }))
     try {
-      const res = await fetch('/api/projects/clone', {
+      const res = await authFetch('/api/projects/clone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
@@ -560,7 +604,7 @@ function App() {
       if (!hasSpec || updateSpec) {
         body.spec = { whatToBuild: whatToBuild.trim(), successCriteria: successCriteria.trim() }
       }
-      const res = await fetch('/api/projects/add', {
+      const res = await authFetch('/api/projects/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -569,7 +613,7 @@ function App() {
       if (!res.ok) throw new Error(data.error)
       // Bootstrap workspace
       try {
-        await fetch(`/api/projects/${projectId}/bootstrap`, { method: 'POST' })
+        await authFetch(`/api/projects/${projectId}/bootstrap`, { method: 'POST' })
       } catch {} // Best effort
       resetAddProjectModal()
       await fetchGlobalStatus()
@@ -808,6 +852,13 @@ function App() {
                 <p className="text-neutral-500 dark:text-neutral-400 text-sm mt-1 hidden sm:block">Multi-project AI Agent Orchestrator</p>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
+                  className={`px-2 py-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
+                  title={isWriteMode ? 'Write mode (click to lock)' : 'Read-only (click to unlock)'}
+                >
+                  {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                </button>
                 <button
                   onClick={cycleTheme}
                   className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
@@ -2157,6 +2208,28 @@ function App() {
           ) : (
             <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load issue</p>
           )}
+        </ModalContent>
+      </Modal>
+
+      {/* Login Modal */}
+      <Modal open={loginModal} onClose={() => { setLoginModal(false); setLoginInput('') }}>
+        <ModalHeader onClose={() => { setLoginModal(false); setLoginInput('') }}>
+          Unlock Write Mode
+        </ModalHeader>
+        <ModalContent>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-3">Enter password to enable write operations.</p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              className="flex-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 text-neutral-800 dark:text-neutral-100"
+              placeholder="Password"
+              value={loginInput}
+              onChange={(e) => setLoginInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              autoFocus
+            />
+            <Button onClick={handleLogin} disabled={!loginInput}>Unlock</Button>
+          </div>
         </ModalContent>
       </Modal>
 
