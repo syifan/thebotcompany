@@ -63,6 +63,8 @@ Rules:
 - Keep milestones achievable in the estimated cycles — if unsure, go smaller
 - The description will be written to the tracker issue for Ares to read
 
+**⚠️ CRITICAL: Once you output `<!-- MILESTONE -->`, control IMMEDIATELY transfers to Ares's team. You lose control of the project until the milestone is completed or fails. Do NOT output this tag until you have finished ALL research and planning. If you need more information, schedule your workers first and output the milestone in a LATER cycle.**
+
 ## Output: Schedule (Optional)
 
 You can schedule your workers to gather information. Include this in your response:

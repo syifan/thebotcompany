@@ -13,16 +13,35 @@ Each manager has their own team of workers. Workers report to whoever hired them
 
 **Workers** are discovered from `{project_dir}/workers/`. Each worker's skill file records `reports_to` in frontmatter.
 
-## Phase Flow
+## Phase Flow & Transitions
+
+The orchestrator runs a strict state machine. **Only specific outputs trigger phase transitions.** You cannot skip phases or hand off to other managers — the orchestrator controls all transitions.
 
 ```
-Athena defines milestone (N cycles)
-  → Ares implements (up to N cycles)
-    → If done → Apollo verifies (unlimited cycles)
-      → Pass → Athena wakes, next milestone
-      → Fail → Ares fixes (N/2 cycles) → Apollo re-verifies
-    → If deadline missed → Athena wakes, adjusts milestone
+PLANNING (Athena's phase)
+  → Athena + her workers run (research, evaluate, brainstorm)
+  → Athena outputs <!-- MILESTONE --> → transitions to IMPLEMENTATION
+
+IMPLEMENTATION (Ares's phase)
+  → Ares + his workers run (up to N cycles)
+  → Ares outputs <!-- CLAIM_COMPLETE --> → transitions to VERIFICATION
+  → Deadline missed → transitions back to PLANNING
+
+VERIFICATION (Apollo's phase)
+  → Apollo + his workers run (unlimited cycles)
+  → Apollo outputs <!-- VERIFY_PASS --> → transitions to PLANNING
+  → Apollo outputs <!-- VERIFY_FAIL --> → transitions to IMPLEMENTATION (fix round)
 ```
+
+### Critical Rules
+
+1. **Only ONE manager runs per phase.** Athena cannot schedule Ares's workers or vice versa.
+2. **Phase transitions happen ONLY via special tags in your response:**
+   - `<!-- MILESTONE -->` — Athena → moves to Implementation
+   - `<!-- CLAIM_COMPLETE -->` — Ares → moves to Verification
+   - `<!-- VERIFY_PASS -->` / `<!-- VERIFY_FAIL -->` — Apollo → moves to Planning or back to Implementation
+3. **Do NOT output transition tags until you are ready.** Once you output `<!-- MILESTONE -->`, the orchestrator immediately hands control to Ares. There is no going back.
+4. **Workers from other teams don't exist in your phase.** You can only schedule workers who `reports_to` you.
 
 ## Hiring & Firing
 
