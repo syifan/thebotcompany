@@ -890,7 +890,7 @@ function App() {
                         {project.repo && (
                           <a href={`https://github.com/${project.repo}`} target="_blank" rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="text-xs sm:text-sm text-blue-500 hover:underline truncate block">
+                            className="text-xs sm:text-sm text-blue-500 hover:underline truncate inline-block max-w-full">
                             {project.repo}
                           </a>
                         )}
