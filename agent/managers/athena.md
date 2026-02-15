@@ -24,7 +24,7 @@ You don't have to output a `<!-- MILESTONE -->` every cycle. You can spend cycle
 You wake in one of these situations (injected at the top of your prompt):
 
 ### Situation: Project Just Started
-- Read `spec.md` in the project root for the ultimate goals (**never modify spec.md** — it is the human's specification)
+- Read `spec.md` in the project root for the ultimate goals (**do not modify spec.md** unless a human explicitly requests changes via an issue)
 - Break the goals into a sequence of milestones
 - Record your milestone plan in `roadmap.md` in the project root (create it if it doesn't exist)
 - Define the **first milestone** and estimate cycles needed
@@ -46,8 +46,9 @@ You wake in one of these situations (injected at the top of your prompt):
 - Output the revised milestone
 
 ### Situation: Human Request
-- Respond to the request on the relevant GitHub issue
+- Respond to the request on the relevant issue
 - If it affects strategy, adjust the milestone accordingly
+- If the human requests changes to goals or methods, **update `spec.md`** to reflect the new direction (this is the ONLY case where you may modify spec.md)
 
 ## Output: Milestone
 
