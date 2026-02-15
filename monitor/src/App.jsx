@@ -1381,44 +1381,48 @@ function App() {
           <>
             {/* Phase Indicator */}
             {selectedProject.phase && (
-              <div className="mb-4 p-3 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">
-                    {selectedProject.phase === 'athena' ? '🧠' : selectedProject.phase === 'implementation' ? '🔨' : selectedProject.phase === 'verification' ? '✅' : '❓'}
-                  </span>
-                  <Badge variant={
-                    selectedProject.phase === 'athena' ? 'default' :
-                    selectedProject.phase === 'implementation' ? 'success' :
-                    selectedProject.phase === 'verification' ? 'warning' : 'secondary'
-                  } className="text-sm capitalize">
-                    {selectedProject.phase}
-                  </Badge>
-                  {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
-                </div>
-                {selectedProject.milestone && (
-                  <details className="flex-1 min-w-0 group">
-                    <summary className="text-sm text-neutral-600 dark:text-neutral-400 cursor-pointer hover:text-neutral-800 dark:hover:text-neutral-200 flex items-center gap-1 [&::-webkit-details-marker]:hidden list-none">
-                      <ChevronDown className="w-3.5 h-3.5 shrink-0 transition-transform group-open:rotate-180" />
-                      <span className="truncate">{selectedProject.milestone.length > 80 ? selectedProject.milestone.slice(0, 80) + '…' : selectedProject.milestone}</span>
-                    </summary>
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2 whitespace-pre-wrap pl-5">{selectedProject.milestone}</p>
-                  </details>
-                )}
-                {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="w-24 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.8 ? 'bg-red-500' :
-                          (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.5 ? 'bg-yellow-500' : 'bg-green-500'
-                        }`}
-                        style={{ width: `${Math.min(100, (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">
-                      {selectedProject.milestoneCyclesUsed}/{selectedProject.milestoneCyclesBudget} cycles
+              <div className="mb-4 p-4 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
+                {/* Row 1: Phase badge + progress */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">
+                      {selectedProject.phase === 'athena' ? '🧠' : selectedProject.phase === 'implementation' ? '🔨' : selectedProject.phase === 'verification' ? '✅' : '❓'}
                     </span>
+                    <Badge variant={
+                      selectedProject.phase === 'athena' ? 'default' :
+                      selectedProject.phase === 'implementation' ? 'success' :
+                      selectedProject.phase === 'verification' ? 'warning' : 'secondary'
+                    } className="text-sm capitalize">
+                      {selectedProject.phase === 'athena' ? 'Planning' : selectedProject.phase === 'implementation' ? 'Implementation' : selectedProject.phase === 'verification' ? 'Verification' : selectedProject.phase}
+                    </Badge>
+                    {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
                   </div>
+                  {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.8 ? 'bg-red-500' :
+                            (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.5 ? 'bg-yellow-500' : 'bg-green-500'
+                          }`}
+                          style={{ width: `${Math.min(100, (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">
+                        {selectedProject.milestoneCyclesUsed}/{selectedProject.milestoneCyclesBudget} cycles
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {/* Row 2: Milestone description */}
+                {selectedProject.milestone && (
+                  <details className="group">
+                    <summary className="text-sm text-neutral-700 dark:text-neutral-300 cursor-pointer hover:text-neutral-900 dark:hover:text-neutral-100 flex items-start gap-1.5 [&::-webkit-details-marker]:hidden list-none">
+                      <ChevronDown className="w-3.5 h-3.5 shrink-0 mt-0.5 transition-transform group-open:rotate-180 text-neutral-400" />
+                      <span className="line-clamp-1">{selectedProject.milestone}</span>
+                    </summary>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2 pl-5 whitespace-pre-wrap leading-relaxed">{selectedProject.milestone}</p>
+                  </details>
                 )}
               </div>
             )}
