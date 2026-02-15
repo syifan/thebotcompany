@@ -1311,6 +1311,13 @@ function App() {
             {/* Right: Actions */}
             <div className="flex items-center gap-2 pl-8 sm:pl-0">
               <button
+                onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
+                className={`px-2 py-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
+                title={isWriteMode ? 'Write mode (click to lock)' : 'Read-only (click to unlock)'}
+              >
+                {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              </button>
+              <button
                 onClick={cycleTheme}
                 className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
                 title={`Theme: ${theme} (click to cycle)`}
