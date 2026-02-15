@@ -1860,7 +1860,7 @@ function App() {
                 {/* Agent Skill - shown first and open by default */}
                 <details open>
                   <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">Agent Skill — {agentModal.agent}.md</summary>
-                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none max-h-[60vh] overflow-y-auto mt-1">
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none  mt-1">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
                   </div>
                 </details>
@@ -1868,7 +1868,7 @@ function App() {
                 {agentModal.data.roleRules && (
                 <details>
                   <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">{agentModal.data.isManager ? 'Manager' : 'Worker'} Rules — {agentModal.data.isManager ? 'manager' : 'worker'}.md</summary>
-                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none max-h-[60vh] overflow-y-auto mt-1">
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none  mt-1">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.roleRules}</ReactMarkdown>
                   </div>
                 </details>
@@ -1877,7 +1877,7 @@ function App() {
                 {agentModal.data.everyone && (
                 <details>
                   <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">Shared Rules — everyone.md</summary>
-                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none max-h-[60vh] overflow-y-auto mt-1">
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 text-sm prose prose-sm dark:prose-invert max-w-none  mt-1">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.everyone}</ReactMarkdown>
                   </div>
                 </details>
@@ -2178,7 +2178,7 @@ function App() {
 
               {/* Body */}
               {issueModal.issue.body && (
-                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 prose prose-sm prose-neutral dark:prose-invert max-w-none max-h-[40vh] overflow-y-auto">
+                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 prose prose-sm prose-neutral dark:prose-invert max-w-none ">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{issueModal.issue.body}</ReactMarkdown>
                 </div>
               )}
@@ -2188,7 +2188,7 @@ function App() {
                 <>
                   <Separator />
                   <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300">Comments ({issueModal.comments.length})</h3>
-                  <div className="space-y-3 max-h-[40vh] overflow-y-auto">
+                  <div className="space-y-3 ">
                     {issueModal.comments.map((comment) => (
                       <div key={comment.id} className="bg-neutral-50 dark:bg-neutral-900 rounded p-3">
                         <div className="flex items-center gap-2 mb-2">
