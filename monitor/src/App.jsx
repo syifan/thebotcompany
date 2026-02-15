@@ -100,6 +100,13 @@ function App() {
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('tbc_notifications') === 'true')
 
+  // Register service worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    }
+  }, [])
+
   // SSE connection for real-time notifications
   useEffect(() => {
     if (!notificationsEnabled) return
@@ -108,18 +115,24 @@ function App() {
       try {
         const event = JSON.parse(e.data)
         if (event.type === 'connected') return
-        if (Notification.permission === 'granted') {
-          const messages = {
-            milestone: `📌 New milestone: ${event.title}`,
-            verified: `✅ Milestone verified: ${event.title}`,
-            'verify-fail': `❌ Verification failed: ${event.title}`,
-            phase: `🔄 ${event.project}: → ${event.phase}`,
-            error: `⚠️ ${event.project}: ${event.message}`,
-          }
-          new Notification('TheBotCompany', {
-            body: messages[event.type] || JSON.stringify(event),
-            tag: `tbc-${event.type}-${event.project}`,
+        const messages = {
+          milestone: `📌 New milestone: ${event.title}`,
+          verified: `✅ Milestone verified: ${event.title}`,
+          'verify-fail': `❌ Verification failed: ${event.title}`,
+          phase: `🔄 ${event.project}: → ${event.phase}`,
+          error: `⚠️ ${event.project}: ${event.message}`,
+        }
+        const body = messages[event.type] || JSON.stringify(event)
+        const tag = `tbc-${event.type}-${event.project}`
+        // Try service worker notification first (works on iOS PWA), fall back to Notification API
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification('TheBotCompany', { body, tag, icon: '/icon-192.png' })
+          }).catch(() => {
+            if (Notification.permission === 'granted') new Notification('TheBotCompany', { body, tag })
           })
+        } else if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('TheBotCompany', { body, tag })
         }
       } catch {}
     }
