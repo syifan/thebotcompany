@@ -1382,38 +1382,37 @@ function App() {
             {/* Phase Indicator */}
             {selectedProject.phase && (
               <div className="mb-4 p-4 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
-                {/* Row 1: Phase badge + progress */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">
-                      {selectedProject.phase === 'athena' ? '🧠' : selectedProject.phase === 'implementation' ? '🔨' : selectedProject.phase === 'verification' ? '✅' : '❓'}
-                    </span>
-                    <Badge variant={
-                      selectedProject.phase === 'athena' ? 'default' :
-                      selectedProject.phase === 'implementation' ? 'success' :
-                      selectedProject.phase === 'verification' ? 'warning' : 'secondary'
-                    } className="text-sm capitalize">
-                      {selectedProject.phase === 'athena' ? 'Planning' : selectedProject.phase === 'implementation' ? 'Implementation' : selectedProject.phase === 'verification' ? 'Verification' : selectedProject.phase}
-                    </Badge>
-                    {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
-                  </div>
+                {/* Row 1: Phase badge */}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">
+                    {selectedProject.phase === 'athena' ? '🧠' : selectedProject.phase === 'implementation' ? '🔨' : selectedProject.phase === 'verification' ? '✅' : '❓'}
+                  </span>
+                  <Badge variant={
+                    selectedProject.phase === 'athena' ? 'default' :
+                    selectedProject.phase === 'implementation' ? 'success' :
+                    selectedProject.phase === 'verification' ? 'warning' : 'secondary'
+                  } className="text-sm capitalize">
+                    {selectedProject.phase === 'athena' ? 'Planning' : selectedProject.phase === 'implementation' ? 'Implementation' : selectedProject.phase === 'verification' ? 'Verification' : selectedProject.phase}
+                  </Badge>
+                  {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
                   {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
-                    <div className="flex items-center gap-2 shrink-0 ml-auto">
-                      <div className="w-24 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.8 ? 'bg-red-500' :
-                            (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.5 ? 'bg-yellow-500' : 'bg-green-500'
-                          }`}
-                          style={{ width: `${Math.min(100, (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">
-                        {selectedProject.milestoneCyclesUsed}/{selectedProject.milestoneCyclesBudget} cycles
-                      </span>
-                    </div>
+                    <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 ml-auto">
+                      {selectedProject.milestoneCyclesUsed}/{selectedProject.milestoneCyclesBudget} cycles
+                    </span>
                   )}
                 </div>
+                {/* Progress bar */}
+                {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
+                  <div className="w-full h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden mb-2">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.8 ? 'bg-red-500' :
+                        (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) > 0.5 ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min(100, (selectedProject.milestoneCyclesUsed / selectedProject.milestoneCyclesBudget) * 100)}%` }}
+                    />
+                  </div>
+                )}
                 {/* Row 2: Milestone description */}
                 {selectedProject.milestone && (
                   <details className="group">
