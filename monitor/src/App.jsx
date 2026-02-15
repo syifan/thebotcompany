@@ -900,9 +900,23 @@ function App() {
                     {/* Right: Status + Actions */}
                     <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
                       <div className="text-left sm:text-right">
-                        <Badge variant={project.paused ? 'warning' : project.running ? 'success' : project.sleeping ? 'secondary' : 'destructive'}>
-                          {project.paused ? 'Paused' : project.running ? (project.currentAgent || 'Running') : project.sleeping ? 'Sleeping' : 'Stopped'}
+                        <Badge variant={project.paused ? 'warning' : project.sleeping ? 'secondary' : project.currentAgent ? 'success' : project.running ? 'success' : 'destructive'}>
+                          {project.paused ? (project.pauseReason ? 'Paused' : 'Paused') 
+                            : project.sleeping ? '💤 Sleeping' 
+                            : project.currentAgent ? `▶ ${project.currentAgent}` 
+                            : project.running ? 'Running' 
+                            : 'Stopped'}
                         </Badge>
+                        {project.sleeping && project.sleepUntil && (
+                          <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5 font-mono">
+                            <SleepCountdown sleepUntil={project.sleepUntil} />
+                          </p>
+                        )}
+                        {project.currentAgent && project.currentAgentRuntime > 0 && (
+                          <p className="text-xs text-green-500 dark:text-green-400 mt-0.5 font-mono">
+                            {Math.floor(project.currentAgentRuntime / 60)}m {project.currentAgentRuntime % 60}s
+                          </p>
+                        )}
                         <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Cycle {project.cycleCount}</p>
                         {project.cost && project.cost.totalCost > 0 && (
                           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
