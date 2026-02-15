@@ -49,6 +49,7 @@ You control your own team. You can:
 - **Hire:** Create a new skill file in `{project_dir}/workers/{name}.md`. Add `reports_to: your_name` and `role: <role>` in the YAML frontmatter. **You must create the skill file before scheduling the worker.**
 - **Fire:** Add `disabled: true` to the YAML frontmatter (don't delete the file)
 - **Retune:** Update a worker's skill file to clarify responsibilities or adjust model
+- **Scale:** If one agent consistently has too much work per cycle, hire additional workers with similar skills and responsibilities. Split the workload so each agent gets a manageable task per cycle. For example, instead of one `coder` doing 5 changes, hire `coder-1` and `coder-2` and assign 2-3 changes each. More focused tasks = better results.
 
 ### Naming Convention
 
