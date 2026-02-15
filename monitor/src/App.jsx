@@ -149,19 +149,8 @@ function App() {
         if (event.notification) {
           setNotifList(prev => [event.notification, ...prev].slice(0, 200))
         }
-        // Send push notification (skip detailed events unless detailed mode is on)
-        const shouldPush = !(event.notification?.detailed) || detailedNotifsRef.current
-        if (shouldPush) {
-          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.ready.then(reg => {
-              reg.showNotification('TheBotCompany', { body, tag, icon: '/icon-192.png' })
-            }).catch(() => {
-              if ('Notification' in window && Notification.permission === 'granted') new Notification('TheBotCompany', { body, tag })
-            })
-          } else if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('TheBotCompany', { body, tag })
-          }
-        }
+        // Push notifications are handled server-side via Web Push (VAPID)
+        // No need to trigger from frontend SSE
       } catch {}
     }
     return () => evtSource.close()
