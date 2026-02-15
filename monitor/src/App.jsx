@@ -908,14 +908,14 @@ function App() {
                           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
                         )}
                       </div>
-                      <Button 
+                      {isWriteMode && <Button 
                         variant="ghost" 
                         size="sm" 
                         onClick={(e) => { e.stopPropagation(); removeProject(project.id) }}
                         className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </Button>
+                      </Button>}
                     </div>
                   </div>
                 </CardContent>
@@ -934,9 +934,9 @@ function App() {
               </Card>
             )}
 
-            <Button onClick={openAddProjectModal} className="w-full" variant="outline">
+            {isWriteMode && <Button onClick={openAddProjectModal} className="w-full" variant="outline">
               <Plus className="w-4 h-4 mr-2" /> Add Project
-            </Button>
+            </Button>}
           </div>
 
           <Footer />
@@ -1323,7 +1323,7 @@ function App() {
                   GitHub
                 </a>
               )}
-              {selectedProject.paused ? (
+              {isWriteMode && (selectedProject.paused ? (
                 <button onClick={() => controlAction('resume')} className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium inline-flex items-center">
                   <Play className="w-3 h-3 mr-1.5" />
                   Resume
@@ -1333,11 +1333,11 @@ function App() {
                   <Pause className="w-3 h-3 mr-1.5" />
                   Pause
                 </button>
-              )}
-              <button onClick={openBootstrapModal} className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium inline-flex items-center">
+              ))}
+              {isWriteMode && <button onClick={openBootstrapModal} className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium inline-flex items-center">
                 <RotateCcw className="w-3 h-3 mr-1.5" />
                 Bootstrap
-              </button>
+              </button>}
             </div>
           </div>
           
@@ -1630,13 +1630,13 @@ function App() {
                       <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
                         Reset
                       </button>
-                      <button 
+                      {isWriteMode && <button 
                         onClick={saveConfig} 
                         disabled={configSaving}
                         className="px-3 py-1.5 rounded text-xs font-medium inline-flex items-center bg-blue-500 hover:bg-blue-600 text-white"
                       >
                         <Save className="w-3 h-3 mr-1.5" />{configSaving ? '...' : 'Save'}
-                      </button>
+                      </button>}
                     </div>
                   )}
                 </CardContent>
@@ -1782,14 +1782,14 @@ function App() {
                     {issues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No issues</p>}
                   </div>
                   <Separator className="my-3 shrink-0" />
-                  <div className="shrink-0">
+                  {isWriteMode && <div className="shrink-0">
                     <Button 
                       onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}
                       className="w-full dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100"
                     >
                       Human Intervention (Create Issue)
                     </Button>
-                  </div>
+                  </div>}
                 </CardContent>
               </Card>
             </div>
@@ -2202,6 +2202,7 @@ function App() {
                 </>
               )}
               {/* Add Comment */}
+              {isWriteMode && <>
               <Separator />
               <div className="flex gap-2">
                 <textarea
@@ -2226,6 +2227,7 @@ function App() {
                   {issueModal.commenting ? '...' : 'Post'}
                 </Button>
               </div>
+              </>}
             </div>
           ) : (
             <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load issue</p>
