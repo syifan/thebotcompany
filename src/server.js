@@ -1446,10 +1446,15 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathParts = url.pathname.split('/').filter(Boolean);
   
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
+  // CORS: only allow requests from the same origin (the dashboard served by this server)
+  const origin = req.headers.origin;
+  const allowedOrigin = `http://localhost:${PORT}`;
+  if (origin === allowedOrigin || origin === `http://127.0.0.1:${PORT}`) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
