@@ -917,7 +917,10 @@ function App() {
                             {Math.floor(project.currentAgentRuntime / 60)}m {project.currentAgentRuntime % 60}s
                           </p>
                         )}
-                        <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Cycle {project.cycleCount}</p>
+                        <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Cycle {project.cycleCount}{project.phase ? ` · ${project.phase}` : ''}</p>
+                        {(project.milestoneTitle || project.milestone) && (
+                          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 truncate max-w-[200px] sm:max-w-[300px]">📌 {project.milestoneTitle || project.milestone}</p>
+                        )}
                         {project.cost && project.cost.totalCost > 0 && (
                           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
                         )}
