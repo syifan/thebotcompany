@@ -111,7 +111,7 @@ function App() {
 
   // Fetch notifications on mount + open center if redirected from push notification
   useEffect(() => {
-    fetch('/api/notifications').then(r => r.json()).then(setNotifList).catch(() => {})
+    fetch('/api/notifications').then(r => r.json()).then(d => setNotifList(Array.isArray(d) ? d : [])).catch(() => {})
     if (new URLSearchParams(window.location.search).has('notif')) {
       setNotifCenter(true)
       window.history.replaceState({}, '', '/')
