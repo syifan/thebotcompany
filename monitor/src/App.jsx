@@ -1449,7 +1449,7 @@ function App() {
                       {selectedProject.sleeping ? (
                         <Badge variant="secondary" className="flex items-center gap-1">
                           💤 Sleeping
-                          <button onClick={(e) => { e.stopPropagation(); controlAction('skip') }} className="ml-1 hover:text-red-500 cursor-pointer" title="Skip sleep">✕</button>
+                          {isWriteMode && <button onClick={(e) => { e.stopPropagation(); controlAction('skip') }} className="ml-1 hover:text-red-500 cursor-pointer" title="Skip sleep">✕</button>}
                         </Badge>
                       ) : (
                         <Badge variant="secondary">{selectedProject.currentAgent || 'None'}</Badge>
