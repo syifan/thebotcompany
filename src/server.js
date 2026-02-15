@@ -105,7 +105,6 @@ class ProjectRunner {
     this.verificationFeedback = null;
     this.isFixRound = false; // true when returning from failed verification
     this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
-    this._pendingWaitMs = 0; // One-time sleep override from manager WAIT tag
     this._repo = null;
   }
 
@@ -844,20 +843,18 @@ class ProjectRunner {
     }
   }
 
-  parseWait(resultText) {
-    // Parse <!-- WAIT -->{"minutes": N}<!-- /WAIT --> from manager response (max 120min)
-    const match = resultText.match(/<!--\s*WAIT\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/WAIT\s*-->/);
-    if (!match) return;
-    try {
-      const data = JSON.parse(match[1]);
-      const minutes = Math.min(Math.max(parseFloat(data.minutes) || 0, 0), 120);
-      if (minutes > 0) {
-        this._pendingWaitMs = Math.max(this._pendingWaitMs, minutes * 60000);
-        log(`Manager requested ${minutes}m wait`, this.id);
-      }
-    } catch (e) {
-      log(`Failed to parse WAIT tag: ${e.message}`, this.id);
+  async sleepDelay(minutes, label) {
+    const ms = Math.min(Math.max(parseFloat(minutes) || 0, 0), 120) * 60000;
+    if (ms <= 0) return;
+    log(`⏳ Waiting ${Math.round(ms / 60000)}m after ${label}...`, this.id);
+    this.sleepUntil = Date.now() + ms;
+    let slept = 0;
+    while (slept < ms && !this.wakeNow && this.running) {
+      await sleep(5000);
+      slept += 5000;
+      while (this.isPaused && !this.wakeNow && this.running) { await sleep(1000); }
     }
+    this.sleepUntil = null;
   }
 
   parseSchedule(resultText) {
@@ -979,10 +976,9 @@ class ProjectRunner {
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
-          // Parse schedule, wait request, and check for CLAIM_COMPLETE
+          // Parse schedule and check for CLAIM_COMPLETE
           let schedule = null;
           if (result && result.resultText) {
-            this.parseWait(result.resultText);
             schedule = this.parseSchedule(result.resultText);
             if (schedule) {
               log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
@@ -997,6 +993,11 @@ class ProjectRunner {
             }
           }
 
+          // Delay after manager if requested
+          if (schedule && schedule.delay) {
+            await this.sleepDelay(schedule.delay, 'ares');
+          }
+
           // Run Ares's scheduled workers
           if (schedule && schedule.agents) {
             for (const [name, value] of Object.entries(schedule.agents)) {
@@ -1008,6 +1009,9 @@ class ProjectRunner {
               const wResult = await this.runAgent(worker, config, null, task);
               cycleTotal++;
               if (!wResult || !wResult.success) cycleFailures++;
+              // Per-agent delay
+              const agentDelay = typeof value === 'object' ? value.delay : null;
+              if (agentDelay) await this.sleepDelay(agentDelay, name);
             }
           }
         }
@@ -1028,7 +1032,6 @@ class ProjectRunner {
           let schedule = null;
           let decision = null;
           if (result && result.resultText) {
-            this.parseWait(result.resultText);
             schedule = this.parseSchedule(result.resultText);
             if (schedule) {
               log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
@@ -1051,6 +1054,11 @@ class ProjectRunner {
             }
           }
 
+          // Delay after manager if requested
+          if (schedule && schedule.delay) {
+            await this.sleepDelay(schedule.delay, 'apollo');
+          }
+
           // Run Apollo's scheduled workers
           if (schedule && schedule.agents) {
             for (const [name, value] of Object.entries(schedule.agents)) {
@@ -1062,6 +1070,9 @@ class ProjectRunner {
               const wResult = await this.runAgent(worker, config, null, task);
               cycleTotal++;
               if (!wResult || !wResult.success) cycleFailures++;
+              // Per-agent delay
+              const agentDelay = typeof value === 'object' ? value.delay : null;
+              if (agentDelay) await this.sleepDelay(agentDelay, name);
             }
           }
 
@@ -1100,13 +1111,8 @@ class ProjectRunner {
         continue;
       }
 
-      // Compute sleep: budget-derived or fixed interval (with optional manager wait override)
-      let sleepMs = this.computeSleepInterval();
-      if (this._pendingWaitMs > 0) {
-        sleepMs = Math.max(sleepMs, this._pendingWaitMs);
-        log(`Manager requested wait: ${Math.round(this._pendingWaitMs / 60000)}m — overriding sleep`, this.id);
-        this._pendingWaitMs = 0;
-      }
+      // Compute sleep: budget-derived or fixed interval
+      const sleepMs = this.computeSleepInterval();
       this.lastComputedSleepMs = sleepMs; // Cache for status requests
       if (this.running) {
         log(`Sleeping ${Math.round(sleepMs / 1000)}s...`, this.id);

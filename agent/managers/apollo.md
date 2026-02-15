@@ -66,12 +66,14 @@ This sends the project back to Ares's team with your feedback. Be specific — v
 - **Every file must be checked.** If your team hasn't covered all relevant files, don't make a decision yet.
 - **Document everything.** Create issues for problems you find so there's a paper trail.
 
-## Optional: Request Wait
+## Delays
 
-If your verification team dispatched long-running checks (e.g., CI, test suites) and you need results before the next cycle:
+You can add delays after yourself or any worker in the schedule. Use this when waiting for CI or test results.
 
-<!-- WAIT -->
-{"minutes": 30}
-<!-- /WAIT -->
+<!-- SCHEDULE -->
+{"delay": 20, "agents":{"checker":{"task":"Verify CI output","delay":15}}}
+<!-- /SCHEDULE -->
 
-- Maximum 120 minutes. One-time override — next cycle reverts to normal scheduling.
+- Top-level `delay`: minutes to wait after YOU finish, before workers start
+- Per-agent `delay`: minutes to wait after THAT worker finishes
+- Maximum 120 minutes per delay

@@ -64,14 +64,15 @@ Rules:
 - Only schedule workers who report to you.
 - **ALWAYS use the <!-- SCHEDULE --> format. Never use code blocks.**
 
-## Optional: Request Wait
+## Delays
 
-If you dispatched long-running work (e.g., GitHub Actions CI, external builds) and need the orchestrator to wait before the next cycle, include:
+You can add delays after yourself or any worker in the schedule. Use this when waiting for CI, builds, or other async work.
 
-<!-- WAIT -->
-{"minutes": 30}
-<!-- /WAIT -->
+<!-- SCHEDULE -->
+{"delay": 20, "agents":{"leo":{"task":"Run CI tests","delay":30},"maya":{"task":"Check results"}}}
+<!-- /SCHEDULE -->
 
-- Maximum 120 minutes. Values above 120 are capped.
-- This is a one-time override — the next cycle reverts to normal scheduling.
-- Use this when workers kicked off jobs that need time to complete.
+- Top-level `delay`: minutes to wait after YOU (the manager) finish, before workers start
+- Per-agent `delay`: minutes to wait after THAT worker finishes, before the next one starts
+- Maximum 120 minutes per delay (values above are capped)
+- Omit `delay` for agents that don't need it
