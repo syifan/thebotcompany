@@ -1405,6 +1405,10 @@ class ProjectRunner {
             } else {
               reportBody = resultText.trim();
             }
+            // Prepend time log to all reports
+            const startTime = new Date(this.currentAgentStartTime).toLocaleString('sv-SE');
+            const endTime = new Date().toLocaleString('sv-SE');
+            reportBody = `> ⏱ Started: ${startTime} | Ended: ${endTime} | Duration: ${durationStr}\n\n${reportBody}`;
             const db = this.getDb();
             db.exec(`CREATE TABLE IF NOT EXISTS reports (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
