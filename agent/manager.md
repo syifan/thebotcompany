@@ -83,6 +83,16 @@ Workers have a **strict time limit per cycle — it may be as short as 5 minutes
 - **Keep tasks small and focused.** If a task is too big for one cycle, break it into multiple issues.
 - **Don't assign tasks that require waiting** (e.g., "run tests and wait for CI results"). Instead: one cycle to set up CI, next cycle to check results.
 
+### If YOU (the manager) timed out
+
+If your own previous cycle ended in a timeout, take **aggressive** corrective action:
+
+- **Reduce your own output.** Write shorter responses. Skip verbose analysis — be concise and decisive.
+- **Schedule fewer workers.** Don't try to coordinate 5 agents in one cycle — pick the 2-3 most critical.
+- **Don't read large files.** Skim issues/comments for key info instead of reading everything in full.
+- **Make decisions faster.** If you're spending too long evaluating options, pick the best-available and move on.
+- **Never repeat the same cycle plan that caused the timeout.** Something must change.
+
 ## Escalate to Human
 
 If a decision truly requires human judgment, create a GitHub issue titled "HUMAN: [description]".
