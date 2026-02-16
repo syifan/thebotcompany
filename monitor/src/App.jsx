@@ -1018,9 +1018,11 @@ function App() {
               <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{n.project}</span>
               <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto shrink-0">{timeAgo(n.timestamp)}</span>
             </div>
-            <p className={`text-sm mt-0.5 leading-relaxed ${!n.read ? 'text-neutral-700 dark:text-neutral-200' : 'text-neutral-500 dark:text-neutral-400'}`}>
-              {agentName ? (isLong && !expanded ? agentMsg.slice(0, 120) + '…' : agentMsg) : displayMsg}
-            </p>
+            <div className={`text-sm mt-0.5 leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 ${!n.read ? 'text-neutral-700 dark:text-neutral-200' : 'text-neutral-500 dark:text-neutral-400'}`}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {agentName ? (isLong && !expanded ? agentMsg.slice(0, 120) + '…' : agentMsg) : displayMsg}
+              </ReactMarkdown>
+            </div>
             {isLong && (
               <button className="text-xs text-blue-500 mt-1" onClick={(e) => { e.stopPropagation(); toggleNotifExpand(n.id) }}>
                 {expanded ? 'Show less' : 'Show more'}
