@@ -975,6 +975,54 @@ function App() {
   }
 
   // Project listing page (when no project is selected)
+  // Notification item component
+  const NotifItem = ({ n }) => {
+    const [expanded, setExpanded] = useState(false)
+    const typeIcons = { milestone: '📌', verified: '✅', 'verify-fail': '❌', phase: '🔄', error: '⚠️', 'agent-done': n.message?.startsWith('✗') ? '✗' : '✓' }
+    const icon = typeIcons[n.type] || '📋'
+    const isLong = n.message && n.message.length > 120
+    const displayMsg = isLong && !expanded ? n.message.slice(0, 120) + '…' : n.message
+
+    // Parse agent name from message (format: "✓ agentname: response" or "📌 title")
+    const agentMatch = n.type === 'agent-done' && n.message?.match(/^[✓✗]\s+(\S+?):\s(.+)$/s)
+    const agentName = agentMatch ? agentMatch[1] : null
+    const agentMsg = agentMatch ? agentMatch[2] : displayMsg
+
+    const timeAgo = (ts) => {
+      const diff = Date.now() - new Date(ts).getTime()
+      if (diff < 60000) return 'just now'
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+      return new Date(ts).toLocaleDateString()
+    }
+
+    return (
+      <div
+        className={`p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
+        onClick={() => { markRead(n.id); if (isLong) setExpanded(!expanded) }}
+      >
+        <div className="flex items-start gap-2.5">
+          <span className="mt-0.5 text-base shrink-0 w-5 text-center">{!n.read ? <span className="inline-block w-2 h-2 rounded-full bg-blue-500" /> : <span className="opacity-60">{icon}</span>}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              {agentName && <span className={`text-sm font-semibold ${!n.read ? 'text-neutral-800 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-300'}`}>{agentName}</span>}
+              <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{n.project}</span>
+              <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto shrink-0">{timeAgo(n.timestamp)}</span>
+            </div>
+            <p className={`text-sm mt-0.5 leading-relaxed ${!n.read ? 'text-neutral-700 dark:text-neutral-200' : 'text-neutral-500 dark:text-neutral-400'}`}>
+              {agentName ? (isLong && !expanded ? agentMsg.slice(0, 120) + '…' : agentMsg) : displayMsg}
+            </p>
+            {isLong && (
+              <button className="text-xs text-blue-500 mt-1" onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}>
+                {expanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const notifSupported = typeof window !== 'undefined' && 'Notification' in window
   const notifPermission = notifSupported ? Notification.permission : 'default'
 
@@ -1543,26 +1591,7 @@ function App() {
                   <BellOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p>No notifications yet</p>
                 </div>
-              ) : notifList.map(n => (
-                <div
-                  key={n.id}
-                  className={`p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
-                  onClick={() => markRead(n.id)}
-                >
-                  <div className="flex items-start gap-3">
-                    {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
-                    {n.read && <span className="mt-1.5 w-2 h-2 shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${!n.read ? 'font-medium text-neutral-800 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-400'}`}>
-                        {n.message}
-                      </p>
-                      <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
-                        {n.project} · {new Date(n.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              ) : notifList.map(n => <NotifItem key={n.id} n={n} />)}
             </div>
           </ModalContent>
         </Modal>
@@ -2577,26 +2606,7 @@ function App() {
                 <BellOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p>No notifications yet</p>
               </div>
-            ) : notifList.map(n => (
-              <div
-                key={n.id}
-                className={`p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
-                onClick={() => markRead(n.id)}
-              >
-                <div className="flex items-start gap-3">
-                  {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
-                  {n.read && <span className="mt-1.5 w-2 h-2 shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${!n.read ? 'font-medium text-neutral-800 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-400'}`}>
-                      {n.message}
-                    </p>
-                    <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
-                      {n.project} · {new Date(n.timestamp).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
+            ) : notifList.map(n => <NotifItem key={n.id} n={n} />)}
           </div>
         </ModalContent>
       </Modal>
