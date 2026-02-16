@@ -50,6 +50,7 @@ You control your own team. You can:
 - **Fire:** Add `disabled: true` to the YAML frontmatter (don't delete the file)
 - **Retune:** Update a worker's skill file to clarify responsibilities or adjust model
 - **Scale:** If one agent consistently has too much work per cycle, hire additional workers with similar skills and responsibilities. Split the workload so each agent gets a manageable task per cycle. For example, instead of one `coder` doing 5 changes, hire `coder-1` and `coder-2` and assign 2-3 changes each. More focused tasks = better results.
+- **Timeout recovery:** If a worker timed out in the previous cycle, you MUST take corrective action. Options: (1) break the task into smaller pieces, (2) hire additional workers to share the load, (3) clarify/simplify the worker's skill file to reduce scope, (4) add constraints like "limit changes to 3 files" or "focus on X only." Do NOT re-assign the same oversized task — that wastes another cycle.
 
 ### Naming Convention
 
