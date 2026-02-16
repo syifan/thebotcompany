@@ -27,7 +27,7 @@ function Modal({ open, onClose, children }) {
 function ModalHeader({ children, onClose }) {
   return (
     <div className="flex items-center justify-between p-4 border-b dark:border-neutral-700">
-      <h2 className="text-lg font-semibold dark:text-neutral-100">{children}</h2>
+      <h2 className="text-lg font-semibold dark:text-neutral-100 flex-1">{children}</h2>
       {onClose && (
         <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
