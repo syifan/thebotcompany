@@ -37,6 +37,16 @@ Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
 
 **Do NOT use GitHub Issues** — use `tbc-db issue-create` instead.
 
+## Time Management
+
+You have a **strict time limit** per cycle (often 1 hour or less). If you get killed by timeout, all unsaved work is lost.
+
+- **Commit early, commit often.** Don't wait until you're "done" — commit after each meaningful change. Partial progress > no progress.
+- **Never run long subprocesses directly.** Builds, test suites, simulations — anything that might take >5 minutes should go through GitHub Actions, not direct execution.
+- **Set timeouts on all commands.** Use `timeout 300 make build` or equivalent. Never run an unbounded command.
+- **If you need to run tests**, run a small subset or a single test file — not the full suite.
+- **Push your branch frequently** so work survives even if you're killed.
+
 ## Response Format
 
 Your final response should **briefly summarize what you completed**. Keep it concise — a few sentences or bullet points.

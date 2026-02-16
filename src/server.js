@@ -1306,6 +1306,10 @@ class ProjectRunner {
             log(`⏰ Timeout (${Math.floor(elapsed / 60000)}m elapsed, limit ${Math.floor(freshConfig.agentTimeoutMs / 60000)}m), killing ${agent.name}`, this.id);
             killedByTimeout = true;
             this.currentAgentProcess.kill('SIGTERM');
+            // Escalate to SIGKILL after 30s if still alive
+            setTimeout(() => {
+              try { this.currentAgentProcess?.kill('SIGKILL'); } catch {}
+            }, 30000);
             clearInterval(timeoutInterval);
           }
         }
@@ -1383,7 +1387,21 @@ class ProjectRunner {
               const errorMsg = killedByTimeout
                 ? `Killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`
                 : `Exited with code ${code}.`;
-              reportBody = `## ${errorType}\n\n${errorMsg}\n\n- Duration: ${durationStr}\n- Exit code: ${code}`;
+              // Capture partial work on timeout — check for uncommitted changes
+              let partialWork = '';
+              if (killedByTimeout) {
+                try {
+                  const repoDir = path.join(this.agentDir, 'repo');
+                  if (fs.existsSync(path.join(repoDir, '.git'))) {
+                    const diffStat = execSync('git diff --stat HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
+                    const stagedStat = execSync('git diff --stat --cached HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
+                    if (diffStat || stagedStat) {
+                      partialWork = `\n\n### Partial Work Detected\n\nUncommitted changes found in repo:\n\`\`\`\n${(stagedStat ? 'Staged:\n' + stagedStat + '\n' : '')}${(diffStat ? 'Unstaged:\n' + diffStat : '')}\n\`\`\``;
+                    }
+                  }
+                } catch {}
+              }
+              reportBody = `## ${errorType}\n\n${errorMsg}\n\n- Duration: ${durationStr}\n- Exit code: ${code}${partialWork}`;
             } else {
               reportBody = resultText.trim();
             }
