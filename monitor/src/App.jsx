@@ -102,6 +102,7 @@ function App() {
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [expandedNotifs, setExpandedNotifs] = useState(new Set())
   const [detailedNotifs, setDetailedNotifs] = useState(() => localStorage.getItem('tbc_detailed_notifs') === 'true')
   const detailedNotifsRef = useRef(detailedNotifs)
   useEffect(() => { detailedNotifsRef.current = detailedNotifs }, [detailedNotifs])
@@ -976,8 +977,16 @@ function App() {
 
   // Project listing page (when no project is selected)
   // Notification item component
+  const toggleNotifExpand = (id) => {
+    setExpandedNotifs(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
   const NotifItem = ({ n }) => {
-    const [expanded, setExpanded] = useState(false)
+    const expanded = expandedNotifs.has(n.id)
     const typeIcons = { milestone: '📌', verified: '✅', 'verify-fail': '❌', phase: '🔄', error: '⚠️', 'agent-done': n.message?.startsWith('✗') ? '✗' : '✓' }
     const icon = typeIcons[n.type] || '📋'
     const isLong = n.message && n.message.length > 120
@@ -999,7 +1008,7 @@ function App() {
     return (
       <div
         className={`p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
-        onClick={() => { markRead(n.id); if (isLong) setExpanded(!expanded) }}
+        onClick={() => { markRead(n.id); if (isLong) toggleNotifExpand(n.id) }}
       >
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 text-base shrink-0 w-5 text-center">{!n.read ? <span className="inline-block w-2 h-2 rounded-full bg-blue-500" /> : <span className="opacity-60">{icon}</span>}</span>
@@ -1013,7 +1022,7 @@ function App() {
               {agentName ? (isLong && !expanded ? agentMsg.slice(0, 120) + '…' : agentMsg) : displayMsg}
             </p>
             {isLong && (
-              <button className="text-xs text-blue-500 mt-1" onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}>
+              <button className="text-xs text-blue-500 mt-1" onClick={(e) => { e.stopPropagation(); toggleNotifExpand(n.id) }}>
                 {expanded ? 'Show less' : 'Show more'}
               </button>
             )}
