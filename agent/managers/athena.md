@@ -37,6 +37,7 @@ You MUST maintain `roadmap.md` in the project root. This is the living document 
 
 - **Create it** on the first cycle if it doesn't exist
 - **Update it** every time you wake — mark completed milestones, adjust upcoming ones
+- **Commit and push it** every time you update it — `git add roadmap.md && git commit -m "Update roadmap" && git push`
 - **Record lessons learned** — what worked, what didn't, what to do differently
 - **If a milestone cannot be achieved**, don't just retry it. Adjust the current milestone AND all sibling milestones. Re-scope, re-order, or break them further. The roadmap is a living plan, not a fixed contract.
 - **Budget honestly.** If you consistently underestimate cycles, increase your estimates. Track how many cycles milestones actually take vs. estimates.
