@@ -52,6 +52,27 @@ You control your own team. You can:
 - **Scale:** If one agent consistently has too much work per cycle, hire additional workers with similar skills and responsibilities. Split the workload so each agent gets a manageable task per cycle. For example, instead of one `coder` doing 5 changes, hire `coder-1` and `coder-2` and assign 2-3 changes each. More focused tasks = better results.
 - **Timeout recovery:** If a worker timed out in the previous cycle, you MUST take corrective action. Options: (1) break the task into smaller pieces, (2) hire additional workers to share the load, (3) clarify/simplify the worker's skill file to reduce scope, (4) add constraints like "limit changes to 3 files" or "focus on X only." Do NOT re-assign the same oversized task — that wastes another cycle.
 
+### Worker Visibility
+
+You can control what each worker sees by adding `visibility` to your SCHEDULE:
+
+```json
+{"agents": {
+  "leo": {"task": "Fix bug in cache.go — see issue #42", "visibility": "focused"},
+  "maya": {"task": "Review the training loop for correctness", "visibility": "blind"}
+}}
+```
+
+**Three levels:**
+- **`full`** (default): Worker can see all issues, comments, and reports via `tbc-db`
+- **`focused`**: Worker can only see issues mentioned in the task (e.g., `#42`). All other issues are hidden. Good for keeping workers on-task without distractions.
+- **`blind`**: Worker cannot access the tracker at all. They only see the task description and the repo code. Good for independent verification — the worker must evaluate on their own without seeing prior discussion.
+
+**When to use each:**
+- Use `full` for general implementation and coordination tasks
+- Use `focused` when you want a worker to concentrate on specific issues without seeing the full backlog
+- Use `blind` for verification, independent code review, or when fresh perspective matters
+
 ### Naming Convention
 
 Workers must have **human first names** (e.g., `leo.md`, `maya.md`, `alice.md`). The filename IS the agent's name. The `role` field in frontmatter describes what they do.

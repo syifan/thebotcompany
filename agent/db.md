@@ -65,3 +65,12 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 | `comments` | id, issue_id, author, body, created_at |
 | `agents` | id, name, role, reports_to, model, disabled |
 | `milestones` | id, description, cycles_budget, cycles_used, phase, status |
+
+## Visibility
+
+Your access to the tracker may be restricted by your manager:
+- **Full**: You can access everything
+- **Focused**: You can only access specific issues assigned to you
+- **Blind**: You cannot access the tracker — focus on the repo code and your task
+
+If you get "Access denied", respect the restriction and work with what you have.

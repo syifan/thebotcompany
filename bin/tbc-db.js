@@ -70,6 +70,20 @@ db.exec(`
 const command = process.argv[2];
 const args = process.argv.slice(3);
 
+// --- Visibility enforcement ---
+const visibility = process.env.TBC_VISIBILITY || 'full';
+const focusedIssues = (process.env.TBC_FOCUSED_ISSUES || '').split(',').map(s => s.trim()).filter(Boolean);
+
+if (visibility === 'blind') {
+  // Blind agents cannot use tbc-db at all (except issue-create for escalation)
+  if (command && command !== 'issue-create') {
+    console.error('Access denied: you are in blind mode and cannot query the tracker.');
+    process.exit(1);
+  }
+}
+
+// For focused mode, we filter after query execution (see below)
+
 function jsonOut(data) {
   console.log(JSON.stringify(data, null, 2));
 }
@@ -136,6 +150,11 @@ const commands = {
     if (values.label) {
       query += ' AND labels LIKE ?'; params.push(`%${values.label}%`);
     }
+    // Focused mode: only show issues in the focused set
+    if (visibility === 'focused' && focusedIssues.length > 0) {
+      query += ` AND id IN (${focusedIssues.map(() => '?').join(',')})`;
+      params.push(...focusedIssues);
+    }
     query += ' ORDER BY id DESC';
     const rows = db.prepare(query).all(...params);
     if (values.json) {
@@ -153,6 +172,10 @@ const commands = {
   'issue-view'() {
     const id = args[0];
     if (!id) { console.error('Usage: tbc-db issue-view <id>'); process.exit(1); }
+    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(id))) {
+      console.error(`Access denied: issue #${id} is not in your focused set.`);
+      process.exit(1);
+    }
     const issue = db.prepare('SELECT * FROM issues WHERE id = ?').get(id);
     if (!issue) { console.error(`Issue #${id} not found`); process.exit(1); }
     console.log(`# Issue #${issue.id}: ${issue.title}`);
@@ -220,6 +243,10 @@ const commands = {
       console.error('Usage: tbc-db comment --issue <id> --author agent_name --body "..."');
       process.exit(1);
     }
+    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(values.issue))) {
+      console.error(`Access denied: issue #${values.issue} is not in your focused set.`);
+      process.exit(1);
+    }
     const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.issue, values.author, values.body, new Date().toISOString());
     db.prepare("UPDATE issues SET updated_at = ? WHERE id = ?").run(new Date().toISOString(), values.issue);
     console.log(`Added comment #${result.lastInsertRowid} to issue #${values.issue}`);
@@ -228,6 +255,10 @@ const commands = {
   'comments'() {
     const id = args[0];
     if (!id) { console.error('Usage: tbc-db comments <issue_id>'); process.exit(1); }
+    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(id))) {
+      console.error(`Access denied: issue #${id} is not in your focused set.`);
+      process.exit(1);
+    }
     const comments = db.prepare('SELECT * FROM comments WHERE issue_id = ? ORDER BY created_at').all(id);
     for (const c of comments) {
       console.log(`[${c.author}] (${c.created_at}):`);

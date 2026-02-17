@@ -923,6 +923,19 @@ class ProjectRunner {
   }
 
   parseSchedule(resultText) {
+    // Helper: parse visibility from schedule entry
+    _parseVisibility(value, task) {
+      const visMode = typeof value === 'object' ? value.visibility : undefined;
+      if (!visMode || visMode === 'full') return null;
+      if (visMode === 'blind') return { mode: 'blind', issues: [] };
+      if (visMode === 'focused') {
+        // Extract issue IDs from task text (e.g., "#42", "issue #7")
+        const issueIds = (task || '').match(/#(\d+)/g)?.map(m => m.slice(1)) || [];
+        return { mode: 'focused', issues: issueIds };
+      }
+      return null;
+    }
+
     // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Ares's response
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
@@ -1034,7 +1047,8 @@ class ProjectRunner {
               if (!worker) continue;
               while (this.isPaused && this.running) { await sleep(1000); }
               const task = typeof value === 'string' ? value : value.task || null;
-              const wResult = await this.runAgent(worker, config, null, task);
+              const vis = this._parseVisibility(value, task);
+              const wResult = await this.runAgent(worker, config, null, task, vis);
               cycleTotal++;
               if (!wResult || !wResult.success) cycleFailures++;
               // Per-agent delay
@@ -1101,7 +1115,8 @@ class ProjectRunner {
               if (!worker) continue;
               while (this.isPaused && this.running) { await sleep(1000); }
               const task = typeof value === 'string' ? value : value.task || null;
-              const wResult = await this.runAgent(worker, config, null, task);
+              const vis = this._parseVisibility(value, task);
+              const wResult = await this.runAgent(worker, config, null, task, vis);
               cycleTotal++;
               if (!wResult || !wResult.success) cycleFailures++;
               // Per-agent delay
@@ -1162,7 +1177,8 @@ class ProjectRunner {
               if (!worker) continue;
               while (this.isPaused && this.running) { await sleep(1000); }
               const task = typeof value === 'string' ? value : value.task || null;
-              const wResult = await this.runAgent(worker, config, null, task);
+              const vis = this._parseVisibility(value, task);
+              const wResult = await this.runAgent(worker, config, null, task, vis);
               cycleTotal++;
               if (!wResult || !wResult.success) cycleFailures++;
               // Per-agent delay
@@ -1231,7 +1247,7 @@ class ProjectRunner {
     }
   }
 
-  async runAgent(agent, config, mode = null, task = null) {
+  async runAgent(agent, config, mode = null, task = null, visibility = null) {
     this.currentAgent = agent.name;
     this.currentAgentStartTime = Date.now();
     const modeStr = mode ? ` [${mode}]` : '';
@@ -1259,8 +1275,19 @@ class ProjectRunner {
       try {
         const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
         sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
-        const dbPath = path.join(ROOT, 'agent', 'db.md');
-        try { sharedRules += fs.readFileSync(dbPath, 'utf-8') + '\n\n---\n\n'; } catch {}
+        const visMode = visibility?.mode || 'full';
+        if (visMode !== 'blind') {
+          const dbPath = path.join(ROOT, 'agent', 'db.md');
+          try {
+            let dbContent = fs.readFileSync(dbPath, 'utf-8');
+            if (visMode === 'focused') {
+              dbContent += `\n\n> **Visibility: Focused** — You can only access issues: ${visibility?.issues?.join(', ') || 'none specified'}. Other issues are restricted.\n`;
+            }
+            sharedRules += dbContent + '\n\n---\n\n';
+          } catch {}
+        } else {
+          sharedRules += '\n> **You are in blind mode.** You cannot access the issue tracker (tbc-db). Focus only on the task described above and the repository code.\n\n---\n\n';
+        }
         const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
         sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
       } catch {}
@@ -1289,7 +1316,13 @@ class ProjectRunner {
       this.currentAgentProcess = spawn('claude', args, {
         cwd: this.path,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'cli', TBC_DB: path.join(this.agentDir, 'project.db') }
+        env: {
+          ...process.env,
+          CLAUDE_CODE_ENTRYPOINT: 'cli',
+          TBC_DB: path.join(this.agentDir, 'project.db'),
+          TBC_VISIBILITY: visibility?.mode || 'full',
+          TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
+        }
       });
 
       let stdout = '';
