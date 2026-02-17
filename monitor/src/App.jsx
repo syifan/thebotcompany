@@ -71,6 +71,9 @@ function App() {
   const [logs, setLogs] = useState([])
   const [agents, setAgents] = useState({ workers: [], managers: [] })
   const [config, setConfig] = useState({ config: null, raw: '' })
+  const [hasProjectToken, setHasProjectToken] = useState(false)
+  const [projectTokenInput, setProjectTokenInput] = useState('')
+  const [projectTokenSaving, setProjectTokenSaving] = useState(false)
   const [configForm, setConfigForm] = useState({
     cycleIntervalMs: 1800000, agentTimeoutMs: 900000,
     trackerIssue: 1, budgetPer24h: 0
@@ -103,6 +106,9 @@ function App() {
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [hasGlobalToken, setHasGlobalToken] = useState(false)
+  const [globalTokenInput, setGlobalTokenInput] = useState('')
+  const [tokenSaving, setTokenSaving] = useState(false)
   const [expandedNotifs, setExpandedNotifs] = useState(new Set())
   const [detailedNotifs, setDetailedNotifs] = useState(() => localStorage.getItem('tbc_detailed_notifs') === 'true')
   const detailedNotifsRef = useRef(detailedNotifs)
@@ -115,8 +121,9 @@ function App() {
     }
   }, [])
 
-  // Fetch notifications on mount + open center if redirected from push notification
+  // Fetch settings + notifications on mount
   useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then(d => setHasGlobalToken(!!d.hasGlobalToken)).catch(() => {})
     fetch('/api/notifications').then(r => r.json()).then(d => setNotifList(Array.isArray(d) ? d : [])).catch(() => {})
     if (new URLSearchParams(window.location.search).has('notif')) {
       setNotifCenter(true)
@@ -372,6 +379,7 @@ function App() {
       
       const configData = await configRes.json()
       setConfig(configData)
+      setHasProjectToken(!!configData.hasProjectToken)
       if (!configDirtyRef.current && configData.config) {
         setConfigForm({
           cycleIntervalMs: configData.config.cycleIntervalMs ?? 1800000,
@@ -1103,6 +1111,73 @@ function App() {
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${detailedNotifs ? 'translate-x-5' : ''}`} />
             </button>
+          </div>
+        </div>
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Authentication</h3>
+          <div className="py-2">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <span className="text-sm text-neutral-700 dark:text-neutral-300">Claude Setup Token</span>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                  {hasGlobalToken ? '✓ Global token is set' : 'No global token — agents use OAuth login'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                placeholder={hasGlobalToken ? '••••••••' : 'Paste setup token...'}
+                value={globalTokenInput}
+                onChange={e => setGlobalTokenInput(e.target.value)}
+                className="flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+              />
+              <button
+                onClick={async () => {
+                  setTokenSaving(true)
+                  try {
+                    const res = await authFetch('/api/settings/token', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ token: globalTokenInput })
+                    })
+                    if (res.ok) {
+                      const d = await res.json()
+                      setHasGlobalToken(d.hasGlobalToken)
+                      setGlobalTokenInput('')
+                      setToast('Global token updated')
+                    }
+                  } catch {}
+                  setTokenSaving(false)
+                }}
+                disabled={tokenSaving || !globalTokenInput}
+                className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+              >
+                {tokenSaving ? 'Saving...' : 'Save'}
+              </button>
+              {hasGlobalToken && (
+                <button
+                  onClick={async () => {
+                    setTokenSaving(true)
+                    try {
+                      const res = await authFetch('/api/settings/token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: '' })
+                      })
+                      if (res.ok) {
+                        setHasGlobalToken(false)
+                        setToast('Global token removed')
+                      }
+                    } catch {}
+                    setTokenSaving(false)
+                  }}
+                  className="px-3 py-1.5 text-sm font-medium text-red-500 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </ModalContent>
@@ -1958,6 +2033,70 @@ function App() {
                       </div>
                     </div>
                   </div>
+                  {isWriteMode && (
+                    <div className="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-neutral-600 dark:text-neutral-300 text-sm">Setup Token</span>
+                        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                          {hasProjectToken ? '✓ Project token set' : hasGlobalToken ? '↑ Using global' : 'Not set'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          placeholder={hasProjectToken ? '••••••••' : 'Override global token...'}
+                          value={projectTokenInput}
+                          onChange={e => setProjectTokenInput(e.target.value)}
+                          className="flex-1 px-2 py-1 text-xs border rounded bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                        />
+                        <button
+                          onClick={async () => {
+                            setProjectTokenSaving(true)
+                            try {
+                              const res = await authFetch(projectApi('/token'), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ token: projectTokenInput })
+                              })
+                              if (res.ok) {
+                                const d = await res.json()
+                                setHasProjectToken(d.hasProjectToken)
+                                setProjectTokenInput('')
+                                setToast('Project token updated')
+                              }
+                            } catch {}
+                            setProjectTokenSaving(false)
+                          }}
+                          disabled={projectTokenSaving || !projectTokenInput}
+                          className="px-2 py-1 text-xs font-medium bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                        >
+                          {projectTokenSaving ? '...' : 'Save'}
+                        </button>
+                        {hasProjectToken && (
+                          <button
+                            onClick={async () => {
+                              setProjectTokenSaving(true)
+                              try {
+                                const res = await authFetch(projectApi('/token'), {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ token: '' })
+                                })
+                                if (res.ok) {
+                                  setHasProjectToken(false)
+                                  setToast('Project token removed — using global')
+                                }
+                              } catch {}
+                              setProjectTokenSaving(false)
+                            }}
+                            className="px-2 py-1 text-xs text-red-500 border border-red-300 dark:border-red-700 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {configDirty && (
                     <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700">
                       <Badge variant="warning">Unsaved</Badge>

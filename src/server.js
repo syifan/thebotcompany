@@ -1321,16 +1321,26 @@ class ProjectRunner {
         '--output-format', 'json'
       ];
 
+      // Resolve setup token: project-specific > global > none
+      const projectToken = config.setupToken;
+      const globalToken = process.env.CLAUDE_SETUP_TOKEN;
+      const resolvedToken = projectToken || globalToken || null;
+
+      const agentEnv = {
+        ...process.env,
+        CLAUDE_CODE_ENTRYPOINT: 'cli',
+        TBC_DB: path.join(this.agentDir, 'project.db'),
+        TBC_VISIBILITY: visibility?.mode || 'full',
+        TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
+      };
+      if (resolvedToken) {
+        agentEnv.CLAUDE_SETUP_TOKEN = resolvedToken;
+      }
+
       this.currentAgentProcess = spawn('claude', args, {
         cwd: this.path,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          CLAUDE_CODE_ENTRYPOINT: 'cli',
-          TBC_DB: path.join(this.agentDir, 'project.db'),
-          TBC_VISIBILITY: visibility?.mode || 'full',
-          TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
-        }
+        env: agentEnv,
       });
 
       let stdout = '';
@@ -1672,6 +1682,51 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/auth') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ authenticated: isAuthenticated(req), passwordRequired: !!TBC_PASSWORD }));
+    return;
+  }
+
+  // --- Settings (global token) ---
+
+  if (req.method === 'GET' && url.pathname === '/api/settings') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      hasGlobalToken: !!process.env.CLAUDE_SETUP_TOKEN,
+    }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/settings/token') {
+    if (!requireWrite(req, res)) return;
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { token } = JSON.parse(body);
+        const envPath = path.join(TBC_HOME, '.env');
+        let envContent = '';
+        try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch {}
+        // Replace or add CLAUDE_SETUP_TOKEN
+        if (/^CLAUDE_SETUP_TOKEN=.*/m.test(envContent)) {
+          envContent = token
+            ? envContent.replace(/^CLAUDE_SETUP_TOKEN=.*/m, `CLAUDE_SETUP_TOKEN=${token}`)
+            : envContent.replace(/^CLAUDE_SETUP_TOKEN=.*\n?/m, '');
+        } else if (token) {
+          envContent = envContent.trimEnd() + `\nCLAUDE_SETUP_TOKEN=${token}\n`;
+        }
+        fs.writeFileSync(envPath, envContent);
+        // Update in-memory
+        if (token) {
+          process.env.CLAUDE_SETUP_TOKEN = token;
+        } else {
+          delete process.env.CLAUDE_SETUP_TOKEN;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, hasGlobalToken: !!token }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
@@ -2085,8 +2140,46 @@ const server = http.createServer(async (req, res) => {
     // GET /api/projects/:id/config
     if (req.method === 'GET' && subPath === 'config') {
       const raw = fs.existsSync(runner.configPath) ? fs.readFileSync(runner.configPath, 'utf-8') : '';
+      const config = runner.loadConfig();
+      const hasProjectToken = !!config.setupToken;
+      // Never expose the token value
+      const safeConfig = { ...config };
+      delete safeConfig.setupToken;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ config: runner.loadConfig(), raw }));
+      res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken }));
+      return;
+    }
+
+    // POST /api/projects/:id/token — set per-project setup token
+    if (req.method === 'POST' && subPath === 'token') {
+      if (!requireWrite(req, res)) return;
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const { token } = JSON.parse(body);
+          const config = runner.loadConfig();
+          if (token) {
+            config.setupToken = token;
+          } else {
+            delete config.setupToken;
+          }
+          // Write back preserving existing config structure
+          const configPath = runner.configPath;
+          const existing = fs.existsSync(configPath) ? yaml.load(fs.readFileSync(configPath, 'utf-8')) || {} : {};
+          if (token) {
+            existing.setupToken = token;
+          } else {
+            delete existing.setupToken;
+          }
+          fs.writeFileSync(configPath, yaml.dump(existing));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, hasProjectToken: !!token }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
       return;
     }
 
