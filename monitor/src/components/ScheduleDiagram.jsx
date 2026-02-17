@@ -1,20 +1,12 @@
 import { useState } from 'react'
-import { Clock, Eye, EyeOff, Focus, ChevronDown, User, ArrowDown } from 'lucide-react'
+import { Clock, EyeOff, Focus, ChevronDown, ArrowDown } from 'lucide-react'
 
 const visConfig = {
-  full: { icon: Eye, label: 'Full', bg: 'bg-green-500/10', text: 'text-green-500', border: 'border-green-500/20' },
-  focused: { icon: Focus, label: 'Focused', bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20' },
-  blind: { icon: EyeOff, label: 'Blind', bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20' },
+  focused: { icon: Focus, label: 'Focused', color: '#eab308' },
+  blind: { icon: EyeOff, label: 'Blind', color: '#ef4444' },
 }
 
-const agentColors = [
-  'from-blue-500 to-blue-600',
-  'from-purple-500 to-purple-600',
-  'from-emerald-500 to-emerald-600',
-  'from-orange-500 to-orange-600',
-  'from-pink-500 to-pink-600',
-  'from-cyan-500 to-cyan-600',
-]
+const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f97316', '#ec4899', '#06b6d4']
 
 const isDark = () => document.documentElement.classList.contains('dark')
 
@@ -24,85 +16,114 @@ function ScheduleDiagram({ schedule }) {
 
   const entries = Object.entries(schedule.agents)
   const topDelay = schedule.delay
+  const dark = isDark()
 
   return (
-    <div className="my-3 not-prose">
+    <div className="my-4 not-prose">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-xs font-medium text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+        className="flex items-center gap-2 text-xs font-medium transition-colors"
+        style={{ color: '#3b82f6' }}
       >
-        <span className="inline-flex items-center gap-1.5 bg-blue-500/10 dark:bg-blue-500/15 px-2.5 py-1 rounded-full border border-blue-500/20">
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          background: dark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.08)',
+          padding: '5px 12px', borderRadius: '20px',
+          border: '1px solid rgba(59,130,246,0.2)',
+        }}>
           📋 Schedule · {entries.length} agent{entries.length > 1 ? 's' : ''}
         </span>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+        <ChevronDown style={{ width: 14, height: 14, transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'none' }} />
       </button>
       
       {expanded && (
-        <div className="mt-3 space-y-2">
-          {/* Top-level delay */}
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 0 }}>
           {topDelay > 0 && (
-            <div className="flex items-center justify-center gap-1.5 py-1">
-              <div className="flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-full">
-                <Clock className="w-3 h-3" />
-                {topDelay}m delay
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, color: dark ? '#737373' : '#a3a3a3',
+                background: dark ? '#262626' : '#f5f5f5',
+                padding: '3px 10px', borderRadius: 12,
+              }}>
+                <Clock style={{ width: 12, height: 12 }} /> {topDelay}m delay
+              </span>
             </div>
           )}
 
-          {/* Agent cards in a flow */}
-          <div className="flex flex-col items-stretch gap-0">
-            {entries.map(([name, value], i) => {
-              const task = typeof value === 'string' ? value : value.task || ''
-              const delay = typeof value === 'object' ? value.delay : null
-              const vis = typeof value === 'object' ? value.visibility : null
-              const visInfo = vis && vis !== 'full' ? visConfig[vis] : null
-              const VisIcon = visInfo?.icon
-              const color = agentColors[i % agentColors.length]
+          {entries.map(([name, value], i) => {
+            const task = typeof value === 'string' ? value : value.task || ''
+            const delay = typeof value === 'object' ? value.delay : null
+            const vis = typeof value === 'object' ? value.visibility : null
+            const visInfo = vis && vis !== 'full' ? visConfig[vis] : null
+            const VisIcon = visInfo?.icon
+            const color = colors[i % colors.length]
 
-              return (
-                <div key={name}>
-                  {/* Arrow connector */}
-                  {i > 0 && (
-                    <div className="flex items-center justify-center py-0.5">
-                      <ArrowDown className="w-4 h-4 text-neutral-300 dark:text-neutral-600" />
-                    </div>
-                  )}
-
-                  {/* Agent card */}
-                  <div className="flex items-stretch gap-0 rounded-lg overflow-hidden" style={{ background: isDark() ? '#262626' : '#fafafa', border: `1px solid ${isDark() ? '#404040' : '#e5e5e5'}` }}>
-                    {/* Color accent bar */}
-                    <div className={`w-1 bg-gradient-to-b ${color} shrink-0`} />
-                    
-                    <div className="flex-1 p-2.5 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${color} flex items-center justify-center shrink-0`}>
-                          <User className="w-3 h-3 text-white" />
-                        </div>
-                        <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{name}</span>
-                        {visInfo && (
-                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${visInfo.bg} ${visInfo.text} border ${visInfo.border}`}>
-                            <VisIcon className="w-2.5 h-2.5" />
-                            {visInfo.label}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">{task}</p>
-                    </div>
+            return (
+              <div key={name}>
+                {i > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+                    <ArrowDown style={{ width: 16, height: 16, color: dark ? '#525252' : '#d4d4d4' }} />
                   </div>
+                )}
 
-                  {/* Per-agent delay */}
-                  {delay > 0 && (
-                    <div className="flex items-center justify-center py-0.5">
-                      <div className="flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-full">
-                        <Clock className="w-3 h-3" />
-                        {delay}m delay
+                <div style={{
+                  display: 'flex',
+                  borderRadius: 10,
+                  overflow: 'hidden',
+                  background: dark ? '#1e1e1e' : '#ffffff',
+                  border: `1px solid ${dark ? '#404040' : '#e5e5e5'}`,
+                  boxShadow: dark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.06)',
+                }}>
+                  {/* Color accent */}
+                  <div style={{ width: 4, background: color, flexShrink: 0 }} />
+                  
+                  {/* Content */}
+                  <div style={{ flex: 1, padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <div style={{
+                        width: 24, height: 24, borderRadius: '50%',
+                        background: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 700, color: '#fff',
+                      }}>
+                        {name.charAt(0).toUpperCase()}
                       </div>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: dark ? '#f5f5f5' : '#171717', textTransform: 'capitalize' }}>
+                        {name}
+                      </span>
+                      {visInfo && (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 3,
+                          fontSize: 10, fontWeight: 500, color: visInfo.color,
+                          background: `${visInfo.color}15`, padding: '2px 8px', borderRadius: 10,
+                          border: `1px solid ${visInfo.color}30`,
+                        }}>
+                          <VisIcon style={{ width: 10, height: 10 }} />
+                          {visInfo.label}
+                        </span>
+                      )}
                     </div>
-                  )}
+                    <p style={{ fontSize: 13, lineHeight: 1.5, color: dark ? '#a3a3a3' : '#525252', margin: 0 }}>
+                      {task}
+                    </p>
+                  </div>
                 </div>
-              )
-            })}
-          </div>
+
+                {delay > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, color: dark ? '#737373' : '#a3a3a3',
+                      background: dark ? '#262626' : '#f5f5f5',
+                      padding: '3px 10px', borderRadius: 12,
+                    }}>
+                      <Clock style={{ width: 12, height: 12 }} /> {delay}m delay
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
