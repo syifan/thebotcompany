@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Clock, EyeOff, Focus, ChevronDown, ArrowDown } from 'lucide-react'
+import { Clock, Eye, EyeOff, Focus, ChevronDown, ArrowDown } from 'lucide-react'
 
 const visConfig = {
+  full: { icon: Eye, label: 'Full', color: '#10b981' },
   focused: { icon: Focus, label: 'Focused', color: '#eab308' },
   blind: { icon: EyeOff, label: 'Blind', color: '#ef4444' },
 }
@@ -70,7 +71,7 @@ function ScheduleBody({ schedule }) {
         const task = typeof value === 'string' ? value : value.task || ''
         const delay = typeof value === 'object' ? value.delay : null
         const vis = typeof value === 'object' ? value.visibility : null
-        const visInfo = vis && vis !== 'full' ? visConfig[vis] : null
+        const visInfo = visConfig[vis || 'full']
         const VisIcon = visInfo?.icon
         const color = colors[i % colors.length]
 
