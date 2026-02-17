@@ -25,6 +25,16 @@ loadDotenv({ path: path.join(TBC_HOME_EARLY, '.env') });
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 const MONITOR_DIST = path.join(ROOT, 'monitor', 'dist');
 
+// Strip meta directive blocks from agent responses (keep human-readable text only)
+function stripMetaBlocks(text) {
+  if (!text) return text;
+  return text
+    .replace(/<!--\s*(SCHEDULE|MILESTONE|CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // --- Web Push (VAPID) ---
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
@@ -1434,7 +1444,7 @@ class ProjectRunner {
               }
               reportBody = `## ${errorType}\n\n${errorMsg}\n\n- Duration: ${durationStr}\n- Exit code: ${code}${partialWork}`;
             } else {
-              reportBody = resultText.trim();
+              reportBody = stripMetaBlocks(resultText);
             }
             // Prepend time log to all reports
             const startTime = new Date(this.currentAgentStartTime).toLocaleString('sv-SE');
@@ -1457,7 +1467,7 @@ class ProjectRunner {
         }
 
         log(`${agent.name} done (code ${code})${tokenInfo}`, this.id);
-        const summary = resultText ? resultText.slice(0, 500).replace(/\n+/g, ' ').trim() : '';
+        const summary = resultText ? stripMetaBlocks(resultText).slice(0, 500).replace(/\n+/g, ' ').trim() : '';
         broadcastEvent({ type: 'agent-done', project: this.id, agent: agent.name, success: code === 0 && !killedByTimeout, summary });
         this.currentAgent = null;
         this.currentAgentProcess = null;
