@@ -142,4 +142,88 @@ export function stripScheduleBlock(text) {
   return text.replace(/<!--\s*SCHEDULE\s*-->\s*\{[\s\S]*?\}\s*<!--\s*\/SCHEDULE\s*-->/, '').trim()
 }
 
+// Strip ALL meta blocks (SCHEDULE, MILESTONE, CLAIM_COMPLETE, VERIFY_PASS, VERIFY_FAIL)
+export function stripAllMetaBlocks(text) {
+  if (!text) return text
+  return text
+    .replace(/<!--\s*(SCHEDULE|MILESTONE)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function parseMilestoneBlock(text) {
+  if (!text) return null
+  const match = text.match(/<!--\s*MILESTONE\s*-->\s*([\s\S]*?)\s*<!--\s*\/MILESTONE\s*-->/)
+  if (!match) return null
+  try { return JSON.parse(match[1]) } catch { return null }
+}
+
+export function parseDirectives(text) {
+  if (!text) return []
+  const directives = []
+  if (/<!--\s*CLAIM_COMPLETE\s*-->/.test(text)) directives.push('claim_complete')
+  if (/<!--\s*VERIFY_PASS\s*-->/.test(text)) directives.push('verify_pass')
+  if (/<!--\s*VERIFY_FAIL\s*-->/.test(text)) directives.push('verify_fail')
+  return directives
+}
+
+export function MetaBlockBadges({ text }) {
+  const milestone = parseMilestoneBlock(text)
+  const directives = parseDirectives(text)
+  const dark = isDark()
+
+  if (!milestone && directives.length === 0) return null
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+      {milestone && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 12, fontWeight: 600,
+          color: '#8b5cf6',
+          background: dark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.08)',
+          padding: '4px 12px', borderRadius: 16,
+          border: '1px solid rgba(139,92,246,0.25)',
+        }}>
+          🎯 Milestone: {milestone.title || milestone.description?.slice(0, 60)} · {milestone.cycles} cycles
+        </span>
+      )}
+      {directives.includes('claim_complete') && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 12, fontWeight: 600, color: '#3b82f6',
+          background: dark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.08)',
+          padding: '4px 12px', borderRadius: 16,
+          border: '1px solid rgba(59,130,246,0.25)',
+        }}>
+          📦 Claimed Complete
+        </span>
+      )}
+      {directives.includes('verify_pass') && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 12, fontWeight: 600, color: '#10b981',
+          background: dark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)',
+          padding: '4px 12px', borderRadius: 16,
+          border: '1px solid rgba(16,185,129,0.25)',
+        }}>
+          ✅ Verification Passed
+        </span>
+      )}
+      {directives.includes('verify_fail') && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 12, fontWeight: 600, color: '#ef4444',
+          background: dark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)',
+          padding: '4px 12px', borderRadius: 16,
+          border: '1px solid rgba(239,68,68,0.25)',
+        }}>
+          ❌ Verification Failed
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default ScheduleDiagram
