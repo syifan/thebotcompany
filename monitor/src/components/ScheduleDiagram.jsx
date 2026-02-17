@@ -177,6 +177,7 @@ export function parseDirectives(text) {
 
 export function MetaBlockBadges({ text }) {
   const [msExpanded, setMsExpanded] = useState(false)
+  const [vfExpanded, setVfExpanded] = useState(false)
   const milestone = parseMilestoneBlock(text)
   const { list: directives, verifyFailFeedback } = parseDirectives(text)
   const dark = isDark()
@@ -244,12 +245,18 @@ export function MetaBlockBadges({ text }) {
           background: dark ? '#1e1e1e' : '#ffffff',
           border: `1px solid ${dark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
-            borderBottom: verifyFailFeedback ? `1px solid ${dark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)'}` : 'none',
-          }}>
+          <button
+            onClick={() => verifyFailFeedback && setVfExpanded(!vfExpanded)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', width: '100%',
+              background: 'none', border: 'none',
+              cursor: verifyFailFeedback ? 'pointer' : 'default',
+              borderBottom: vfExpanded && verifyFailFeedback ? `1px solid ${dark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)'}` : 'none',
+            }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444' }}>❌ Verification Failed</span>
-          </div>
-          {verifyFailFeedback && (
+            {verifyFailFeedback && <ChevronDown style={{ width: 12, height: 12, color: '#ef4444', transition: 'transform 0.2s', transform: vfExpanded ? 'rotate(180deg)' : 'none' }} />}
+          </button>
+          {vfExpanded && verifyFailFeedback && (
             <div style={{
               padding: '8px 12px',
               fontSize: 13, lineHeight: 1.5,
