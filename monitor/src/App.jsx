@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
+import ScheduleDiagram, { parseScheduleBlock, stripScheduleBlock } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -2062,7 +2063,10 @@ function App() {
                             <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
                           </div>
                           <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripScheduleBlock(comment.body)}</ReactMarkdown>
+                            {parseScheduleBlock(comment.body) && (
+                              <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2527,7 +2531,10 @@ function App() {
                           <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
                         </div>
                         <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripScheduleBlock(comment.body)}</ReactMarkdown>
+                          {parseScheduleBlock(comment.body) && (
+                            <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
+                          )}
                         </div>
                       </div>
                     ))}
