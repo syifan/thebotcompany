@@ -48,10 +48,10 @@ function ScheduleDiagram({ schedule }) {
                   {/* Connector dot */}
                   <div className="absolute -left-[17px] top-4 w-2.5 h-2.5 rounded-full bg-blue-400 dark:bg-blue-500 border-2 border-white dark:border-neutral-900" />
                   
-                  <div className="bg-neutral-50 dark:bg-neutral-800/50 rounded-lg p-2.5 border border-neutral-200 dark:border-neutral-700">
+                  <div className="bg-neutral-100 dark:bg-neutral-800 rounded-lg p-2.5 border border-neutral-200 dark:border-neutral-700">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{name}</span>
-                      {vis !== 'full' && (
+                      {vis && vis !== 'full' && (
                         <span className={`flex items-center gap-0.5 text-[10px] font-medium ${VisInfo.color}`}>
                           <VisIcon className="w-3 h-3" />
                           {VisInfo.label}
