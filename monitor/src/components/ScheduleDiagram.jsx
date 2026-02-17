@@ -1,11 +1,20 @@
 import { useState } from 'react'
-import { Clock, Eye, EyeOff, Focus, ChevronDown } from 'lucide-react'
+import { Clock, Eye, EyeOff, Focus, ChevronDown, User, ArrowDown } from 'lucide-react'
 
-const visIcons = {
-  full: { icon: Eye, label: 'Full', color: 'text-green-500' },
-  focused: { icon: Focus, label: 'Focused', color: 'text-yellow-500' },
-  blind: { icon: EyeOff, label: 'Blind', color: 'text-red-500' },
+const visConfig = {
+  full: { icon: Eye, label: 'Full', bg: 'bg-green-500/10', text: 'text-green-500', border: 'border-green-500/20' },
+  focused: { icon: Focus, label: 'Focused', bg: 'bg-yellow-500/10', text: 'text-yellow-500', border: 'border-yellow-500/20' },
+  blind: { icon: EyeOff, label: 'Blind', bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20' },
 }
+
+const agentColors = [
+  'from-blue-500 to-blue-600',
+  'from-purple-500 to-purple-600',
+  'from-emerald-500 to-emerald-600',
+  'from-orange-500 to-orange-600',
+  'from-pink-500 to-pink-600',
+  'from-cyan-500 to-cyan-600',
+]
 
 function ScheduleDiagram({ schedule }) {
   const [expanded, setExpanded] = useState(false)
@@ -15,82 +24,96 @@ function ScheduleDiagram({ schedule }) {
   const topDelay = schedule.delay
 
   return (
-    <div className="my-3">
+    <div className="my-3 not-prose">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-xs font-semibold text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+        className="flex items-center gap-2 text-xs font-medium text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
       >
-        <span className="bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">📋 Schedule ({entries.length} agent{entries.length > 1 ? 's' : ''})</span>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        <span className="inline-flex items-center gap-1.5 bg-blue-500/10 dark:bg-blue-500/15 px-2.5 py-1 rounded-full border border-blue-500/20">
+          📋 Schedule · {entries.length} agent{entries.length > 1 ? 's' : ''}
+        </span>
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
       </button>
       
       {expanded && (
-        <div className="mt-2 ml-1 border-l-2 border-blue-200 dark:border-blue-800 pl-3 space-y-0">
+        <div className="mt-3 space-y-2">
           {/* Top-level delay */}
           {topDelay > 0 && (
-            <div className="flex items-center gap-2 py-1.5 text-xs text-neutral-400 dark:text-neutral-500">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Wait {topDelay}m after manager</span>
+            <div className="flex items-center justify-center gap-1.5 py-1">
+              <div className="flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-full">
+                <Clock className="w-3 h-3" />
+                {topDelay}m delay
+              </div>
             </div>
           )}
 
-          {entries.map(([name, value], i) => {
-            const task = typeof value === 'string' ? value : value.task || ''
-            const delay = typeof value === 'object' ? value.delay : null
-            const vis = typeof value === 'object' ? value.visibility : 'full'
-            const VisInfo = visIcons[vis] || visIcons.full
-            const VisIcon = VisInfo.icon
+          {/* Agent cards in a flow */}
+          <div className="flex flex-col items-stretch gap-0">
+            {entries.map(([name, value], i) => {
+              const task = typeof value === 'string' ? value : value.task || ''
+              const delay = typeof value === 'object' ? value.delay : null
+              const vis = typeof value === 'object' ? value.visibility : null
+              const visInfo = vis && vis !== 'full' ? visConfig[vis] : null
+              const VisIcon = visInfo?.icon
+              const color = agentColors[i % agentColors.length]
 
-            return (
-              <div key={name}>
-                {/* Agent card */}
-                <div className="relative py-2">
-                  {/* Connector dot */}
-                  <div className="absolute -left-[17px] top-4 w-2.5 h-2.5 rounded-full bg-blue-400 dark:bg-blue-500 border-2 border-white dark:border-neutral-900" />
-                  
-                  <div className="bg-neutral-100 dark:bg-neutral-800 rounded-lg p-2.5 border border-neutral-200 dark:border-neutral-700">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{name}</span>
-                      {vis && vis !== 'full' && (
-                        <span className={`flex items-center gap-0.5 text-[10px] font-medium ${VisInfo.color}`}>
-                          <VisIcon className="w-3 h-3" />
-                          {VisInfo.label}
-                        </span>
-                      )}
+              return (
+                <div key={name}>
+                  {/* Arrow connector */}
+                  {i > 0 && (
+                    <div className="flex items-center justify-center py-0.5">
+                      <ArrowDown className="w-4 h-4 text-neutral-300 dark:text-neutral-600" />
                     </div>
-                    <p className="text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed line-clamp-3">{task}</p>
-                  </div>
-                </div>
+                  )}
 
-                {/* Per-agent delay */}
-                {delay > 0 && (
-                  <div className="flex items-center gap-2 py-1 text-xs text-neutral-400 dark:text-neutral-500 ml-2">
-                    <Clock className="w-3 h-3" />
-                    <span>Wait {delay}m</span>
+                  {/* Agent card */}
+                  <div className="flex items-stretch gap-0 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/80">
+                    {/* Color accent bar */}
+                    <div className={`w-1 bg-gradient-to-b ${color} shrink-0`} />
+                    
+                    <div className="flex-1 p-2.5 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${color} flex items-center justify-center shrink-0`}>
+                          <User className="w-3 h-3 text-white" />
+                        </div>
+                        <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{name}</span>
+                        {visInfo && (
+                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${visInfo.bg} ${visInfo.text} border ${visInfo.border}`}>
+                            <VisIcon className="w-2.5 h-2.5" />
+                            {visInfo.label}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">{task}</p>
+                    </div>
                   </div>
-                )}
-              </div>
-            )
-          })}
+
+                  {/* Per-agent delay */}
+                  {delay > 0 && (
+                    <div className="flex items-center justify-center py-0.5">
+                      <div className="flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-full">
+                        <Clock className="w-3 h-3" />
+                        {delay}m delay
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-// Parse SCHEDULE block from text
 export function parseScheduleBlock(text) {
   if (!text) return null
   const match = text.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/)
   if (!match) return null
-  try {
-    return JSON.parse(match[1])
-  } catch {
-    return null
-  }
+  try { return JSON.parse(match[1]) } catch { return null }
 }
 
-// Strip SCHEDULE block from text for clean markdown rendering
 export function stripScheduleBlock(text) {
   if (!text) return text
   return text.replace(/<!--\s*SCHEDULE\s*-->\s*\{[\s\S]*?\}\s*<!--\s*\/SCHEDULE\s*-->/, '').trim()
