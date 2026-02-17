@@ -75,6 +75,10 @@ function App() {
   const [projectTokenPreview, setProjectTokenPreview] = useState(null)
   const [projectTokenInput, setProjectTokenInput] = useState('')
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
+  const [projectNotifs, setProjectNotifs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('tbc_project_notifs') || '{}') } catch { return {} }
+  })
   const [configForm, setConfigForm] = useState({
     cycleIntervalMs: 1800000, agentTimeoutMs: 900000,
     trackerIssue: 1, budgetPer24h: 0
@@ -1189,6 +1193,107 @@ function App() {
     </Modal>
   )
 
+  const projectSettingsModal = selectedProject && (
+    <Modal open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)}>
+      <ModalHeader>Project Settings</ModalHeader>
+      <ModalContent>
+        <div className="pb-5">
+          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="text-sm text-neutral-700 dark:text-neutral-300">Push Notifications</span>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                {projectNotifs[selectedProject.id] === false ? 'Disabled for this project' : 'Using global setting'}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const next = projectNotifs[selectedProject.id] === false ? true : false
+                const updated = { ...projectNotifs, [selectedProject.id]: next }
+                if (next === true) delete updated[selectedProject.id]
+                setProjectNotifs(updated)
+                localStorage.setItem('tbc_project_notifs', JSON.stringify(updated))
+                setToast(next !== false ? 'Project notifications enabled' : 'Project notifications disabled')
+              }}
+              className={`relative w-11 h-6 rounded-full transition-colors ${projectNotifs[selectedProject.id] !== false ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${projectNotifs[selectedProject.id] !== false ? 'translate-x-5' : ''}`} />
+            </button>
+          </div>
+        </div>
+        <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
+          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Authentication</h3>
+          <div className="py-2">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <span className="text-sm text-neutral-700 dark:text-neutral-300">Setup Token</span>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                  {hasProjectToken ? `✓ Project token: ${projectTokenPreview}` : hasGlobalToken ? `↑ Using global: ${globalTokenPreview}` : 'No token set — agents will not run'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                placeholder={hasProjectToken ? '••••••••' : 'Override global token...'}
+                value={projectTokenInput}
+                onChange={e => setProjectTokenInput(e.target.value)}
+                className="flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+              />
+              <button
+                onClick={async () => {
+                  setProjectTokenSaving(true)
+                  try {
+                    const res = await authFetch(projectApi('/token'), {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ token: projectTokenInput })
+                    })
+                    if (res.ok) {
+                      const d = await res.json()
+                      setHasProjectToken(d.hasProjectToken)
+                      setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
+                      setProjectTokenInput('')
+                      setToast('Project token updated')
+                    }
+                  } catch {}
+                  setProjectTokenSaving(false)
+                }}
+                disabled={projectTokenSaving || !projectTokenInput}
+                className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+              >
+                {projectTokenSaving ? 'Saving...' : 'Save'}
+              </button>
+              {hasProjectToken && (
+                <button
+                  onClick={async () => {
+                    setProjectTokenSaving(true)
+                    try {
+                      const res = await authFetch(projectApi('/token'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: '' })
+                      })
+                      if (res.ok) {
+                        setHasProjectToken(false)
+                        setProjectTokenPreview(null)
+                        setToast('Project token removed — using global')
+                      }
+                    } catch {}
+                    setProjectTokenSaving(false)
+                  }}
+                  className="px-3 py-1.5 text-sm font-medium text-red-500 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </ModalContent>
+    </Modal>
+  )
+
   if (!selectedProject) {
     return (
       <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6">
@@ -1729,9 +1834,9 @@ function App() {
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
               <button
-                onClick={() => setSettingsOpen(true)}
+                onClick={() => setProjectSettingsOpen(true)}
                 className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                title="Settings"
+                title="Project Settings"
               >
                 <Settings className="w-4 h-4" />
               </button>
@@ -2038,70 +2143,6 @@ function App() {
                       </div>
                     </div>
                   </div>
-                  {isWriteMode && (
-                    <div className="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-700">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-neutral-600 dark:text-neutral-300 text-sm">Setup Token</span>
-                        <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                          {hasProjectToken ? `✓ ${projectTokenPreview}` : hasGlobalToken ? `↑ Global: ${globalTokenPreview}` : 'Not set'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="password"
-                          placeholder={hasProjectToken ? '••••••••' : 'Override global token...'}
-                          value={projectTokenInput}
-                          onChange={e => setProjectTokenInput(e.target.value)}
-                          className="flex-1 px-2 py-1 text-xs border rounded bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-                        />
-                        <button
-                          onClick={async () => {
-                            setProjectTokenSaving(true)
-                            try {
-                              const res = await authFetch(projectApi('/token'), {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ token: projectTokenInput })
-                              })
-                              if (res.ok) {
-                                const d = await res.json()
-                                setHasProjectToken(d.hasProjectToken)
-                                setProjectTokenInput('')
-                                setToast('Project token updated')
-                              }
-                            } catch {}
-                            setProjectTokenSaving(false)
-                          }}
-                          disabled={projectTokenSaving || !projectTokenInput}
-                          className="px-2 py-1 text-xs font-medium bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-                        >
-                          {projectTokenSaving ? '...' : 'Save'}
-                        </button>
-                        {hasProjectToken && (
-                          <button
-                            onClick={async () => {
-                              setProjectTokenSaving(true)
-                              try {
-                                const res = await authFetch(projectApi('/token'), {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ token: '' })
-                                })
-                                if (res.ok) {
-                                  setHasProjectToken(false)
-                                  setToast('Project token removed — using global')
-                                }
-                              } catch {}
-                              setProjectTokenSaving(false)
-                            }}
-                            className="px-2 py-1 text-xs text-red-500 border border-red-300 dark:border-red-700 rounded hover:bg-red-50 dark:hover:bg-red-900/20"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
                   {configDirty && (
                     <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700">
                       <Badge variant="warning">Unsaved</Badge>
@@ -2744,6 +2785,7 @@ function App() {
       </Modal>
 
       {settingsModal}
+      {projectSettingsModal}
       {/* Notification Center */}
       <Modal open={notifCenter} onClose={() => setNotifCenter(false)}>
         <ModalHeader>
