@@ -67,7 +67,7 @@ function ScheduleDiagram({ schedule }) {
                   )}
 
                   {/* Agent card */}
-                  <div className="flex items-stretch gap-0 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/80">
+                  <div className="flex items-stretch gap-0 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:!bg-neutral-800">
                     {/* Color accent bar */}
                     <div className={`w-1 bg-gradient-to-b ${color} shrink-0`} />
                     
