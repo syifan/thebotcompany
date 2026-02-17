@@ -177,7 +177,6 @@ export function parseDirectives(text) {
 
 export function MetaBlockBadges({ text }) {
   const [msExpanded, setMsExpanded] = useState(false)
-  const [vfExpanded, setVfExpanded] = useState(false)
   const milestone = parseMilestoneBlock(text)
   const { list: directives, verifyFailFeedback } = parseDirectives(text)
   const dark = isDark()
@@ -240,28 +239,21 @@ export function MetaBlockBadges({ text }) {
         </span>
       )}
       {directives.includes('verify_fail') && (
-        <div>
-          <button
-            onClick={() => verifyFailFeedback && setVfExpanded(!vfExpanded)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              fontSize: 12, fontWeight: 600, color: '#ef4444',
-              background: dark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)',
-              padding: '4px 12px', borderRadius: 16,
-              border: '1px solid rgba(239,68,68,0.25)',
-              cursor: verifyFailFeedback ? 'pointer' : 'default',
-            }}>
-            ❌ Verification Failed
-            {verifyFailFeedback && <ChevronDown style={{ width: 12, height: 12, transition: 'transform 0.2s', transform: vfExpanded ? 'rotate(180deg)' : 'none' }} />}
-          </button>
-          {vfExpanded && verifyFailFeedback && (
+        <div style={{
+          borderRadius: 10, overflow: 'hidden',
+          background: dark ? '#1e1e1e' : '#ffffff',
+          border: `1px solid ${dark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+            borderBottom: verifyFailFeedback ? `1px solid ${dark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)'}` : 'none',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444' }}>❌ Verification Failed</span>
+          </div>
+          {verifyFailFeedback && (
             <div style={{
-              marginTop: 6, marginLeft: 8, padding: '8px 12px',
+              padding: '8px 12px',
               fontSize: 13, lineHeight: 1.5,
               color: dark ? '#a3a3a3' : '#525252',
-              background: dark ? '#1e1e1e' : '#fef2f2',
-              borderRadius: 8,
-              border: `1px solid ${dark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)'}`,
               whiteSpace: 'pre-wrap',
             }}>
               {verifyFailFeedback}
