@@ -25,6 +25,11 @@ loadDotenv({ path: path.join(TBC_HOME_EARLY, '.env') });
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 const MONITOR_DIST = path.join(ROOT, 'monitor', 'dist');
 
+function maskToken(token) {
+  if (!token || token.length < 8) return '****';
+  return token.slice(0, 4) + '****' + token.slice(-4);
+}
+
 // Strip meta directive blocks from agent responses (keep human-readable text only)
 function stripMetaBlocks(text) {
   if (!text) return text;
@@ -1688,9 +1693,11 @@ const server = http.createServer(async (req, res) => {
   // --- Settings (global token) ---
 
   if (req.method === 'GET' && url.pathname === '/api/settings') {
+    const token = process.env.CLAUDE_SETUP_TOKEN;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      hasGlobalToken: !!process.env.CLAUDE_SETUP_TOKEN,
+      hasGlobalToken: !!token,
+      globalTokenPreview: token ? maskToken(token) : null,
     }));
     return;
   }
@@ -2141,12 +2148,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && subPath === 'config') {
       const raw = fs.existsSync(runner.configPath) ? fs.readFileSync(runner.configPath, 'utf-8') : '';
       const config = runner.loadConfig();
-      const hasProjectToken = !!config.setupToken;
-      // Never expose the token value
+      const projectToken = config.setupToken;
+      const hasProjectToken = !!projectToken;
       const safeConfig = { ...config };
       delete safeConfig.setupToken;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken }));
+      res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken, projectTokenPreview: projectToken ? maskToken(projectToken) : null }));
       return;
     }
 

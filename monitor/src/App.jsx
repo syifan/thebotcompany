@@ -72,6 +72,7 @@ function App() {
   const [agents, setAgents] = useState({ workers: [], managers: [] })
   const [config, setConfig] = useState({ config: null, raw: '' })
   const [hasProjectToken, setHasProjectToken] = useState(false)
+  const [projectTokenPreview, setProjectTokenPreview] = useState(null)
   const [projectTokenInput, setProjectTokenInput] = useState('')
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
   const [configForm, setConfigForm] = useState({
@@ -107,6 +108,7 @@ function App() {
   const [notifList, setNotifList] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [hasGlobalToken, setHasGlobalToken] = useState(false)
+  const [globalTokenPreview, setGlobalTokenPreview] = useState(null)
   const [globalTokenInput, setGlobalTokenInput] = useState('')
   const [tokenSaving, setTokenSaving] = useState(false)
   const [expandedNotifs, setExpandedNotifs] = useState(new Set())
@@ -123,7 +125,7 @@ function App() {
 
   // Fetch settings + notifications on mount
   useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(d => setHasGlobalToken(!!d.hasGlobalToken)).catch(() => {})
+    fetch('/api/settings').then(r => r.json()).then(d => { setHasGlobalToken(!!d.hasGlobalToken); setGlobalTokenPreview(d.globalTokenPreview || null) }).catch(() => {})
     fetch('/api/notifications').then(r => r.json()).then(d => setNotifList(Array.isArray(d) ? d : [])).catch(() => {})
     if (new URLSearchParams(window.location.search).has('notif')) {
       setNotifCenter(true)
@@ -380,6 +382,7 @@ function App() {
       const configData = await configRes.json()
       setConfig(configData)
       setHasProjectToken(!!configData.hasProjectToken)
+      setProjectTokenPreview(configData.projectTokenPreview || null)
       if (!configDirtyRef.current && configData.config) {
         setConfigForm({
           cycleIntervalMs: configData.config.cycleIntervalMs ?? 1800000,
@@ -1120,7 +1123,7 @@ function App() {
               <div>
                 <span className="text-sm text-neutral-700 dark:text-neutral-300">Claude Setup Token</span>
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-                  {hasGlobalToken ? '✓ Global token is set' : 'No global token — agents use OAuth login'}
+                  {hasGlobalToken ? `✓ Token: ${globalTokenPreview}` : 'No global token — agents use OAuth login'}
                 </p>
               </div>
             </div>
@@ -1144,6 +1147,8 @@ function App() {
                     if (res.ok) {
                       const d = await res.json()
                       setHasGlobalToken(d.hasGlobalToken)
+                      // Refresh preview
+                      fetch('/api/settings').then(r => r.json()).then(s => setGlobalTokenPreview(s.globalTokenPreview || null)).catch(() => {})
                       setGlobalTokenInput('')
                       setToast('Global token updated')
                     }
@@ -2038,7 +2043,7 @@ function App() {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-neutral-600 dark:text-neutral-300 text-sm">Setup Token</span>
                         <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                          {hasProjectToken ? '✓ Project token set' : hasGlobalToken ? '↑ Using global' : 'Not set'}
+                          {hasProjectToken ? `✓ ${projectTokenPreview}` : hasGlobalToken ? `↑ Global: ${globalTokenPreview}` : 'Not set'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
