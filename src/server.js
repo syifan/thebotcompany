@@ -922,20 +922,18 @@ class ProjectRunner {
     this.sleepUntil = null;
   }
 
-  parseSchedule(resultText) {
-    // Helper: parse visibility from schedule entry
-    _parseVisibility(value, task) {
-      const visMode = typeof value === 'object' ? value.visibility : undefined;
-      if (!visMode || visMode === 'full') return null;
-      if (visMode === 'blind') return { mode: 'blind', issues: [] };
-      if (visMode === 'focused') {
-        // Extract issue IDs from task text (e.g., "#42", "issue #7")
-        const issueIds = (task || '').match(/#(\d+)/g)?.map(m => m.slice(1)) || [];
-        return { mode: 'focused', issues: issueIds };
-      }
-      return null;
+  _parseVisibility(value, task) {
+    const visMode = typeof value === 'object' ? value.visibility : undefined;
+    if (!visMode || visMode === 'full') return null;
+    if (visMode === 'blind') return { mode: 'blind', issues: [] };
+    if (visMode === 'focused') {
+      const issueIds = (task || '').match(/#(\d+)/g)?.map(m => m.slice(1)) || [];
+      return { mode: 'focused', issues: issueIds };
     }
+    return null;
+  }
 
+  parseSchedule(resultText) {
     // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Ares's response
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
