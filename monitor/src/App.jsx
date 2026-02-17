@@ -108,9 +108,9 @@ function App() {
   const detailedNotifsRef = useRef(detailedNotifs)
   useEffect(() => { detailedNotifsRef.current = detailedNotifs }, [detailedNotifs])
 
-  // Register service worker
+  // Register service worker (production only — dev causes reload loops)
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && !import.meta.env.DEV) {
       navigator.serviceWorker.register('/sw.js').catch(() => {})
     }
   }, [])
