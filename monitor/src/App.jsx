@@ -1722,9 +1722,8 @@ function App() {
                     selectedProject.phase === 'implementation' ? 'success' :
                     selectedProject.phase === 'verification' ? 'warning' : 'secondary'
                   } className="text-sm capitalize">
-                    {selectedProject.phase === 'athena' ? 'Planning' : selectedProject.phase === 'implementation' ? 'Implementation' : selectedProject.phase === 'verification' ? 'Verification' : selectedProject.phase}
+                    {selectedProject.phase === 'athena' ? 'Planning' : selectedProject.phase === 'implementation' ? (selectedProject.isFixRound ? 'Fixing' : 'Implementation') : selectedProject.phase === 'verification' ? 'Verification' : selectedProject.phase}
                   </Badge>
-                  {selectedProject.isFixRound && <Badge variant="destructive">🔧 Fix Round</Badge>}
                   {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
                     <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 ml-auto">
                       {selectedProject.milestoneCyclesUsed}/{selectedProject.milestoneCyclesBudget} cycles
@@ -1799,7 +1798,7 @@ function App() {
                         selectedProject.phase === 'verification' ? 'warning' : 'secondary'
                       }>
                         {selectedProject.phase === 'athena' ? '🧠 Planning (Athena)' :
-                         selectedProject.phase === 'implementation' ? '🔨 Implementation' :
+                         selectedProject.phase === 'implementation' ? (selectedProject.isFixRound ? '🔧 Fixing' : '🔨 Implementation') :
                          selectedProject.phase === 'verification' ? '✅ Verification' :
                          selectedProject.phase || 'Unknown'}
                       </Badge>
@@ -1808,12 +1807,6 @@ function App() {
                       <div className="flex justify-between items-center">
                         <span className="text-neutral-600 dark:text-neutral-300">Milestone Progress</span>
                         <span className="text-sm font-mono">{selectedProject.milestoneCyclesUsed || 0} / {selectedProject.milestoneCyclesBudget} cycles</span>
-                      </div>
-                    )}
-                    {selectedProject.isFixRound && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-neutral-600 dark:text-neutral-300">Fix Round</span>
-                        <Badge variant="destructive">🔧 Fixing</Badge>
                       </div>
                     )}
                     <Separator className="my-2" />
