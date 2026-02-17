@@ -253,8 +253,8 @@ export function MetaBlockBadges({ text }) {
               cursor: verifyFailFeedback ? 'pointer' : 'default',
               borderBottom: vfExpanded && verifyFailFeedback ? `1px solid ${dark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)'}` : 'none',
             }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444' }}>❌ Verification Failed</span>
-            {verifyFailFeedback && <ChevronDown style={{ width: 12, height: 12, color: '#ef4444', transition: 'transform 0.2s', transform: vfExpanded ? 'rotate(180deg)' : 'none' }} />}
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', flex: 1, textAlign: 'left' }}>❌ Verification Failed</span>
+            {verifyFailFeedback && <ChevronDown style={{ width: 12, height: 12, color: '#ef4444', transition: 'transform 0.2s', transform: vfExpanded ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
           </button>
           {vfExpanded && verifyFailFeedback && (
             <div style={{
