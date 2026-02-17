@@ -146,7 +146,7 @@ export function stripScheduleBlock(text) {
 export function stripAllMetaBlocks(text) {
   if (!text) return text
   return text
-    .replace(/<!--\s*(SCHEDULE|MILESTONE)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*(SCHEDULE|MILESTONE|VERIFY_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
     .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
@@ -160,18 +160,26 @@ export function parseMilestoneBlock(text) {
 }
 
 export function parseDirectives(text) {
-  if (!text) return []
-  const directives = []
-  if (/<!--\s*CLAIM_COMPLETE\s*-->/.test(text)) directives.push('claim_complete')
-  if (/<!--\s*VERIFY_PASS\s*-->/.test(text)) directives.push('verify_pass')
-  if (/<!--\s*VERIFY_FAIL\s*-->/.test(text)) directives.push('verify_fail')
-  return directives
+  if (!text) return { list: [], verifyFailFeedback: null }
+  const list = []
+  if (/<!--\s*CLAIM_COMPLETE\s*-->/.test(text)) list.push('claim_complete')
+  if (/<!--\s*VERIFY_PASS\s*-->/.test(text)) list.push('verify_pass')
+  let verifyFailFeedback = null
+  const vfMatch = text.match(/<!--\s*VERIFY_FAIL\s*-->\s*([\s\S]*?)\s*<!--\s*\/VERIFY_FAIL\s*-->/)
+  if (vfMatch) {
+    list.push('verify_fail')
+    try { verifyFailFeedback = JSON.parse(vfMatch[1]).feedback } catch { verifyFailFeedback = vfMatch[1].trim() }
+  } else if (/<!--\s*VERIFY_FAIL\s*-->/.test(text)) {
+    list.push('verify_fail')
+  }
+  return { list, verifyFailFeedback }
 }
 
 export function MetaBlockBadges({ text }) {
   const [msExpanded, setMsExpanded] = useState(false)
+  const [vfExpanded, setVfExpanded] = useState(false)
   const milestone = parseMilestoneBlock(text)
-  const directives = parseDirectives(text)
+  const { list: directives, verifyFailFeedback } = parseDirectives(text)
   const dark = isDark()
 
   if (!milestone && directives.length === 0) return null
@@ -232,15 +240,34 @@ export function MetaBlockBadges({ text }) {
         </span>
       )}
       {directives.includes('verify_fail') && (
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          fontSize: 12, fontWeight: 600, color: '#ef4444',
-          background: dark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)',
-          padding: '4px 12px', borderRadius: 16,
-          border: '1px solid rgba(239,68,68,0.25)',
-        }}>
-          ❌ Verification Failed
-        </span>
+        <div>
+          <button
+            onClick={() => verifyFailFeedback && setVfExpanded(!vfExpanded)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 12, fontWeight: 600, color: '#ef4444',
+              background: dark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)',
+              padding: '4px 12px', borderRadius: 16,
+              border: '1px solid rgba(239,68,68,0.25)',
+              cursor: verifyFailFeedback ? 'pointer' : 'default',
+            }}>
+            ❌ Verification Failed
+            {verifyFailFeedback && <ChevronDown style={{ width: 12, height: 12, transition: 'transform 0.2s', transform: vfExpanded ? 'rotate(180deg)' : 'none' }} />}
+          </button>
+          {vfExpanded && verifyFailFeedback && (
+            <div style={{
+              marginTop: 6, marginLeft: 8, padding: '8px 12px',
+              fontSize: 13, lineHeight: 1.5,
+              color: dark ? '#a3a3a3' : '#525252',
+              background: dark ? '#1e1e1e' : '#fef2f2',
+              borderRadius: 8,
+              border: `1px solid ${dark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.15)'}`,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {verifyFailFeedback}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
