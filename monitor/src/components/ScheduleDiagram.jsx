@@ -16,6 +16,8 @@ const agentColors = [
   'from-cyan-500 to-cyan-600',
 ]
 
+const isDark = () => document.documentElement.classList.contains('dark')
+
 function ScheduleDiagram({ schedule }) {
   const [expanded, setExpanded] = useState(false)
   if (!schedule || !schedule.agents || Object.keys(schedule.agents).length === 0) return null
@@ -67,7 +69,7 @@ function ScheduleDiagram({ schedule }) {
                   )}
 
                   {/* Agent card */}
-                  <div className="flex items-stretch gap-0 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:!bg-neutral-800">
+                  <div className="flex items-stretch gap-0 rounded-lg overflow-hidden" style={{ background: isDark() ? '#262626' : '#fafafa', border: `1px solid ${isDark() ? '#404040' : '#e5e5e5'}` }}>
                     {/* Color accent bar */}
                     <div className={`w-1 bg-gradient-to-b ${color} shrink-0`} />
                     
