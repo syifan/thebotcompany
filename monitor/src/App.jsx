@@ -1053,7 +1053,7 @@ function App() {
     <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
       <ModalHeader>Settings</ModalHeader>
       <ModalContent>
-        <div className="mb-6">
+        <div className="pb-5">
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Display</h3>
           <div className="flex items-center justify-between py-2">
             <span className="text-sm text-neutral-700 dark:text-neutral-300">Theme</span>
@@ -1079,7 +1079,7 @@ function App() {
             </div>
           </div>
         </div>
-        <div>
+        <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5 pb-5">
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
           <div className="flex items-center justify-between py-2">
             <div>
@@ -1116,7 +1116,7 @@ function App() {
             </button>
           </div>
         </div>
-        <div className="mt-6">
+        <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Authentication</h3>
           <div className="py-2">
             <div className="flex items-center justify-between mb-2">
