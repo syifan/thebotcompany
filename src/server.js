@@ -1331,6 +1331,12 @@ class ProjectRunner {
       const globalToken = process.env.CLAUDE_SETUP_TOKEN;
       const resolvedToken = projectToken || globalToken || null;
 
+      if (!resolvedToken) {
+        log(`No setup token configured — skipping ${agent.name}. Set a global or project token in the dashboard.`, this.id);
+        resolve({ success: false, resultText: 'No setup token configured. Set a global or project-specific token in Settings.' });
+        return;
+      }
+
       const agentEnv = {
         ...process.env,
         CLAUDE_CODE_ENTRYPOINT: 'cli',
