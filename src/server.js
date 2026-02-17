@@ -1444,7 +1444,7 @@ class ProjectRunner {
               }
               reportBody = `## ${errorType}\n\n${errorMsg}\n\n- Duration: ${durationStr}\n- Exit code: ${code}${partialWork}`;
             } else {
-              reportBody = stripMetaBlocks(resultText);
+              reportBody = resultText.trim();
             }
             // Prepend time log to all reports
             const startTime = new Date(this.currentAgentStartTime).toLocaleString('sv-SE');
