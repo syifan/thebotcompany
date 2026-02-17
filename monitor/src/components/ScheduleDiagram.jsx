@@ -169,6 +169,7 @@ export function parseDirectives(text) {
 }
 
 export function MetaBlockBadges({ text }) {
+  const [msExpanded, setMsExpanded] = useState(false)
   const milestone = parseMilestoneBlock(text)
   const directives = parseDirectives(text)
   const dark = isDark()
@@ -176,18 +177,37 @@ export function MetaBlockBadges({ text }) {
   if (!milestone && directives.length === 0) return null
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
       {milestone && (
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          fontSize: 12, fontWeight: 600,
-          color: '#8b5cf6',
-          background: dark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.08)',
-          padding: '4px 12px', borderRadius: 16,
-          border: '1px solid rgba(139,92,246,0.25)',
-        }}>
-          🎯 Milestone: {milestone.title || milestone.description?.slice(0, 60)} · {milestone.cycles} cycles
-        </span>
+        <div>
+          <button
+            onClick={() => setMsExpanded(!msExpanded)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 12, fontWeight: 600,
+              color: '#8b5cf6',
+              background: dark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.08)',
+              padding: '4px 12px', borderRadius: 16,
+              border: '1px solid rgba(139,92,246,0.25)',
+              cursor: 'pointer',
+            }}>
+            🎯 Milestone: {milestone.title || milestone.description?.slice(0, 60)} · {milestone.cycles} cycles
+            <ChevronDown style={{ width: 12, height: 12, transition: 'transform 0.2s', transform: msExpanded ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {msExpanded && milestone.description && (
+            <div style={{
+              marginTop: 6, marginLeft: 8, padding: '8px 12px',
+              fontSize: 13, lineHeight: 1.5,
+              color: dark ? '#a3a3a3' : '#525252',
+              background: dark ? '#1e1e1e' : '#faf5ff',
+              borderRadius: 8,
+              border: `1px solid ${dark ? 'rgba(139,92,246,0.2)' : 'rgba(139,92,246,0.15)'}`,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {milestone.description}
+            </div>
+          )}
+        </div>
       )}
       {directives.includes('claim_complete') && (
         <span style={{
