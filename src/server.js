@@ -1347,8 +1347,12 @@ class ProjectRunner {
         TBC_VISIBILITY: visibility?.mode || 'full',
         TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
       };
+      // Always explicitly set or remove ANTHROPIC_AUTH_TOKEN to avoid
+      // dotenv pollution from process.env leaking into agent spawns
       if (resolvedToken) {
         agentEnv.ANTHROPIC_AUTH_TOKEN = resolvedToken;
+      } else {
+        delete agentEnv.ANTHROPIC_AUTH_TOKEN;
       }
 
       this.currentAgentProcess = spawn('claude', args, {
