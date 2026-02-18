@@ -1328,7 +1328,7 @@ class ProjectRunner {
 
       // Resolve setup token: project-specific > global > none
       const projectToken = config.setupToken;
-      const globalToken = process.env.CLAUDE_SETUP_TOKEN;
+      const globalToken = process.env.ANTHROPIC_AUTH_TOKEN;
       const resolvedToken = projectToken || globalToken || null;
 
       if (!resolvedToken) {
@@ -1345,7 +1345,7 @@ class ProjectRunner {
         TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
       };
       if (resolvedToken) {
-        agentEnv.CLAUDE_SETUP_TOKEN = resolvedToken;
+        agentEnv.ANTHROPIC_AUTH_TOKEN = resolvedToken;
       }
 
       this.currentAgentProcess = spawn('claude', args, {
@@ -1699,7 +1699,7 @@ const server = http.createServer(async (req, res) => {
   // --- Settings (global token) ---
 
   if (req.method === 'GET' && url.pathname === '/api/settings') {
-    const token = process.env.CLAUDE_SETUP_TOKEN;
+    const token = process.env.ANTHROPIC_AUTH_TOKEN;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       hasGlobalToken: !!token,
@@ -1718,20 +1718,20 @@ const server = http.createServer(async (req, res) => {
         const envPath = path.join(TBC_HOME, '.env');
         let envContent = '';
         try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch {}
-        // Replace or add CLAUDE_SETUP_TOKEN
-        if (/^CLAUDE_SETUP_TOKEN=.*/m.test(envContent)) {
+        // Replace or add ANTHROPIC_AUTH_TOKEN
+        if (/^ANTHROPIC_AUTH_TOKEN=.*/m.test(envContent)) {
           envContent = token
-            ? envContent.replace(/^CLAUDE_SETUP_TOKEN=.*/m, `CLAUDE_SETUP_TOKEN=${token}`)
-            : envContent.replace(/^CLAUDE_SETUP_TOKEN=.*\n?/m, '');
+            ? envContent.replace(/^ANTHROPIC_AUTH_TOKEN=.*/m, `ANTHROPIC_AUTH_TOKEN=${token}`)
+            : envContent.replace(/^ANTHROPIC_AUTH_TOKEN=.*\n?/m, '');
         } else if (token) {
-          envContent = envContent.trimEnd() + `\nCLAUDE_SETUP_TOKEN=${token}\n`;
+          envContent = envContent.trimEnd() + `\nANTHROPIC_AUTH_TOKEN=${token}\n`;
         }
         fs.writeFileSync(envPath, envContent);
         // Update in-memory
         if (token) {
-          process.env.CLAUDE_SETUP_TOKEN = token;
+          process.env.ANTHROPIC_AUTH_TOKEN = token;
         } else {
-          delete process.env.CLAUDE_SETUP_TOKEN;
+          delete process.env.ANTHROPIC_AUTH_TOKEN;
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, hasGlobalToken: !!token }));
