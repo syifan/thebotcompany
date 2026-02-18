@@ -1347,13 +1347,13 @@ class ProjectRunner {
         TBC_VISIBILITY: visibility?.mode || 'full',
         TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
       };
-      // Always explicitly set or remove ANTHROPIC_AUTH_TOKEN to avoid
+      // Always explicitly set or remove auth token to avoid
       // dotenv pollution from process.env leaking into agent spawns
       if (resolvedToken) {
-        agentEnv.ANTHROPIC_AUTH_TOKEN = resolvedToken;
-      } else {
-        delete agentEnv.ANTHROPIC_AUTH_TOKEN;
+        agentEnv.CLAUDE_CODE_OAUTH_TOKEN = resolvedToken;
       }
+      // Clean up any leaked tokens from dotenv
+      delete agentEnv.ANTHROPIC_AUTH_TOKEN;
 
       this.currentAgentProcess = spawn('claude', args, {
         cwd: this.path,
