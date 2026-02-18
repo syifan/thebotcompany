@@ -6,8 +6,6 @@ Read this before doing anything.
 
 **Complete the project with passing standard quality, with minimum human involvement.** Work autonomously. Make decisions. Solve problems. Only escalate when absolutely necessary.
 
-**There is always room to improve.** After completing one milestone, move to the next.
-
 ## Safety
 
 **Before ANY action**, verify you are in the correct repository. If repo doesn't match, **ABORT immediately**.
