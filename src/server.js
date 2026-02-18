@@ -1138,7 +1138,12 @@ class ProjectRunner {
             }
           }
         }
-        this.milestoneCyclesUsed++;
+        // Only count cycle if at least one agent succeeded
+        if (cycleTotal > 0 && cycleFailures < cycleTotal) {
+          this.milestoneCyclesUsed++;
+        } else if (cycleTotal > 0) {
+          log(`All ${cycleTotal} agents failed — cycle not counted toward milestone budget`, this.id);
+        }
         this.saveState();
       }
 
