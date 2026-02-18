@@ -1332,9 +1332,7 @@ class ProjectRunner {
       const resolvedToken = projectToken || globalToken || null;
 
       if (!resolvedToken) {
-        log(`No setup token configured — skipping ${agent.name}. Set a global or project token in the dashboard.`, this.id);
-        resolve({ success: false, resultText: 'No setup token configured. Set a global or project-specific token in Settings.' });
-        return;
+        log(`No setup token configured for ${agent.name} — using default auth.`, this.id);
       }
 
       const agentEnv = {
