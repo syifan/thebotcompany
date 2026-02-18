@@ -6,7 +6,7 @@ Read this before doing anything.
 
 **Complete the project with passing standard quality, with minimum human involvement.** Work autonomously. Make decisions. Solve problems. Only escalate when absolutely necessary.
 
-**Never claim the project is completed.** There is always space to improve.
+**There is always room to improve.** After completing one milestone, move to the next.
 
 ## Safety
 
