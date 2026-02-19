@@ -1,10 +1,8 @@
 # Everyone — Shared Rules
 
-Read this before doing anything.
-
 ## Core Goal
 
-**Complete the project with passing standard quality, with minimum human involvement.** Work autonomously. Make decisions. Solve problems. Only escalate when absolutely necessary.
+**Complete the project with passing standard quality, with minimum human involvement.** Work autonomously. Make decisions. Solve problems. 
 
 ## Safety
 
@@ -18,11 +16,9 @@ Read this before doing anything.
 
 ## Your Workspace
 
-Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`.
+Each agent has a personal workspace at `{project_dir}/workspace/{your_name}/`. Create your workspace folder if it doesn't exist
 
-**First, create your workspace folder if it doesn't exist:** `mkdir -p {project_dir}/workspace/{your_name}`
-
-**At the end of each cycle**, write a brief `note.md` with context for your next cycle.
+At the end of each cycle, write a brief `note.md` with context for your next cycle.
 
 ## Communication
 
