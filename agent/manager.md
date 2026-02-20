@@ -90,13 +90,13 @@ Example frontmatter:
 ---
 reports_to: ares
 role: CI Pipeline Engineer
-model: claude-opus-4-6
+model: claude-sonnet-4-5
 ---
 ```
 
 ### Model selection:
 
-Default workers to **claude-opus-4-6**. Downgrade to Sonnet 4.6 only for simple/repetitive tasks.
+Default workers to **claude-sonnet-4-5**. Downgrade to Sonnet 4.6 only for simple/repetitive tasks.
 
 When writing skill files, search online for best practices relevant to the worker's role only if needed. Write clear, specific skill files.
 

@@ -247,7 +247,7 @@ class ProjectRunner {
   }
 
   loadConfig() {
-    const defaults = { cycleIntervalMs: 0, agentTimeoutMs: 3600000, model: 'claude-opus-4-6', budgetPer24h: 0 };
+    const defaults = { cycleIntervalMs: 0, agentTimeoutMs: 3600000, model: 'claude-sonnet-4-5', budgetPer24h: 0 };
     try {
       const raw = fs.readFileSync(this.configPath, 'utf-8');
       const config = yaml.load(raw) || {};
@@ -1398,7 +1398,7 @@ class ProjectRunner {
       
       skillContent = (taskHeader + sharedRules + skillContent).replaceAll('{project_dir}', this.agentDir);
 
-      const agentModel = agent.rawModel || config.model || 'claude-opus-4-6';
+      const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-5';
       const args = [
         '-p', skillContent,
         '--model', agentModel,

@@ -64,14 +64,14 @@ VAPID_PRIVATE_KEY=...
 VAPID_EMAIL=mailto:you@example.com
 ```
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TBC_PASSWORD` | Yes | Password for dashboard write access |
+| Variable               | Required   | Description                                                           |
+| ---------------------- | ---------- | --------------------------------------------------------------------- |
+| `TBC_PASSWORD`         | Yes        | Password for dashboard write access                                   |
 | `ANTHROPIC_AUTH_TOKEN` | For agents | Claude Code auth token. Can also be set per-project in the dashboard. |
-| `TBC_PORT` | No | Server port (default: 3100) |
-| `VAPID_PUBLIC_KEY` | No | Web Push public key for browser notifications |
-| `VAPID_PRIVATE_KEY` | No | Web Push private key |
-| `VAPID_EMAIL` | No | Contact email for VAPID (default: `mailto:admin@example.com`) |
+| `TBC_PORT`             | No         | Server port (default: 3100)                                           |
+| `VAPID_PUBLIC_KEY`     | No         | Web Push public key for browser notifications                         |
+| `VAPID_PRIVATE_KEY`    | No         | Web Push private key                                                  |
+| `VAPID_EMAIL`          | No         | Contact email for VAPID (default: `mailto:admin@example.com`)         |
 
 ### Project Configuration
 
@@ -80,7 +80,7 @@ Each project has a YAML config at `~/.thebotcompany/dev/<project-path>/workspace
 ```yaml
 cycleIntervalMs: 1800000    # Time between cycles (default: 30 min)
 agentTimeoutMs: 3600000     # Max time per agent run (default: 1 hour)
-model: claude-opus-4-6            # Default model for all agents
+model: claude-sonnet-4-5            # Default model for all agents
 trackerIssue: 1             # GitHub issue number for tracking
 budgetPer24h: 100           # Max spend per 24h in USD (0 = unlimited)
 ```
@@ -109,11 +109,11 @@ Each project runs through a repeating cycle of three phases:
 
 ### Managers
 
-| Manager | Role | When it runs |
-|---------|------|-------------|
-| **Athena** | Strategy — defines milestones, maintains roadmap, manages research workers | Start of each milestone cycle |
-| **Ares** | Implementation — schedules workers, reviews PRs, coordinates execution | Every cycle during implementation |
-| **Apollo** | Verification — independently verifies milestone completion | Every cycle during verification |
+| Manager    | Role                                                                       | When it runs                      |
+| ---------- | -------------------------------------------------------------------------- | --------------------------------- |
+| **Athena** | Strategy — defines milestones, maintains roadmap, manages research workers | Start of each milestone cycle     |
+| **Ares**   | Implementation — schedules workers, reviews PRs, coordinates execution     | Every cycle during implementation |
+| **Apollo** | Verification — independently verifies milestone completion                 | Every cycle during verification   |
 
 ### Workers
 
@@ -160,7 +160,7 @@ your-repo/
 
 ```markdown
 ---
-model: claude-opus-4-6
+model: claude-sonnet-4-5
 role: Backend Developer
 reports_to: ares
 ---
@@ -169,10 +169,10 @@ reports_to: ares
 Your instructions here...
 ```
 
-| Frontmatter | Description |
-|-------------|-------------|
-| `model` | Model to use (overrides project default) |
-| `role` | Short description shown in dashboard |
+| Frontmatter  | Description                                                         |
+| ------------ | ------------------------------------------------------------------- |
+| `model`      | Model to use (overrides project default)                            |
+| `role`       | Short description shown in dashboard                                |
 | `reports_to` | Which manager schedules this worker (`ares`, `athena`, or `apollo`) |
 
 ### TheBotCompany Data Directory
