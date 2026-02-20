@@ -1022,7 +1022,7 @@ function App() {
 
   const NotifItem = ({ n }) => {
     const expanded = expandedNotifs.has(n.id)
-    const typeIcons = { milestone: '📌', verified: '✅', 'verify-fail': '❌', phase: '🔄', error: '⚠️', 'agent-done': n.message?.startsWith('✗') ? '✗' : '✓' }
+    const typeIcons = { milestone: '📌', verified: '✅', 'verify-fail': '❌', phase: '🔄', error: '⚠️', 'agent-done': n.message?.startsWith('✗') ? '✗' : '✓', 'project-complete': '🏁' }
     const icon = typeIcons[n.type] || '📋'
     const isLong = n.message && n.message.length > 120
     const displayMsg = isLong && !expanded ? n.message.slice(0, 120) + '…' : n.message
@@ -1439,8 +1439,9 @@ function App() {
                     {/* Right: Status + Actions */}
                     <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
                       <div className="text-left sm:text-right">
-                        <Badge variant={project.paused ? 'warning' : project.sleeping ? 'secondary' : project.currentAgent ? 'success' : project.running ? 'success' : 'destructive'}>
-                          {project.paused ? (project.pauseReason ? 'Paused' : 'Paused') 
+                        <Badge variant={project.isComplete ? (project.completionSuccess ? 'success' : 'destructive') : project.paused ? 'warning' : project.sleeping ? 'secondary' : project.currentAgent ? 'success' : project.running ? 'success' : 'destructive'}>
+                          {project.isComplete ? (project.completionSuccess ? '✅ Complete' : '🛑 Ended')
+                            : project.paused ? (project.pauseReason ? 'Paused' : 'Paused') 
                             : project.sleeping ? '💤 Sleeping' 
                             : project.currentAgent ? `▶ ${project.currentAgent}` 
                             : project.running ? 'Running' 
@@ -2024,10 +2025,16 @@ function App() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-neutral-600 dark:text-neutral-300">Status</span>
-                      <Badge variant={selectedProject.paused ? 'warning' : selectedProject.running ? 'success' : 'destructive'}>
-                        {selectedProject.paused && selectedProject.currentAgent ? '⏳ Pausing...' : selectedProject.paused ? '⏸️ Paused' : selectedProject.running ? '▶️ Running' : '⏹️ Stopped'}
+                      <Badge variant={selectedProject.isComplete ? (selectedProject.completionSuccess ? 'success' : 'destructive') : selectedProject.paused ? 'warning' : selectedProject.running ? 'success' : 'destructive'}>
+                        {selectedProject.isComplete ? (selectedProject.completionSuccess ? '✅ Complete' : '🛑 Ended')
+                          : selectedProject.paused && selectedProject.currentAgent ? '⏳ Pausing...' : selectedProject.paused ? '⏸️ Paused' : selectedProject.running ? '▶️ Running' : '⏹️ Stopped'}
                       </Badge>
                     </div>
+                    {selectedProject.isComplete && selectedProject.completionMessage && (
+                      <div className={`p-3 rounded-lg text-sm ${selectedProject.completionSuccess ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'}`}>
+                        🏁 {selectedProject.completionMessage}
+                      </div>
+                    )}
                     <div className="flex justify-between items-center">
                       <span className="text-neutral-600 dark:text-neutral-300">Cycle</span>
                       <span className="text-2xl font-mono font-bold">{selectedProject.cycleCount}</span>
