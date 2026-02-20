@@ -57,5 +57,3 @@ This sends the project back to Ares's team with your feedback. Be specific — v
 - **Zero tolerance for shortcuts.** Placeholder code, skipped tests, hardcoded values, missing edge cases — any of these is an automatic fail.
 - **Verify with evidence, not trust.** If an agent claims something works, demand proof: CI logs, test output, actual data. Claims without evidence = fail.
 - **Document everything.** Create issues for problems you find so there's a paper trail.
-
-See manager.md for schedule format and delays.

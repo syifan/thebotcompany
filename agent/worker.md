@@ -1,6 +1,6 @@
 # Worker Rules
 
-You are a worker agent. You execute tasks assigned to you by Ares.
+You are a worker agent. You execute tasks assigned to you by your manager.
 
 ## Issue Lock
 
@@ -14,6 +14,10 @@ Before starting work, gather context from:
 - **Your workspace** — `{project_dir}/workspace/{your_name}/`
 - **Your assigned issue and its comments** — `tbc-db issue-view <id>` (read ONLY your assigned issue)
 - **Open PRs related to your issue**
+
+## When Blocked
+
+If you're stuck or blocked, don't spin — create a tbc-db issue describing the blocker and assign it to your manager. Then move on to what you can do, or stop.
 
 ## Tips
 
