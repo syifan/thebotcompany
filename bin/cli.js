@@ -121,7 +121,7 @@ async function main() {
       
       const server = spawn('node', ['--watch', path.join(ROOT, 'src', 'server.js')], {
         stdio: ['ignore', devOut, devErr],
-        env: { ...process.env, TBC_SERVE_STATIC: 'false' }
+        env: { ...process.env, TBC_SERVE_STATIC: 'false', TBC_PORT: '3100' }
       });
       
       console.log(`API server started on http://localhost:3100`);
