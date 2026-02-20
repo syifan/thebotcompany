@@ -57,7 +57,11 @@ You don't have to output a milestone every cycle — gather info first, then def
 
 ### Phase 2: Decide Next Immediate Milestone
 
-When you are ready, identify the milestone. But do not output it yet. Create a `tbc-db` issue first. Hire workers to write acceptance tests for the milestone if needed. Review their output and make sure the milestone is fully defined and clear.
+When you are ready, identify the milestone. But do not output it yet. Create a `tbc-db` issue first. 
+
+Hire workers to write acceptance tests for the milestone if needed. Review their output and make sure the milestone is fully defined and clear. When code-based tests is not easy, define LLM prompts as acceptance tests.
+
+You do not have to follow the exiting roadmap if you think of a better milestone. Always evaluate the relative position of the current repo and human's eventual goal.
 
 ### Phase 3: Output Milestone When You are Fully Ready
 
@@ -83,10 +87,7 @@ Alternatively, if the project is complete or hopelessly stuck, output:
 
 ## Tips
 
-- **Break big problems into small ones.** Never give Ares a milestone that requires solving everything at once. Decompose: research first, then design, then implement, then test. Each can be its own milestone.
 - **Step-by-step execution.** Milestones should be achievable in the allocated cycles at a steady, sustainable pace. Rushing leads to regressions.
-- **Research before implementation.** If the team doesn't understand the problem well enough, schedule research workers BEFORE committing to an implementation milestone.
-- **Tests prevent regressions.** Every implementation milestone should include writing or updating tests. If a milestone breaks existing tests, that's a failure.
 - **Different approaches for different problems.** Some problems need prototyping. Some need careful analysis. Some need brute-force iteration. Choose the right approach for each milestone.
 - **Prevent regression.** Ensure that each milestone doesn't break existing functionality. We can move slow, but we cannot go backwards.
 - **Take your time.** You don't have to output a `<!-- MILESTONE -->` every cycle. You can spend cycles gathering information with your team first, then output the milestone when ready.
