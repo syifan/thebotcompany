@@ -625,7 +625,24 @@ function App() {
     return `/${project.id}`
   }
 
+  const closeAllModals = () => {
+    setAgentModal({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
+    setIssueModal({ open: false, issue: null, comments: [], loading: false })
+    setCreateIssueModal({ open: false, title: '', body: '', creating: false, error: null })
+    setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false })
+    setAgentSettingsModal({ open: false, agent: null, model: '', saving: false, error: null })
+    setProjectSettingsOpen(false)
+    setBudgetInfoModal(false)
+    setIntervalInfoModal(false)
+    setTimeoutInfoModal(false)
+    setSettingsOpen(false)
+    setLoginModal(false)
+    setNotifCenter(false)
+    resetAddProjectModal()
+  }
+
   const selectProject = (project) => {
+    closeAllModals()
     setSelectedProject(project)
     history.pushState(null, '', projectToPath(project))
     setLogs([])
@@ -638,6 +655,7 @@ function App() {
   }
 
   const goToProjectList = () => {
+    closeAllModals()
     setSelectedProject(null)
     history.pushState(null, '', '/')
   }
@@ -829,6 +847,7 @@ function App() {
   // Handle browser back/forward
   useEffect(() => {
     const onPopState = () => {
+      closeAllModals()
       if (window.location.pathname === '/') {
         setSelectedProject(null)
       } else {
