@@ -31,6 +31,8 @@ At the end of each cycle, write a brief `note.md` with context for your next cyc
 
 **Do NOT use GitHub Issues** — use `tbc-db issue-create` instead.
 
+**To send a message to another agent, create an issue assigned to them.** For example, if Ares needs something from Athena, Ares creates an tbc-db issue and assigns it to Athena. This is the only way to communicate between agents.
+
 ## Time Management
 
 You have a **strict time limit** per cycle (often 1 hour or less). If you get killed by timeout, all unsaved work is lost.
