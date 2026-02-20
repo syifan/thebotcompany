@@ -77,6 +77,7 @@ function broadcastEvent(event) {
     phase: `🔄 Phase → ${event.phase}`,
     error: `⚠️ ${event.message}`,
     'agent-done': `${event.success ? '✓' : '✗'} ${event.agent}: ${event.summary || 'no response'}`,
+    'project-complete': `🏁 Project ${event.success ? 'completed' : 'ended'}: ${event.message}`,
   };
   const notification = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -177,6 +178,9 @@ class ProjectRunner {
     this.milestoneCyclesUsed = 0;
     this.verificationFeedback = null;
     this.isFixRound = false; // true when returning from failed verification
+    this.isComplete = false;
+    this.completionSuccess = false;
+    this.completionMessage = null;
     this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
     this._repo = null;
   }
@@ -731,6 +735,9 @@ class ProjectRunner {
       milestoneCyclesBudget: this.milestoneCyclesBudget,
       milestoneCyclesUsed: this.milestoneCyclesUsed,
       isFixRound: this.isFixRound,
+      isComplete: this.isComplete || false,
+      completionSuccess: this.completionSuccess || false,
+      completionMessage: this.completionMessage || null,
       config: this.loadConfig(),
       agents: this.loadAgents(),
       cost: this.getCostSummary(),
@@ -778,6 +785,9 @@ class ProjectRunner {
     this.milestoneCyclesUsed = 0;
     this.verificationFeedback = null;
     this.isFixRound = false;
+    this.isComplete = false;
+    this.completionSuccess = false;
+    this.completionMessage = null;
     this.isPaused = true;
     this.pauseReason = 'Bootstrapped — resume when ready';
     this.saveState();
@@ -825,6 +835,9 @@ class ProjectRunner {
         this.milestoneCyclesUsed = state.milestoneCyclesUsed || 0;
         this.verificationFeedback = state.verificationFeedback || null;
         this.isFixRound = state.isFixRound || false;
+        this.isComplete = state.isComplete || false;
+        this.completionSuccess = state.completionSuccess || false;
+        this.completionMessage = state.completionMessage || null;
         log(`Loaded state: cycle ${this.cycleCount}, phase: ${this.phase}, completed: [${this.completedAgents.join(', ')}]${this.isPaused ? ', paused' : ''}`, this.id);
       } else {
         // New project — start paused
@@ -858,6 +871,9 @@ class ProjectRunner {
         milestoneCyclesUsed: this.milestoneCyclesUsed,
         verificationFeedback: this.verificationFeedback,
         isFixRound: this.isFixRound,
+        isComplete: this.isComplete || false,
+        completionSuccess: this.completionSuccess || false,
+        completionMessage: this.completionMessage || null,
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -1037,6 +1053,25 @@ class ProjectRunner {
                 log(`Failed to parse milestone: ${e.message}`, this.id);
               }
             }
+            // Check for PROJECT_COMPLETE tag
+            const completeMatch = result.resultText.match(/<!-- PROJECT_COMPLETE -->\s*([\s\S]*?)\s*<!-- \/PROJECT_COMPLETE -->/);
+            if (completeMatch) {
+              try {
+                const completion = JSON.parse(completeMatch[1]);
+                this.isComplete = true;
+                this.completionSuccess = !!completion.success;
+                this.completionMessage = completion.message || 'Project completed';
+                this.isPaused = true;
+                this.pauseReason = `Project ${this.completionSuccess ? 'completed successfully' : 'ended'}: ${this.completionMessage}`;
+                log(`🏁 PROJECT COMPLETE (success: ${this.completionSuccess}): ${this.completionMessage}`, this.id);
+                broadcastEvent({ type: 'project-complete', project: this.id, success: this.completionSuccess, message: this.completionMessage });
+                this.saveState();
+                continue;
+              } catch (e) {
+                log(`Failed to parse PROJECT_COMPLETE: ${e.message}`, this.id);
+              }
+            }
+
             // Check for STOP file
             if (fs.existsSync(path.join(this.agentDir, 'STOP'))) {
               log(`STOP file detected — pausing project`, this.id);
