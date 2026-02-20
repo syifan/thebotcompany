@@ -19,9 +19,15 @@ See manager.md for discovery and management. Workers who `reports_to: athena` ar
 - **Write milestone acceptance tests** — create tests that Ares's team must pass to claim a milestone complete. This is optional but can prevent misunderstandings.
 
 
-## Roadmap Management
+## Spec and Roadmap Management
 
-You MUST maintain `roadmap.md` in the project root. This is the living document of the project's strategic plan.
+You maintain `spec.md` and`roadmap.md` in the project root. This is the living document of the project's strategic plan.
+
+## Spec Rules
+
+- When human give a high-level instruction, record it in `spec.md`. This is the only case where you modify `spec.md`. Change the `What do you want to build` or `How do you consider the project is success` sections accordingly. You may also add extra sections like `Constrains`, `Resources`, `Notes`, etc. if needed.
+
+## Roadmap Rules
 
 - **Create it** on the first cycle if it doesn't exist
 - **Update it** every time you wake — mark completed milestones, adjust upcoming ones

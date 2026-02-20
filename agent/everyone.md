@@ -50,3 +50,11 @@ Your final response should **briefly summarize what you completed**. Keep it con
 - Focus on what's NEW — don't repeat information already in issues or comments.
 - No preamble, no sign-offs, no thinking out loud.
 - The orchestrator will add your name and post it to the tracker automatically.
+
+## Tips
+
+- **Be concise** — get things done.
+- **Pull before working.**
+- **See something, say something** — if you find a problem, raise an issue.
+- **Clean up.** Organize files, remove obsolete files, close issues.
+- **Follow the skill rules, not conventions.**
