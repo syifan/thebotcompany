@@ -1053,10 +1053,12 @@ class ProjectRunner {
           }
 
           // Run Athena's scheduled workers (research, evaluation, review)
+          // Reload agents to pick up any newly hired workers (#12)
           if (schedule && schedule.agents) {
+            const freshWorkers1 = this.loadAgents().workers;
             for (const [name, value] of Object.entries(schedule.agents)) {
               if (!this.running) break;
-              const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
+              const worker = freshWorkers1.find(w => w.name.toLowerCase() === name.toLowerCase());
               if (!worker) continue;
               while (this.isPaused && this.running) { await sleep(1000); }
               const task = typeof value === 'string' ? value : value.task || null;
@@ -1121,10 +1123,12 @@ class ProjectRunner {
           }
 
           // Run Ares's scheduled workers
+          // Reload agents to pick up any newly hired workers (#12)
           if (schedule && schedule.agents) {
+            const freshWorkers2 = this.loadAgents().workers;
             for (const [name, value] of Object.entries(schedule.agents)) {
               if (!this.running) break;
-              const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
+              const worker = freshWorkers2.find(w => w.name.toLowerCase() === name.toLowerCase());
               if (!worker) continue;
               while (this.isPaused && this.running) { await sleep(1000); }
               const task = typeof value === 'string' ? value : value.task || null;
@@ -1188,10 +1192,12 @@ class ProjectRunner {
           }
 
           // Run Apollo's scheduled workers
+          // Reload agents to pick up any newly hired workers (#12)
           if (schedule && schedule.agents) {
+            const freshWorkers3 = this.loadAgents().workers;
             for (const [name, value] of Object.entries(schedule.agents)) {
               if (!this.running) break;
-              const worker = workers.find(w => w.name.toLowerCase() === name.toLowerCase());
+              const worker = freshWorkers3.find(w => w.name.toLowerCase() === name.toLowerCase());
               if (!worker) continue;
               while (this.isPaused && this.running) { await sleep(1000); }
               const task = typeof value === 'string' ? value : value.task || null;
