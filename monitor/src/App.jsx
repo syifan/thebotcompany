@@ -1447,7 +1447,7 @@ function App() {
                             : project.running ? 'Running' 
                             : 'Stopped'}
                         </Badge>
-                        {project.sleeping && project.sleepUntil && (
+                        {project.sleeping && project.sleepUntil && !project.paused && (
                           <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5 font-mono">
                             <SleepCountdown sleepUntil={project.sleepUntil} />
                           </p>
@@ -2050,7 +2050,7 @@ function App() {
                         <Badge variant="secondary">{selectedProject.currentAgent || 'None'}</Badge>
                       )}
                     </div>
-                    {selectedProject.sleeping && selectedProject.sleepUntil && (
+                    {selectedProject.sleeping && selectedProject.sleepUntil && !selectedProject.paused && (
                       <div className="flex justify-between items-center">
                         <span className="text-neutral-600 dark:text-neutral-300">Next cycle</span>
                         <SleepCountdown sleepUntil={selectedProject.sleepUntil} />

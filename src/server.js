@@ -185,6 +185,35 @@ class ProjectRunner {
     this._repo = null;
   }
 
+  /**
+   * Centralized state mutation with invariant enforcement.
+   * All state changes should go through this method.
+   * Automatically saves state and enforces consistency rules.
+   */
+  setState(patch, { save = true } = {}) {
+    // Apply patch
+    for (const [key, value] of Object.entries(patch)) {
+      this[key] = value;
+    }
+
+    // Enforce invariants
+    // 1. Complete projects are always paused
+    if (this.isComplete) {
+      this.isPaused = true;
+    }
+    // 2. Paused projects have no sleep countdown
+    if (this.isPaused) {
+      this.sleepUntil = null;
+      this.lastComputedSleepMs = null;
+    }
+    // 3. Phase reset: when entering athena phase, clear implementation/verification state
+    if (patch.phase === 'athena' && !patch.milestoneDescription) {
+      // Don't clear milestone info if it wasn't explicitly set — Athena needs context
+    }
+
+    if (save) this.saveState();
+  }
+
   get projectDir() {
     const repo = this.repo;
     if (repo) {
@@ -726,8 +755,8 @@ class ProjectRunner {
       currentAgentRuntime: this.currentAgentStartTime
         ? Math.floor((Date.now() - this.currentAgentStartTime) / 1000)
         : null,
-      sleeping: this.sleepUntil !== null,
-      sleepUntil: this.sleepUntil,
+      sleeping: this.sleepUntil !== null && !this.isPaused,
+      sleepUntil: this.isPaused ? null : this.sleepUntil,
       schedule: this.currentSchedule || null,
       phase: this.phase,
       milestoneTitle: this.milestoneTitle,
@@ -777,20 +806,21 @@ class ProjectRunner {
     fs.mkdirSync(this.agentDir, { recursive: true });
 
     // 2. Reset cycle count, phase, and save state
-    this.cycleCount = 0;
-    this.phase = 'athena';
-    this.milestoneTitle = null;
-    this.milestoneDescription = null;
-    this.milestoneCyclesBudget = 0;
-    this.milestoneCyclesUsed = 0;
-    this.verificationFeedback = null;
-    this.isFixRound = false;
-    this.isComplete = false;
-    this.completionSuccess = false;
-    this.completionMessage = null;
-    this.isPaused = true;
-    this.pauseReason = 'Bootstrapped — resume when ready';
-    this.saveState();
+    this.setState({
+      cycleCount: 0,
+      phase: 'athena',
+      milestoneTitle: null,
+      milestoneDescription: null,
+      milestoneCyclesBudget: 0,
+      milestoneCyclesUsed: 0,
+      verificationFeedback: null,
+      isFixRound: false,
+      isComplete: false,
+      completionSuccess: false,
+      completionMessage: null,
+      isPaused: true,
+      pauseReason: 'Bootstrapped — resume when ready',
+    });
     log(`Reset cycle count, project paused`, this.id);
 
     return { bootstrapped: true };
@@ -841,8 +871,7 @@ class ProjectRunner {
         log(`Loaded state: cycle ${this.cycleCount}, phase: ${this.phase}, completed: [${this.completedAgents.join(', ')}]${this.isPaused ? ', paused' : ''}`, this.id);
       } else {
         // New project — start paused
-        this.isPaused = true;
-        this.pauseReason = 'New project (paused by default)';
+        this.setState({ isPaused: true, pauseReason: 'New project (paused by default)' }, { save: false });
         this.completedAgents = [];
         this.currentCycleId = null;
         this.currentSchedule = null;
@@ -891,18 +920,18 @@ class ProjectRunner {
   }
 
   pause() {
-    this.isPaused = true;
-    this.pauseReason = null;
+    this.setState({ isPaused: true, pauseReason: null });
     log(`Paused`, this.id);
-    this.saveState();
   }
 
   resume() {
-    this.isPaused = false;
-    this.pauseReason = null;
+    if (this.isComplete) {
+      log(`Cannot resume completed project`, this.id);
+      return;
+    }
+    this.setState({ isPaused: false, pauseReason: null });
     this.wakeNow = true;
     log(`Resumed`, this.id);
-    this.saveState();
   }
 
   skip() {
@@ -990,8 +1019,7 @@ class ProjectRunner {
       const budgetStatus = this.getBudgetStatus();
       if (budgetStatus && budgetStatus.exhausted) {
         log(`Budget exhausted ($${budgetStatus.spent24h.toFixed(2)}/$${budgetStatus.budgetPer24h}), waiting for budget to roll off`, this.id);
-        this.isPaused = true;
-        this.pauseReason = `Budget exhausted: $${budgetStatus.spent24h.toFixed(2)} / $${budgetStatus.budgetPer24h} (24h)`;
+        this.setState({ isPaused: true, pauseReason: `Budget exhausted: $${budgetStatus.spent24h.toFixed(2)} / $${budgetStatus.budgetPer24h} (24h)` });
         // Re-check every 2 hours until budget rolls off or manually resumed
         await this._autoPauseWait(2 * 60 * 60 * 1000, () => !this.getBudgetStatus().exhausted);
         if (!this.running) break;
@@ -1040,13 +1068,15 @@ class ProjectRunner {
             if (milestoneMatch) {
               try {
                 const milestone = JSON.parse(milestoneMatch[1]);
-                this.milestoneTitle = milestone.title || milestone.description.slice(0, 80);
-                this.milestoneDescription = milestone.description;
-                this.milestoneCyclesBudget = milestone.cycles || 20;
-                this.milestoneCyclesUsed = 0;
-                this.verificationFeedback = null;
-                this.isFixRound = false;
-                this.phase = 'implementation';
+                this.setState({
+                  milestoneTitle: milestone.title || milestone.description.slice(0, 80),
+                  milestoneDescription: milestone.description,
+                  milestoneCyclesBudget: milestone.cycles || 20,
+                  milestoneCyclesUsed: 0,
+                  verificationFeedback: null,
+                  isFixRound: false,
+                  phase: 'implementation',
+                });
                 log(`New milestone (${this.milestoneCyclesBudget} cycles): ${this.milestoneDescription.slice(0, 100)}...`, this.id);
                 broadcastEvent({ type: 'milestone', project: this.id, title: this.milestoneTitle, cycles: this.milestoneCyclesBudget });
               } catch (e) {
@@ -1058,14 +1088,17 @@ class ProjectRunner {
             if (completeMatch) {
               try {
                 const completion = JSON.parse(completeMatch[1]);
-                this.isComplete = true;
-                this.completionSuccess = !!completion.success;
-                this.completionMessage = completion.message || 'Project completed';
-                this.isPaused = true;
-                this.pauseReason = `Project ${this.completionSuccess ? 'completed successfully' : 'ended'}: ${this.completionMessage}`;
-                log(`🏁 PROJECT COMPLETE (success: ${this.completionSuccess}): ${this.completionMessage}`, this.id);
-                broadcastEvent({ type: 'project-complete', project: this.id, success: this.completionSuccess, message: this.completionMessage });
-                this.saveState();
+                const success = !!completion.success;
+                const message = completion.message || 'Project completed';
+                this.setState({
+                  isComplete: true,
+                  completionSuccess: success,
+                  completionMessage: message,
+                  isPaused: true,
+                  pauseReason: `Project ${success ? 'completed successfully' : 'ended'}: ${message}`,
+                });
+                log(`🏁 PROJECT COMPLETE (success: ${success}): ${message}`, this.id);
+                broadcastEvent({ type: 'project-complete', project: this.id, success, message });
                 continue;
               } catch (e) {
                 log(`Failed to parse PROJECT_COMPLETE: ${e.message}`, this.id);
@@ -1075,9 +1108,7 @@ class ProjectRunner {
             // Check for STOP file
             if (fs.existsSync(path.join(this.agentDir, 'STOP'))) {
               log(`STOP file detected — pausing project`, this.id);
-              this.isPaused = true;
-              this.pauseReason = 'Project stopped by Athena';
-              this.saveState();
+              this.setState({ isPaused: true, pauseReason: 'Project stopped by Athena' });
               continue;
             }
           }
@@ -1116,8 +1147,7 @@ class ProjectRunner {
         // Check if deadline missed (before running)
         if (this.milestoneCyclesUsed >= this.milestoneCyclesBudget) {
           log(`⏰ Implementation deadline missed (${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles)`, this.id);
-          this.phase = 'athena';
-          this.saveState();
+          this.setState({ phase: 'athena' });
           continue;
         }
 
@@ -1146,9 +1176,8 @@ class ProjectRunner {
             // Check if Ares claims milestone complete
             if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
               log(`🎯 Ares claims milestone complete — switching to verification`, this.id);
-              this.phase = 'verification';
+              this.setState({ phase: 'verification' });
               broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: this.milestoneTitle });
-              this.saveState();
             }
           }
 
@@ -1251,22 +1280,28 @@ class ProjectRunner {
             log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
             broadcastEvent({ type: 'verified', project: this.id, title: this.milestoneTitle });
             this.milestoneTitle = null;
-            this.milestoneDescription = null;
-            this.milestoneCyclesBudget = 0;
-            this.milestoneCyclesUsed = 0;
-            this.verificationFeedback = null;
-            this.isFixRound = false;
-            this.phase = 'athena';
+            this.setState({
+              milestoneTitle: null,
+              milestoneDescription: null,
+              milestoneCyclesBudget: 0,
+              milestoneCyclesUsed: 0,
+              verificationFeedback: null,
+              isFixRound: false,
+              phase: 'athena',
+            });
           } else if (decision === 'fail') {
             log(`❌ Verification failed — returning to Ares (${Math.floor(this.milestoneCyclesBudget / 2)} fix cycles)`, this.id);
             broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
             const fixBudget = Math.floor(this.milestoneCyclesBudget / 2);
-            this.milestoneCyclesBudget = this.milestoneCyclesUsed + fixBudget;
-            this.isFixRound = true;
-            this.phase = 'implementation';
+            this.setState({
+              milestoneCyclesBudget: this.milestoneCyclesUsed + fixBudget,
+              isFixRound: true,
+              phase: 'implementation',
+            });
+          } else {
+            // No decision yet, stay in verification phase — still save
+            this.saveState();
           }
-          // If no decision yet, stay in verification phase (Apollo gets more cycles)
-          this.saveState();
         }
       }
 
@@ -1277,8 +1312,7 @@ class ProjectRunner {
       if (this.consecutiveFailures >= 10 && this.running) {
         log(`⚠️ ${this.consecutiveFailures} consecutive agent failures — auto-pausing (retry in 2h)`, this.id);
         broadcastEvent({ type: 'error', project: this.id, message: `${this.consecutiveFailures} consecutive failures — auto-paused` });
-        this.isPaused = true;
-        this.pauseReason = `${this.consecutiveFailures} consecutive agent failures`;
+        this.setState({ isPaused: true, pauseReason: `${this.consecutiveFailures} consecutive agent failures` });
         this.consecutiveFailures = 0;
         await this._autoPauseWait(2 * 60 * 60 * 1000);
         if (!this.running) break;
