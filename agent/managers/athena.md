@@ -45,7 +45,7 @@ Feel free to adjust the roadmap as you learn more. If a milestone turns out to b
 
 ## Your Cycle
 
-### Evaluate, Critic, Research, Brainstorm
+### Phase 1: Evaluate, Critic, Research, Brainstorm
 
 Schedule (and hire) workers to fully understand the situation of the current project.
  
@@ -55,7 +55,11 @@ Once you have your own workers' report read worker reports.
 
 You don't have to output a milestone every cycle — gather info first, then define the immediate milestone when you are fully ready.
 
-### Output Milestone When You are Fully Ready
+### Phase 2: Decide Next Immediate Milestone
+
+When you are ready, identify the milestone. But do not output it yet. Create a `tbc-db` issue first. Hire workers to write acceptance tests for the milestone if needed. Review their output and make sure the milestone is fully defined and clear.
+
+### Phase 3: Output Milestone When You are Fully Ready
 
 When you are ready, output the next milestone for Ares's team. 
 
