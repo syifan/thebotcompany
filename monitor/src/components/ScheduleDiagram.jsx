@@ -166,7 +166,7 @@ export function stripScheduleBlock(text) {
 export function stripAllMetaBlocks(text) {
   if (!text) return text
   return text
-    .replace(/<!--\s*(SCHEDULE|MILESTONE|VERIFY_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*(SCHEDULE|MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
     .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
@@ -175,6 +175,13 @@ export function stripAllMetaBlocks(text) {
 export function parseMilestoneBlock(text) {
   if (!text) return null
   const match = text.match(/<!--\s*MILESTONE\s*-->\s*([\s\S]*?)\s*<!--\s*\/MILESTONE\s*-->/)
+  if (!match) return null
+  try { return JSON.parse(match[1]) } catch { return null }
+}
+
+export function parseProjectComplete(text) {
+  if (!text) return null
+  const match = text.match(/<!--\s*PROJECT_COMPLETE\s*-->\s*([\s\S]*?)\s*<!--\s*\/PROJECT_COMPLETE\s*-->/)
   if (!match) return null
   try { return JSON.parse(match[1]) } catch { return null }
 }
@@ -197,9 +204,10 @@ export function parseDirectives(text) {
 
 export function MetaBlockBadges({ text }) {
   const milestone = parseMilestoneBlock(text)
+  const projectComplete = parseProjectComplete(text)
   const { list: directives, verifyFailFeedback } = parseDirectives(text)
 
-  if (!milestone && directives.length === 0) return null
+  if (!milestone && !projectComplete && directives.length === 0) return null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -223,6 +231,16 @@ export function MetaBlockBadges({ text }) {
         <MetaCard label="❌ Verification Failed" color="#ef4444">
           {verifyFailFeedback && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{verifyFailFeedback}</div>
+          )}
+        </MetaCard>
+      )}
+      {projectComplete && (
+        <MetaCard
+          label={projectComplete.success ? '🏁 Project Complete' : '🛑 Project Ended'}
+          color={projectComplete.success ? '#10b981' : '#ef4444'}
+        >
+          {projectComplete.message && (
+            <div style={{ whiteSpace: 'pre-wrap' }}>{projectComplete.message}</div>
           )}
         </MetaCard>
       )}
