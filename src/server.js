@@ -40,10 +40,27 @@ function stripMetaBlocks(text) {
     .trim();
 }
 
-// --- Web Push (VAPID) ---
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+// --- Web Push (VAPID) --- Auto-generate keys if missing
+let VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
+let VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
 const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@example.com';
+if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+  const envPath = path.join(TBC_HOME, '.env');
+  const vapidKeys = webpush.generateVAPIDKeys();
+  VAPID_PUBLIC = vapidKeys.publicKey;
+  VAPID_PRIVATE = vapidKeys.privateKey;
+  // Append to .env file
+  let envContent = '';
+  try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch {}
+  const lines = [];
+  if (!envContent.includes('VAPID_PUBLIC_KEY=')) lines.push(`VAPID_PUBLIC_KEY=${VAPID_PUBLIC}`);
+  if (!envContent.includes('VAPID_PRIVATE_KEY=')) lines.push(`VAPID_PRIVATE_KEY=${VAPID_PRIVATE}`);
+  if (!envContent.includes('VAPID_EMAIL=')) lines.push(`VAPID_EMAIL=${VAPID_EMAIL}`);
+  if (lines.length) {
+    fs.appendFileSync(envPath, (envContent.endsWith('\n') ? '' : '\n') + lines.join('\n') + '\n');
+    log('Auto-generated VAPID keys and saved to .env');
+  }
+}
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
 }
