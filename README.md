@@ -58,10 +58,8 @@ ANTHROPIC_AUTH_TOKEN=sk-ant-...
 # Optional — server port (default: 3100)
 TBC_PORT=3100
 
-# Optional — push notifications (generate with: npx web-push generate-vapid-keys)
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_EMAIL=mailto:you@example.com
+# Optional — override server port (default: 3100)
+# TBC_PORT=3100
 ```
 
 | Variable | Required | Description |
@@ -69,9 +67,8 @@ VAPID_EMAIL=mailto:you@example.com
 | `TBC_PASSWORD` | Yes | Password for dashboard write access |
 | `ANTHROPIC_AUTH_TOKEN` | For agents | Claude Code auth token. Can also be set per-project in the dashboard. |
 | `TBC_PORT` | No | Server port (default: 3100) |
-| `VAPID_PUBLIC_KEY` | No | Web Push public key for browser notifications |
-| `VAPID_PRIVATE_KEY` | No | Web Push private key |
-| `VAPID_EMAIL` | No | Contact email for VAPID (default: `mailto:admin@example.com`) |
+
+> **Note:** VAPID keys for push notifications are auto-generated on first start. No manual setup needed.
 
 ### Project Configuration
 
