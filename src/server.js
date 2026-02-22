@@ -943,10 +943,11 @@ class ProjectRunner {
 
   resume() {
     if (this.isComplete) {
-      log(`Cannot resume completed project`, this.id);
-      return;
+      log(`Reopening completed project`, this.id);
+      this.setState({ isComplete: false, completionSuccess: false, completionMessage: null, isPaused: false, pauseReason: null, phase: 'athena' });
+    } else {
+      this.setState({ isPaused: false, pauseReason: null });
     }
-    this.setState({ isPaused: false, pauseReason: null });
     this.wakeNow = true;
     log(`Resumed`, this.id);
   }
