@@ -58,7 +58,7 @@ The dashboard provides:
 
 ### Authentication
 
-The dashboard has read-only mode by default. Enter the `TBC_PASSWORD` via the login button to enable write operations (pause, resume, config changes, etc.).
+The dashboard has read-only mode by default. Enter the password (set during first-run setup) via the login button to enable write operations (pause, resume, config changes, etc.).
 
 ## Development
 
