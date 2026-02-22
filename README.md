@@ -77,66 +77,6 @@ Athena can end a project by outputting a `<!-- PROJECT_COMPLETE -->` tag:
 
 This pauses the project and marks it as complete in the dashboard.
 
-## Project Structure
-
-### Repository Layout
-
-Each managed repo needs an `agent/` directory:
-
-```
-your-repo/
-├── agent/
-│   ├── everyone.md           # Shared rules for all agents
-│   ├── manager.md            # Shared rules for managers
-│   ├── worker.md             # Shared rules for workers
-│   ├── db.md                 # Database (SQLite) usage guide
-│   ├── managers/
-│   │   ├── athena.md         # Strategy manager skill
-│   │   ├── ares.md           # Implementation manager skill
-│   │   └── apollo.md         # Verification manager skill
-│   └── workers/
-│       ├── leo.md            # Example worker
-│       └── maya.md           # Example worker
-├── spec.md                   # Project specification (created by Athena)
-├── roadmap.md                # Project roadmap (maintained by Athena)
-└── ...                       # Your actual project files
-```
-
-### Worker Skill File Format
-
-```markdown
----
-model: claude-opus-4-6
-role: Backend Developer
-reports_to: ares
----
-# Leo
-
-Your instructions here...
-```
-
-| Frontmatter | Description |
-|-------------|-------------|
-| `model` | Model to use (overrides project default) |
-| `role` | Short description shown in dashboard |
-| `reports_to` | Which manager schedules this worker (`ares`, `athena`, or `apollo`) |
-
-### TheBotCompany Data Directory
-
-```
-~/.thebotcompany/
-├── .env                      # Environment variables
-├── projects.yaml             # Project registry
-├── logs/
-│   └── server.log            # Orchestrator logs
-└── dev/
-    └── <project-path>/
-        └── workspace/
-            ├── config.yaml   # Project config
-            ├── state.json    # Orchestrator state
-            └── project.db    # SQLite database (issues, reports, comments)
-```
-
 ## CLI Reference
 
 ```bash
