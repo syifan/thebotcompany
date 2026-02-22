@@ -4,4 +4,4 @@ dist/
 .DS_Store
 .env
 .env.*
-.history
+.historybin/tbc

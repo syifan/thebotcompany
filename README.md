@@ -46,27 +46,13 @@ Open the dashboard at **http://localhost:3100** (production) or **http://localho
 
 ### Environment Variables
 
-TheBotCompany loads environment variables from `~/.thebotcompany/.env`.
+Running `tbc start` or `tbc dev` for the first time will interactively prompt you to set a dashboard password and port. The config is saved to `~/.thebotcompany/.env`.
 
-```bash
-# Required — dashboard authentication password
-TBC_PASSWORD=your-secure-password
-
-# Required for agents — Anthropic auth token (Claude Code setup token or API key)
-ANTHROPIC_AUTH_TOKEN=sk-ant-...
-
-# Optional — server port (default: 3100)
-TBC_PORT=3100
-
-# Optional — override server port (default: 3100)
-# TBC_PORT=3100
-```
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TBC_PASSWORD` | Yes | Password for dashboard write access |
-| `ANTHROPIC_AUTH_TOKEN` | For agents | Claude Code auth token. Can also be set per-project in the dashboard. |
-| `TBC_PORT` | No | Server port (default: 3100) |
+| Variable | Description |
+|----------|-------------|
+| `TBC_PASSWORD` | Dashboard authentication password (set during first-run setup) |
+| `TBC_PORT` | Server port (default: 5173, set during first-run setup) |
+| `ANTHROPIC_AUTH_TOKEN` | Claude Code auth token. Can be set per-project in the dashboard. |
 
 > **Note:** VAPID keys for push notifications are auto-generated on first start. No manual setup needed.
 
