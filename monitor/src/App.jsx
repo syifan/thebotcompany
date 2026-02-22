@@ -537,7 +537,7 @@ function App() {
     if (!selectedProject) return
     setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false })
     try {
-      const res = await fetch(projectApi('/bootstrap'))
+      const res = await authFetch(projectApi('/bootstrap'))
       const data = await res.json()
       setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false })
     } catch (err) {
