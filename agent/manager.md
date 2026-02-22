@@ -117,6 +117,7 @@ You MUST include this exact format in your response when scheduling workers:
 - Only schedule workers who report to you.
 - **ALWAYS use the `<!-- SCHEDULE -->` format. Never use code blocks.**
 - Prefer describing the task in issues rather than the schedule. 
+- Agents does not in parallel. They run sequentially in the order you list them.
 
 ### Delays
 
