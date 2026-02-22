@@ -27,48 +27,11 @@ Human-free software development with self-organizing AI agent teams.
 # Install globally
 npm install -g thebotcompany
 
-# Initialize config directory
-tbc init
-
-# Add a project (point to a repo with an agent/ directory)
-tbc add myproject ~/path/to/my/repo
-
-# Start the orchestrator (background, logs to file)
+# Start the orchestrator + dashboard (first run will prompt for password and port)
 tbc start
-
-# Or run in dev mode (foreground, with dashboard HMR)
-tbc dev
 ```
 
-Open the dashboard at **http://localhost:3100** (production) or **http://localhost:5173** (dev mode).
-
-## Configuration
-
-### Environment Variables
-
-Running `tbc start` or `tbc dev` for the first time will interactively prompt you to set a dashboard password and port. The config is saved to `~/.thebotcompany/.env`.
-
-| Variable | Description |
-|----------|-------------|
-| `TBC_PASSWORD` | Dashboard authentication password (set during first-run setup) |
-| `TBC_PORT` | Server port (default: 5173, set during first-run setup) |
-| `ANTHROPIC_AUTH_TOKEN` | Claude Code auth token. Can be set per-project in the dashboard. |
-
-> **Note:** VAPID keys for push notifications are auto-generated on first start. No manual setup needed.
-
-### Project Configuration
-
-Each project has a YAML config at `~/.thebotcompany/dev/<project-path>/workspace/config.yaml`:
-
-```yaml
-cycleIntervalMs: 1800000    # Time between cycles (default: 30 min)
-agentTimeoutMs: 3600000     # Max time per agent run (default: 1 hour)
-model: claude-opus-4-6            # Default model for all agents
-trackerIssue: 1             # GitHub issue number for tracking
-budgetPer24h: 100           # Max spend per 24h in USD (0 = unlimited)
-```
-
-These can also be edited from the dashboard's project settings.
+Add projects through the dashboard UI, then start the orchestrator.
 
 ## How It Works
 
@@ -177,15 +140,11 @@ Your instructions here...
 ## CLI Reference
 
 ```bash
-tbc init                    # Initialize ~/.thebotcompany/
 tbc start                   # Start orchestrator + dashboard (background)
 tbc stop                    # Stop orchestrator
 tbc dev                     # Start in dev mode (foreground + Vite HMR)
 tbc status                  # Show running status
-tbc logs                    # Tail orchestrator logs
-tbc projects                # List configured projects
-tbc add <id> <path>         # Add a project
-tbc remove <id>             # Remove a project
+tbc logs [n]                # Show last n lines of logs (default 50)
 ```
 
 ## Dashboard
@@ -204,16 +163,6 @@ The dashboard provides:
 ### Authentication
 
 The dashboard has read-only mode by default. Enter the `TBC_PASSWORD` via the login button to enable write operations (pause, resume, config changes, etc.).
-
-## Hosting
-
-To expose the dashboard externally (e.g., via Cloudflare Tunnel):
-
-1. Set `TBC_PORT` in `.env` to your desired port
-2. Run `tbc start` (serves the built dashboard + API on that port)
-3. Point your tunnel to `localhost:<TBC_PORT>`
-
-For development with HMR, use `tbc dev` which runs Vite on port 5173 and proxies API calls to port 3100.
 
 ## Development
 

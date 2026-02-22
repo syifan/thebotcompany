@@ -4,26 +4,22 @@
  * 
  * Usage:
  *   tbc start              Start production server (orchestrator + monitor)
+ *   tbc stop               Stop the server
  *   tbc dev                Start development mode (orchestrator + vite HMR)
  *   tbc status             Show status of all projects
- *   tbc init               Initialize ~/.thebotcompany
- *   tbc add <id> <path>    Add a project
- *   tbc remove <id>        Remove a project
- *   tbc projects           List configured projects
+ *   tbc logs [n]           Show last n lines of logs
  */
 
 import { spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
 import { createInterface } from 'readline';
 import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
-const PROJECTS_PATH = path.join(TBC_HOME, 'projects.yaml');
 const MONITOR_DIR = path.join(ROOT, 'monitor');
 
 const args = process.argv.slice(2);
@@ -81,16 +77,6 @@ async function ensureEnv() {
   console.log(`   (VAPID keys will be auto-generated on first start)\n`);
 }
 
-function loadProjectsYaml() {
-  if (!fs.existsSync(PROJECTS_PATH)) return { projects: {} };
-  const raw = fs.readFileSync(PROJECTS_PATH, 'utf-8');
-  return yaml.load(raw) || { projects: {} };
-}
-
-function saveProjectsYaml(config) {
-  fs.writeFileSync(PROJECTS_PATH, yaml.dump(config, { lineWidth: -1 }));
-}
-
 function buildMonitor() {
   console.log('Building monitor...');
   if (!fs.existsSync(path.join(MONITOR_DIR, 'node_modules'))) {
@@ -103,13 +89,6 @@ function buildMonitor() {
 
 async function main() {
   switch (command) {
-    case 'init':
-      ensureHome();
-      console.log(`Initialized ${TBC_HOME}`);
-      console.log(`  projects.yaml: ${PROJECTS_PATH}`);
-      console.log(`  logs: ${path.join(TBC_HOME, 'logs')}`);
-      break;
-
     case 'start':
       ensureHome();
       await ensureEnv();
@@ -197,65 +176,6 @@ async function main() {
       }
       break;
 
-    case 'projects':
-      ensureHome();
-      const config = loadProjectsYaml();
-      const projectList = config.projects || {};
-      if (Object.keys(projectList).length === 0) {
-        console.log('No projects configured.');
-        console.log(`Add one with: tbc add <id> <path>`);
-      } else {
-        console.log('Configured projects:\n');
-        for (const [id, cfg] of Object.entries(projectList)) {
-          const enabled = cfg.enabled !== false ? '✓' : '✗';
-          console.log(`  ${enabled} ${id}: ${cfg.path}`);
-        }
-      }
-      console.log(`\nConfig: ${PROJECTS_PATH}`);
-      break;
-
-    case 'add':
-      ensureHome();
-      const addId = args[1];
-      let addPath = args[2];
-      if (!addId || !addPath) {
-        console.log('Usage: tbc add <id> <path>');
-        console.log('Example: tbc add m2sim ~/dev/src/github.com/sarchlab/m2sim');
-        process.exit(1);
-      }
-      if (addPath.startsWith('~')) {
-        addPath = addPath.replace(/^~/, process.env.HOME);
-      }
-      addPath = path.resolve(addPath);
-      {
-        const cfg = loadProjectsYaml();
-        if (!cfg.projects) cfg.projects = {};
-        cfg.projects[addId] = { path: addPath, enabled: true };
-        saveProjectsYaml(cfg);
-        console.log(`Added project: ${addId} -> ${addPath}`);
-        console.log('Run `tbc start` or POST /api/reload to pick up changes');
-      }
-      break;
-
-    case 'remove':
-      ensureHome();
-      const removeId = args[1];
-      if (!removeId) {
-        console.log('Usage: tbc remove <id>');
-        process.exit(1);
-      }
-      {
-        const cfg = loadProjectsYaml();
-        if (cfg.projects && cfg.projects[removeId]) {
-          delete cfg.projects[removeId];
-          saveProjectsYaml(cfg);
-          console.log(`Removed project: ${removeId}`);
-        } else {
-          console.log(`Project not found: ${removeId}`);
-        }
-      }
-      break;
-
     case 'stop':
       {
         const pidFile = path.join(TBC_HOME, 'server.pid');
@@ -308,13 +228,8 @@ Usage:
   tbc logs [n]           Show last n lines of logs (default 50)
   tbc status             Show running status
   tbc dev                Start development mode (foreground + vite HMR)
-  
-  tbc projects           List configured projects
-  tbc add <id> <path>    Add a project
-  tbc remove <id>        Remove a project
-  tbc init               Initialize ~/.thebotcompany
 
-Config: ${PROJECTS_PATH}
+Add projects through the dashboard UI.
 `);
   }
 }
