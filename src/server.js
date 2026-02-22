@@ -1208,6 +1208,7 @@ class ProjectRunner {
 
           // Execute schedule steps (delays + workers)
           if (schedule) {
+            this.currentSchedule = schedule;
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
@@ -1309,6 +1310,7 @@ class ProjectRunner {
 
           // Execute schedule steps (delays + workers)
           if (schedule) {
+            this.currentSchedule = schedule;
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
