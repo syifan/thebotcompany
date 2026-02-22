@@ -1012,16 +1012,91 @@ class ProjectRunner {
   }
 
   parseSchedule(resultText) {
-    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Ares's response
-    const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
+    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from manager response
+    // Supports both array format (new) and object format (legacy)
+    const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
     try {
-      const schedule = JSON.parse(match[1]);
-      return schedule;
+      const raw = JSON.parse(match[1]);
+      
+      // New array format: [{ "delay": 20 }, { "leo": { "task": "..." } }, ...]
+      if (Array.isArray(raw)) {
+        return { _steps: raw };
+      }
+      
+      // Legacy object format: { "agents": { "delay": 20, "leo": {...} } }
+      // Convert to array format internally
+      if (raw.agents) {
+        const steps = [];
+        const agents = raw.agents;
+        // Top-level delay (before first agent)
+        if (agents.delay) {
+          steps.push({ delay: agents.delay });
+        }
+        for (const [name, value] of Object.entries(agents)) {
+          if (name === 'delay') continue;
+          steps.push({ [name]: value });
+          // Per-agent delay
+          const agentDelay = typeof value === 'object' ? value.delay : null;
+          if (agentDelay) {
+            // Remove delay from agent value since it's now a separate step
+            const clean = { ...value };
+            delete clean.delay;
+            steps[steps.length - 1] = { [name]: Object.keys(clean).length === 1 && clean.task ? clean.task : clean };
+          }
+        }
+        return { _steps: steps };
+      }
+      
+      // Bare object with delay at top level
+      if (raw.delay !== undefined) {
+        return { _steps: [{ delay: raw.delay }] };
+      }
+      
+      return null;
     } catch (e) {
-      log(`Failed to parse Ares schedule: ${e.message}`, this.id);
+      log(`Failed to parse schedule: ${e.message}`, this.id);
       return null;
     }
+  }
+
+  async executeSchedule(schedule, config) {
+    if (!schedule || !schedule._steps) return { total: 0, failures: 0 };
+    
+    let total = 0;
+    let failures = 0;
+    const freshWorkers = this.loadAgents().workers;
+    
+    for (const step of schedule._steps) {
+      if (!this.running) break;
+      
+      // Delay step
+      if (step.delay !== undefined) {
+        await this.sleepDelay(step.delay, 'schedule');
+        continue;
+      }
+      
+      // Agent step: { "agentName": taskValue }
+      const name = Object.keys(step).find(k => k !== 'delay');
+      if (!name) continue;
+      
+      const value = step[name];
+      const worker = freshWorkers.find(w => w.name.toLowerCase() === name.toLowerCase());
+      if (!worker) {
+        log(`Worker "${name}" not found, skipping`, this.id);
+        continue;
+      }
+      
+      while (this.isPaused && this.running) { await sleep(1000); }
+      
+      const task = typeof value === 'string' ? value : value.task || null;
+      const vis = this._parseVisibility(value, task);
+      const wResult = await this.runAgent(worker, config, null, task, vis);
+      total++;
+      if (!wResult || !wResult.success) failures++;
+    }
+    
+    return { total, failures };
   }
 
   async runLoop() {
@@ -1131,29 +1206,11 @@ class ProjectRunner {
             }
           }
 
-          // Delay after Athena if requested
-          if (schedule && schedule.delay) {
-            await this.sleepDelay(schedule.delay, 'athena');
-          }
-
-          // Run Athena's scheduled workers (research, evaluation, review)
-          // Reload agents to pick up any newly hired workers (#12)
-          if (schedule && schedule.agents) {
-            const freshWorkers1 = this.loadAgents().workers;
-            for (const [name, value] of Object.entries(schedule.agents)) {
-              if (!this.running) break;
-              const worker = freshWorkers1.find(w => w.name.toLowerCase() === name.toLowerCase());
-              if (!worker) continue;
-              while (this.isPaused && this.running) { await sleep(1000); }
-              const task = typeof value === 'string' ? value : value.task || null;
-              const vis = this._parseVisibility(value, task);
-              const wResult = await this.runAgent(worker, config, null, task, vis);
-              cycleTotal++;
-              if (!wResult || !wResult.success) cycleFailures++;
-              // Per-agent delay
-              const agentDelay = typeof value === 'object' ? value.delay : null;
-              if (agentDelay) await this.sleepDelay(agentDelay, name);
-            }
+          // Execute schedule steps (delays + workers)
+          if (schedule) {
+            const { total, failures } = await this.executeSchedule(schedule, config);
+            cycleTotal += total;
+            cycleFailures += failures;
           }
 
           this.saveState();
@@ -1199,29 +1256,11 @@ class ProjectRunner {
             }
           }
 
-          // Delay after manager if requested
-          if (schedule && schedule.delay) {
-            await this.sleepDelay(schedule.delay, 'ares');
-          }
-
-          // Run Ares's scheduled workers
-          // Reload agents to pick up any newly hired workers (#12)
-          if (schedule && schedule.agents) {
-            const freshWorkers2 = this.loadAgents().workers;
-            for (const [name, value] of Object.entries(schedule.agents)) {
-              if (!this.running) break;
-              const worker = freshWorkers2.find(w => w.name.toLowerCase() === name.toLowerCase());
-              if (!worker) continue;
-              while (this.isPaused && this.running) { await sleep(1000); }
-              const task = typeof value === 'string' ? value : value.task || null;
-              const vis = this._parseVisibility(value, task);
-              const wResult = await this.runAgent(worker, config, null, task, vis);
-              cycleTotal++;
-              if (!wResult || !wResult.success) cycleFailures++;
-              // Per-agent delay
-              const agentDelay = typeof value === 'object' ? value.delay : null;
-              if (agentDelay) await this.sleepDelay(agentDelay, name);
-            }
+          // Execute schedule steps (delays + workers)
+          if (schedule) {
+            const { total, failures } = await this.executeSchedule(schedule, config);
+            cycleTotal += total;
+            cycleFailures += failures;
           }
         }
         // Only count cycle if at least one agent succeeded
@@ -1268,29 +1307,11 @@ class ProjectRunner {
             }
           }
 
-          // Delay after manager if requested
-          if (schedule && schedule.delay) {
-            await this.sleepDelay(schedule.delay, 'apollo');
-          }
-
-          // Run Apollo's scheduled workers
-          // Reload agents to pick up any newly hired workers (#12)
-          if (schedule && schedule.agents) {
-            const freshWorkers3 = this.loadAgents().workers;
-            for (const [name, value] of Object.entries(schedule.agents)) {
-              if (!this.running) break;
-              const worker = freshWorkers3.find(w => w.name.toLowerCase() === name.toLowerCase());
-              if (!worker) continue;
-              while (this.isPaused && this.running) { await sleep(1000); }
-              const task = typeof value === 'string' ? value : value.task || null;
-              const vis = this._parseVisibility(value, task);
-              const wResult = await this.runAgent(worker, config, null, task, vis);
-              cycleTotal++;
-              if (!wResult || !wResult.success) cycleFailures++;
-              // Per-agent delay
-              const agentDelay = typeof value === 'object' ? value.delay : null;
-              if (agentDelay) await this.sleepDelay(agentDelay, name);
-            }
+          // Execute schedule steps (delays + workers)
+          if (schedule) {
+            const { total, failures } = await this.executeSchedule(schedule, config);
+            cycleTotal += total;
+            cycleFailures += failures;
           }
 
           // Process decision

@@ -105,28 +105,34 @@ When writing skill files, search online for best practices relevant to the worke
 You MUST include this exact format in your response when scheduling workers:
 
 <!-- SCHEDULE -->
-{"agents": {
-  "delay": 20,
-  "leo": {"task": "Fix issue #32", "visibility": "focused", "delay":30},
-  "maya": {"task": "Add the feature described in #51", "visibility": "blind"}
-}}
+[
+  {"delay": 20},
+  {"leo": {"task": "Fix issue #32", "visibility": "focused"}},
+  {"delay": 30},
+  {"maya": {"task": "Add the feature described in #51", "visibility": "blind"}}
+]
 <!-- /SCHEDULE -->
 
+The schedule is an **ordered array of steps**. Each step is either:
+- `{"delay": N}` — wait N minutes before proceeding to the next step
+- `{"agentName": taskValue}` — run that agent
+
 ### Rules
+- Steps execute top-to-bottom in exact order.
 - Only include workers that should run. Omitted workers are skipped.
 - Only schedule workers who report to you.
 - **ALWAYS use the `<!-- SCHEDULE -->` format. Never use code blocks.**
-- Prefer describing the task in issues rather than the schedule. 
-- Agents does not in parallel. They run sequentially in the order you list them.
+- Prefer describing the task in issues rather than the schedule.
+- Agents run sequentially in the order you list them, not in parallel.
 
 ### Delays
 
-You can add delays after yourself or any worker in the schedule. Use this when waiting for CI, builds, or other async work.
+Insert `{"delay": N}` steps wherever you need a pause (waiting for CI, builds, etc.):
 
-- Top-level `delay`: minutes to wait after YOU (the manager) finish, before workers start
-- Per-agent `delay`: minutes to wait after THAT worker finishes, before the next one starts
+- A delay at the start waits after YOU (the manager) finish, before any worker starts
+- A delay between workers waits after the previous worker finishes
 - Maximum 240 minutes per delay
-- Omit `delay` for agents that don't need it
+- Omit delay steps where you don't need pauses
 
 ### Worker Visibility
 
