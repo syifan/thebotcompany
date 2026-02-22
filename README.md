@@ -33,50 +33,6 @@ tbc start
 
 Add projects through the dashboard UI, then start the orchestrator.
 
-## How It Works
-
-### Three-Phase State Machine
-
-Each project runs through a repeating cycle of three phases:
-
-```
-┌──────────┐     milestone      ┌────────────────┐    claim complete    ┌──────────────┐
-│  Athena   │ ──────────────►   │ Implementation │ ──────────────────►  │ Verification │
-│ (Strategy)│                   │   (Ares)       │                      │   (Apollo)   │
-└──────────┘                   └────────────────┘                      └──────────────┘
-     ▲                                │                                       │
-     │          deadline missed       │            pass ✅ / fail ❌          │
-     └────────────────────────────────┴───────────────────────────────────────┘
-```
-
-1. **Athena Phase** — Evaluates the project, defines the next milestone with a cycle budget, and optionally schedules research workers for evaluation before committing
-2. **Implementation Phase (Ares)** — Ares coordinates workers to implement the milestone. Runs until Ares claims complete or the cycle budget is exhausted
-3. **Verification Phase (Apollo)** — Apollo's team independently verifies the milestone. Pass → back to Athena for the next milestone. Fail → back to Ares with fix cycles
-
-### Managers
-
-| Manager | Role | When it runs |
-|---------|------|-------------|
-| **Athena** | Strategy — defines milestones, maintains roadmap, manages research workers | Start of each milestone cycle |
-| **Ares** | Implementation — schedules workers, reviews PRs, coordinates execution | Every cycle during implementation |
-| **Apollo** | Verification — independently verifies milestone completion | Every cycle during verification |
-
-### Workers
-
-Workers are project-specific agents defined in the repo's `agent/workers/` directory. Managers hire, schedule, and assign tasks to workers. Each worker has a skill file (markdown with YAML frontmatter) defining their role, model, and who they report to.
-
-### Project Completion
-
-Athena can end a project by outputting a `<!-- PROJECT_COMPLETE -->` tag:
-
-```html
-<!-- PROJECT_COMPLETE -->
-{"success": true, "message": "All milestones achieved. Project complete."}
-<!-- /PROJECT_COMPLETE -->
-```
-
-This pauses the project and marks it as complete in the dashboard.
-
 ## CLI Reference
 
 ```bash
