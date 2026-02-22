@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
-import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges } from '@/components/ScheduleDiagram'
+import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -941,8 +941,7 @@ function App() {
     const runtime = isActive ? selectedProject?.currentAgentRuntime : null
     // Get mode from schedule
     const schedule = selectedProject?.schedule
-    const agentSchedule = schedule?.agents?.[agent.name]
-    const task = typeof agentSchedule === 'string' ? agentSchedule : agentSchedule?.task || null
+    const task = getAgentTask(schedule, agent.name)
     
     return (
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
