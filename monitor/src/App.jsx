@@ -1915,6 +1915,10 @@ function App() {
               >
                 <Settings className="w-4 h-4" />
               </button>
+              <a href={projectApi('/download')} className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="Download workspace as ZIP">
+                <Save className="w-3.5 h-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline">Download</span>
+              </a>
               {repoUrl && (
                 <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="GitHub">
                   <Github className="w-3.5 h-3.5 sm:mr-1.5" />

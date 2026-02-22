@@ -2465,6 +2465,39 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // GET /api/projects/:id/download - zip and download workspace
+    if (req.method === 'GET' && subPath === 'download') {
+      try {
+        const workspaceDir = runner.agentDir;
+        if (!fs.existsSync(workspaceDir)) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Workspace not found' }));
+          return;
+        }
+        const filename = `${runner.id.replace(/\//g, '-')}-workspace.zip`;
+        res.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        });
+        const zip = spawn('zip', ['-r', '-q', '-', '.'], { cwd: workspaceDir, stdio: ['ignore', 'pipe', 'ignore'] });
+        zip.stdout.pipe(res);
+        zip.on('error', () => {
+          // Fallback to tar if zip not available
+          const tar = spawn('tar', ['-czf', '-', '-C', workspaceDir, '.'], { stdio: ['ignore', 'pipe', 'ignore'] });
+          res.writeHead(200, {
+            'Content-Type': 'application/gzip',
+            'Content-Disposition': `attachment; filename="${filename.replace('.zip', '.tar.gz')}"`,
+          });
+          tar.stdout.pipe(res);
+          tar.on('error', () => { res.end(); });
+        });
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
     // GET /api/projects/:id/bootstrap - preview what bootstrap will do
     if (req.method === 'GET' && subPath === 'bootstrap') {
       if (!requireWrite(req, res)) return;
