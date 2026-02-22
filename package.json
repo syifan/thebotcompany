@@ -1,6 +1,6 @@
 {
   "name": "thebotcompany",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Multi-project AI agent orchestrator",
   "type": "module",
   "main": "src/server.js",
