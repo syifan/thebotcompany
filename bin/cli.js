@@ -21,6 +21,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 const MONITOR_DIR = path.join(ROOT, 'monitor');
+const PROJECTS_PATH = path.join(TBC_HOME, 'projects.yaml');
 
 const args = process.argv.slice(2);
 const command = args[0];
