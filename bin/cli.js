@@ -78,6 +78,15 @@ async function ensureEnv() {
   console.log(`   (VAPID keys will be auto-generated on first start)\n`);
 }
 
+function getPort() {
+  const envPath = path.join(TBC_HOME, '.env');
+  if (fs.existsSync(envPath)) {
+    const match = fs.readFileSync(envPath, 'utf-8').match(/^TBC_PORT=(.+)$/m);
+    if (match) return match[1].trim();
+  }
+  return process.env.TBC_PORT || '3100';
+}
+
 function buildMonitor() {
   console.log('Building monitor...');
   if (!fs.existsSync(path.join(MONITOR_DIR, 'node_modules'))) {
@@ -113,7 +122,7 @@ async function main() {
       fs.writeFileSync(path.join(TBC_HOME, 'server.pid'), String(child.pid));
       
       console.log(`TheBotCompany started (PID: ${child.pid})`);
-      console.log(`  Dashboard: http://localhost:3100`);
+      console.log(`  Dashboard: http://localhost:${getPort()}`);
       console.log(`  Logs: ${logFile}`);
       console.log(`\nRun 'tbc stop' to stop, 'tbc logs' to tail logs`);
       break;
@@ -136,10 +145,10 @@ async function main() {
       
       const server = spawn('node', ['--watch', path.join(ROOT, 'src', 'server.js')], {
         stdio: ['ignore', devOut, devErr],
-        env: { ...process.env, TBC_SERVE_STATIC: 'false', TBC_PORT: '3100' }
+        env: { ...process.env, TBC_SERVE_STATIC: 'false', TBC_PORT: getPort() }
       });
       
-      console.log(`API server started on http://localhost:3100`);
+      console.log(`API server started on http://localhost:${getPort()}`);
       console.log(`Server logs: ${devLogFile}\n`);
       
       // Give server a moment to start
@@ -164,7 +173,7 @@ async function main() {
 
     case 'status':
       try {
-        const res = await fetch('http://localhost:3100/api/status');
+        const res = await fetch(`http://localhost:${getPort()}/api/status`);
         const data = await res.json();
         console.log(`TheBotCompany - ${data.projectCount} projects`);
         console.log(`Uptime: ${Math.floor(data.uptime / 60)}m ${data.uptime % 60}s\n`);
