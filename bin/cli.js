@@ -78,6 +78,19 @@ async function ensureEnv() {
   console.log(`   (VAPID keys will be auto-generated on first start)\n`);
 }
 
+function rotateLog(logPath, maxBytes = 5 * 1024 * 1024, keep = 2) {
+  if (!fs.existsSync(logPath)) return;
+  const stats = fs.statSync(logPath);
+  if (stats.size < maxBytes) return;
+  // Rotate: .2 → delete, .1 → .2, current → .1
+  for (let i = keep; i >= 1; i--) {
+    const older = `${logPath}.${i}`;
+    if (i === keep && fs.existsSync(older)) fs.unlinkSync(older);
+    const newer = i === 1 ? logPath : `${logPath}.${i - 1}`;
+    if (fs.existsSync(newer)) fs.renameSync(newer, `${logPath}.${i}`);
+  }
+}
+
 function getPort() {
   const envPath = path.join(TBC_HOME, '.env');
   if (fs.existsSync(envPath)) {
@@ -105,8 +118,9 @@ async function main() {
       // Build monitor first
       buildMonitor();
       
-      // Start server as background process with logs to file
+      // Rotate global log if over 5 MB
       const logFile = path.join(TBC_HOME, 'logs', 'server.log');
+      rotateLog(logFile);
       const out = fs.openSync(logFile, 'a');
       const err = fs.openSync(logFile, 'a');
       
