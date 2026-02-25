@@ -27,182 +27,20 @@ Human-free software development with self-organizing AI agent teams.
 # Install globally
 npm install -g thebotcompany
 
-# Initialize config directory
-tbc init
-
-# Add a project (point to a repo with an agent/ directory)
-tbc add myproject ~/path/to/my/repo
-
-# Start the orchestrator (background, logs to file)
+# Start the orchestrator + dashboard (first run will prompt for password and port)
 tbc start
-
-# Or run in dev mode (foreground, with dashboard HMR)
-tbc dev
 ```
 
-Open the dashboard at **http://localhost:3100** (production) or **http://localhost:5173** (dev mode).
-
-## Configuration
-
-### Environment Variables
-
-TheBotCompany loads environment variables from `~/.thebotcompany/.env`.
-
-```bash
-# Required — dashboard authentication password
-TBC_PASSWORD=your-secure-password
-
-# Required for agents — Anthropic auth token (Claude Code setup token or API key)
-ANTHROPIC_AUTH_TOKEN=sk-ant-...
-
-# Optional — server port (default: 3100)
-TBC_PORT=3100
-
-# Optional — push notifications (generate with: npx web-push generate-vapid-keys)
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_EMAIL=mailto:you@example.com
-```
-
-| Variable               | Required   | Description                                                           |
-| ---------------------- | ---------- | --------------------------------------------------------------------- |
-| `TBC_PASSWORD`         | Yes        | Password for dashboard write access                                   |
-| `ANTHROPIC_AUTH_TOKEN` | For agents | Claude Code auth token. Can also be set per-project in the dashboard. |
-| `TBC_PORT`             | No         | Server port (default: 3100)                                           |
-| `VAPID_PUBLIC_KEY`     | No         | Web Push public key for browser notifications                         |
-| `VAPID_PRIVATE_KEY`    | No         | Web Push private key                                                  |
-| `VAPID_EMAIL`          | No         | Contact email for VAPID (default: `mailto:admin@example.com`)         |
-
-### Project Configuration
-
-Each project has a YAML config at `~/.thebotcompany/dev/<project-path>/workspace/config.yaml`:
-
-```yaml
-cycleIntervalMs: 1800000    # Time between cycles (default: 30 min)
-agentTimeoutMs: 3600000     # Max time per agent run (default: 1 hour)
-model: claude-sonnet-4-5            # Default model for all agents
-trackerIssue: 1             # GitHub issue number for tracking
-budgetPer24h: 100           # Max spend per 24h in USD (0 = unlimited)
-```
-
-These can also be edited from the dashboard's project settings.
-
-## How It Works
-
-### Three-Phase State Machine
-
-Each project runs through a repeating cycle of three phases:
-
-```
-┌──────────┐     milestone      ┌────────────────┐    claim complete    ┌──────────────┐
-│  Athena   │ ──────────────►   │ Implementation │ ──────────────────►  │ Verification │
-│ (Strategy)│                   │   (Ares)       │                      │   (Apollo)   │
-└──────────┘                   └────────────────┘                      └──────────────┘
-     ▲                                │                                       │
-     │          deadline missed       │            pass ✅ / fail ❌          │
-     └────────────────────────────────┴───────────────────────────────────────┘
-```
-
-1. **Athena Phase** — Evaluates the project, defines the next milestone with a cycle budget, and optionally schedules research workers for evaluation before committing
-2. **Implementation Phase (Ares)** — Ares coordinates workers to implement the milestone. Runs until Ares claims complete or the cycle budget is exhausted
-3. **Verification Phase (Apollo)** — Apollo's team independently verifies the milestone. Pass → back to Athena for the next milestone. Fail → back to Ares with fix cycles
-
-### Managers
-
-| Manager    | Role                                                                       | When it runs                      |
-| ---------- | -------------------------------------------------------------------------- | --------------------------------- |
-| **Athena** | Strategy — defines milestones, maintains roadmap, manages research workers | Start of each milestone cycle     |
-| **Ares**   | Implementation — schedules workers, reviews PRs, coordinates execution     | Every cycle during implementation |
-| **Apollo** | Verification — independently verifies milestone completion                 | Every cycle during verification   |
-
-### Workers
-
-Workers are project-specific agents defined in the repo's `agent/workers/` directory. Managers hire, schedule, and assign tasks to workers. Each worker has a skill file (markdown with YAML frontmatter) defining their role, model, and who they report to.
-
-### Project Completion
-
-Athena can end a project by outputting a `<!-- PROJECT_COMPLETE -->` tag:
-
-```html
-<!-- PROJECT_COMPLETE -->
-{"success": true, "message": "All milestones achieved. Project complete."}
-<!-- /PROJECT_COMPLETE -->
-```
-
-This pauses the project and marks it as complete in the dashboard.
-
-## Project Structure
-
-### Repository Layout
-
-Each managed repo needs an `agent/` directory:
-
-```
-your-repo/
-├── agent/
-│   ├── everyone.md           # Shared rules for all agents
-│   ├── manager.md            # Shared rules for managers
-│   ├── worker.md             # Shared rules for workers
-│   ├── db.md                 # Database (SQLite) usage guide
-│   ├── managers/
-│   │   ├── athena.md         # Strategy manager skill
-│   │   ├── ares.md           # Implementation manager skill
-│   │   └── apollo.md         # Verification manager skill
-│   └── workers/
-│       ├── leo.md            # Example worker
-│       └── maya.md           # Example worker
-├── spec.md                   # Project specification (created by Athena)
-├── roadmap.md                # Project roadmap (maintained by Athena)
-└── ...                       # Your actual project files
-```
-
-### Worker Skill File Format
-
-```markdown
----
-model: claude-sonnet-4-5
-role: Backend Developer
-reports_to: ares
----
-# Leo
-
-Your instructions here...
-```
-
-| Frontmatter  | Description                                                         |
-| ------------ | ------------------------------------------------------------------- |
-| `model`      | Model to use (overrides project default)                            |
-| `role`       | Short description shown in dashboard                                |
-| `reports_to` | Which manager schedules this worker (`ares`, `athena`, or `apollo`) |
-
-### TheBotCompany Data Directory
-
-```
-~/.thebotcompany/
-├── .env                      # Environment variables
-├── projects.yaml             # Project registry
-├── logs/
-│   └── server.log            # Orchestrator logs
-└── dev/
-    └── <project-path>/
-        └── workspace/
-            ├── config.yaml   # Project config
-            ├── state.json    # Orchestrator state
-            └── project.db    # SQLite database (issues, reports, comments)
-```
+Add projects through the dashboard UI, then start the orchestrator.
 
 ## CLI Reference
 
 ```bash
-tbc init                    # Initialize ~/.thebotcompany/
 tbc start                   # Start orchestrator + dashboard (background)
 tbc stop                    # Stop orchestrator
 tbc dev                     # Start in dev mode (foreground + Vite HMR)
 tbc status                  # Show running status
-tbc logs                    # Tail orchestrator logs
-tbc projects                # List configured projects
-tbc add <id> <path>         # Add a project
-tbc remove <id>             # Remove a project
+tbc logs [n]                # Show last n lines of logs (default 50)
 ```
 
 ## Dashboard
@@ -220,17 +58,7 @@ The dashboard provides:
 
 ### Authentication
 
-The dashboard has read-only mode by default. Enter the `TBC_PASSWORD` via the login button to enable write operations (pause, resume, config changes, etc.).
-
-## Hosting
-
-To expose the dashboard externally (e.g., via Cloudflare Tunnel):
-
-1. Set `TBC_PORT` in `.env` to your desired port
-2. Run `tbc start` (serves the built dashboard + API on that port)
-3. Point your tunnel to `localhost:<TBC_PORT>`
-
-For development with HMR, use `tbc dev` which runs Vite on port 5173 and proxies API calls to port 3100.
+The dashboard has read-only mode by default. Enter the password (set during first-run setup) via the login button to enable write operations (pause, resume, config changes, etc.).
 
 ## Development
 

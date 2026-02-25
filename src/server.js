@@ -40,10 +40,27 @@ function stripMetaBlocks(text) {
     .trim();
 }
 
-// --- Web Push (VAPID) ---
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+// --- Web Push (VAPID) --- Auto-generate keys if missing
+let VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
+let VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
 const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@example.com';
+if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+  const envPath = path.join(TBC_HOME, '.env');
+  const vapidKeys = webpush.generateVAPIDKeys();
+  VAPID_PUBLIC = vapidKeys.publicKey;
+  VAPID_PRIVATE = vapidKeys.privateKey;
+  // Append to .env file
+  let envContent = '';
+  try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch {}
+  const lines = [];
+  if (!envContent.includes('VAPID_PUBLIC_KEY=')) lines.push(`VAPID_PUBLIC_KEY=${VAPID_PUBLIC}`);
+  if (!envContent.includes('VAPID_PRIVATE_KEY=')) lines.push(`VAPID_PRIVATE_KEY=${VAPID_PRIVATE}`);
+  if (!envContent.includes('VAPID_EMAIL=')) lines.push(`VAPID_EMAIL=${VAPID_EMAIL}`);
+  if (lines.length) {
+    fs.appendFileSync(envPath, (envContent.endsWith('\n') ? '' : '\n') + lines.join('\n') + '\n');
+    log('Auto-generated VAPID keys and saved to .env');
+  }
+}
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
 }
@@ -926,10 +943,11 @@ class ProjectRunner {
 
   resume() {
     if (this.isComplete) {
-      log(`Cannot resume completed project`, this.id);
-      return;
+      log(`Reopening completed project`, this.id);
+      this.setState({ isComplete: false, completionSuccess: false, completionMessage: null, isPaused: false, pauseReason: null, phase: 'athena' });
+    } else {
+      this.setState({ isPaused: false, pauseReason: null });
     }
-    this.setState({ isPaused: false, pauseReason: null });
     this.wakeNow = true;
     log(`Resumed`, this.id);
   }
@@ -994,16 +1012,91 @@ class ProjectRunner {
   }
 
   parseSchedule(resultText) {
-    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from Ares's response
-    const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/);
+    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from manager response
+    // Supports both array format (new) and object format (legacy)
+    const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
     try {
-      const schedule = JSON.parse(match[1]);
-      return schedule;
+      const raw = JSON.parse(match[1]);
+      
+      // New array format: [{ "delay": 20 }, { "leo": { "task": "..." } }, ...]
+      if (Array.isArray(raw)) {
+        return { _steps: raw };
+      }
+      
+      // Legacy object format: { "agents": { "delay": 20, "leo": {...} } }
+      // Convert to array format internally
+      if (raw.agents) {
+        const steps = [];
+        const agents = raw.agents;
+        // Top-level delay (before first agent)
+        if (agents.delay) {
+          steps.push({ delay: agents.delay });
+        }
+        for (const [name, value] of Object.entries(agents)) {
+          if (name === 'delay') continue;
+          steps.push({ [name]: value });
+          // Per-agent delay
+          const agentDelay = typeof value === 'object' ? value.delay : null;
+          if (agentDelay) {
+            // Remove delay from agent value since it's now a separate step
+            const clean = { ...value };
+            delete clean.delay;
+            steps[steps.length - 1] = { [name]: Object.keys(clean).length === 1 && clean.task ? clean.task : clean };
+          }
+        }
+        return { _steps: steps };
+      }
+      
+      // Bare object with delay at top level
+      if (raw.delay !== undefined) {
+        return { _steps: [{ delay: raw.delay }] };
+      }
+      
+      return null;
     } catch (e) {
-      log(`Failed to parse Ares schedule: ${e.message}`, this.id);
+      log(`Failed to parse schedule: ${e.message}`, this.id);
       return null;
     }
+  }
+
+  async executeSchedule(schedule, config) {
+    if (!schedule || !schedule._steps) return { total: 0, failures: 0 };
+    
+    let total = 0;
+    let failures = 0;
+    const freshWorkers = this.loadAgents().workers;
+    
+    for (const step of schedule._steps) {
+      if (!this.running) break;
+      
+      // Delay step
+      if (step.delay !== undefined) {
+        await this.sleepDelay(step.delay, 'schedule');
+        continue;
+      }
+      
+      // Agent step: { "agentName": taskValue }
+      const name = Object.keys(step).find(k => k !== 'delay');
+      if (!name) continue;
+      
+      const value = step[name];
+      const worker = freshWorkers.find(w => w.name.toLowerCase() === name.toLowerCase());
+      if (!worker) {
+        log(`Worker "${name}" not found, skipping`, this.id);
+        continue;
+      }
+      
+      while (this.isPaused && this.running) { await sleep(1000); }
+      
+      const task = typeof value === 'string' ? value : value.task || null;
+      const vis = this._parseVisibility(value, task);
+      const wResult = await this.runAgent(worker, config, null, task, vis);
+      total++;
+      if (!wResult || !wResult.success) failures++;
+    }
+    
+    return { total, failures };
   }
 
   async runLoop() {
@@ -1113,29 +1206,12 @@ class ProjectRunner {
             }
           }
 
-          // Delay after Athena if requested
-          if (schedule && schedule.delay) {
-            await this.sleepDelay(schedule.delay, 'athena');
-          }
-
-          // Run Athena's scheduled workers (research, evaluation, review)
-          // Reload agents to pick up any newly hired workers (#12)
-          if (schedule && schedule.agents) {
-            const freshWorkers1 = this.loadAgents().workers;
-            for (const [name, value] of Object.entries(schedule.agents)) {
-              if (!this.running) break;
-              const worker = freshWorkers1.find(w => w.name.toLowerCase() === name.toLowerCase());
-              if (!worker) continue;
-              while (this.isPaused && this.running) { await sleep(1000); }
-              const task = typeof value === 'string' ? value : value.task || null;
-              const vis = this._parseVisibility(value, task);
-              const wResult = await this.runAgent(worker, config, null, task, vis);
-              cycleTotal++;
-              if (!wResult || !wResult.success) cycleFailures++;
-              // Per-agent delay
-              const agentDelay = typeof value === 'object' ? value.delay : null;
-              if (agentDelay) await this.sleepDelay(agentDelay, name);
-            }
+          // Execute schedule steps (delays + workers)
+          if (schedule) {
+            this.currentSchedule = schedule;
+            const { total, failures } = await this.executeSchedule(schedule, config);
+            cycleTotal += total;
+            cycleFailures += failures;
           }
 
           this.saveState();
@@ -1181,29 +1257,11 @@ class ProjectRunner {
             }
           }
 
-          // Delay after manager if requested
-          if (schedule && schedule.delay) {
-            await this.sleepDelay(schedule.delay, 'ares');
-          }
-
-          // Run Ares's scheduled workers
-          // Reload agents to pick up any newly hired workers (#12)
-          if (schedule && schedule.agents) {
-            const freshWorkers2 = this.loadAgents().workers;
-            for (const [name, value] of Object.entries(schedule.agents)) {
-              if (!this.running) break;
-              const worker = freshWorkers2.find(w => w.name.toLowerCase() === name.toLowerCase());
-              if (!worker) continue;
-              while (this.isPaused && this.running) { await sleep(1000); }
-              const task = typeof value === 'string' ? value : value.task || null;
-              const vis = this._parseVisibility(value, task);
-              const wResult = await this.runAgent(worker, config, null, task, vis);
-              cycleTotal++;
-              if (!wResult || !wResult.success) cycleFailures++;
-              // Per-agent delay
-              const agentDelay = typeof value === 'object' ? value.delay : null;
-              if (agentDelay) await this.sleepDelay(agentDelay, name);
-            }
+          // Execute schedule steps (delays + workers)
+          if (schedule) {
+            const { total, failures } = await this.executeSchedule(schedule, config);
+            cycleTotal += total;
+            cycleFailures += failures;
           }
         }
         // Only count cycle if at least one agent succeeded
@@ -1250,29 +1308,12 @@ class ProjectRunner {
             }
           }
 
-          // Delay after manager if requested
-          if (schedule && schedule.delay) {
-            await this.sleepDelay(schedule.delay, 'apollo');
-          }
-
-          // Run Apollo's scheduled workers
-          // Reload agents to pick up any newly hired workers (#12)
-          if (schedule && schedule.agents) {
-            const freshWorkers3 = this.loadAgents().workers;
-            for (const [name, value] of Object.entries(schedule.agents)) {
-              if (!this.running) break;
-              const worker = freshWorkers3.find(w => w.name.toLowerCase() === name.toLowerCase());
-              if (!worker) continue;
-              while (this.isPaused && this.running) { await sleep(1000); }
-              const task = typeof value === 'string' ? value : value.task || null;
-              const vis = this._parseVisibility(value, task);
-              const wResult = await this.runAgent(worker, config, null, task, vis);
-              cycleTotal++;
-              if (!wResult || !wResult.success) cycleFailures++;
-              // Per-agent delay
-              const agentDelay = typeof value === 'object' ? value.delay : null;
-              if (agentDelay) await this.sleepDelay(agentDelay, name);
-            }
+          // Execute schedule steps (delays + workers)
+          if (schedule) {
+            this.currentSchedule = schedule;
+            const { total, failures } = await this.executeSchedule(schedule, config);
+            cycleTotal += total;
+            cycleFailures += failures;
           }
 
           // Process decision
@@ -2444,6 +2485,39 @@ const server = http.createServer(async (req, res) => {
         repo: runner.repo, 
         url: runner.repo ? `https://github.com/${runner.repo}` : null 
       }));
+      return;
+    }
+
+    // GET /api/projects/:id/download - zip and download workspace
+    if (req.method === 'GET' && subPath === 'download') {
+      try {
+        const workspaceDir = runner.agentDir;
+        if (!fs.existsSync(workspaceDir)) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Workspace not found' }));
+          return;
+        }
+        const filename = `${runner.id.replace(/\//g, '-')}-workspace.zip`;
+        res.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        });
+        const zip = spawn('zip', ['-r', '-q', '-', '.'], { cwd: workspaceDir, stdio: ['ignore', 'pipe', 'ignore'] });
+        zip.stdout.pipe(res);
+        zip.on('error', () => {
+          // Fallback to tar if zip not available
+          const tar = spawn('tar', ['-czf', '-', '-C', workspaceDir, '.'], { stdio: ['ignore', 'pipe', 'ignore'] });
+          res.writeHead(200, {
+            'Content-Type': 'application/gzip',
+            'Content-Disposition': `attachment; filename="${filename.replace('.zip', '.tar.gz')}"`,
+          });
+          tar.stdout.pipe(res);
+          tar.on('error', () => { res.end(); });
+        });
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 

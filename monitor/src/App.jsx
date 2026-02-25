@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import ReactMarkdown from 'react-markdown'
-import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges } from '@/components/ScheduleDiagram'
+import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -537,7 +537,7 @@ function App() {
     if (!selectedProject) return
     setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false })
     try {
-      const res = await fetch(projectApi('/bootstrap'))
+      const res = await authFetch(projectApi('/bootstrap'))
       const data = await res.json()
       setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false })
     } catch (err) {
@@ -664,7 +664,7 @@ function App() {
     setAddProjectModal({
       step: null, githubUrl: '', projectId: null, projectPath: null,
       hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
-      updateSpec: false, error: null,
+      updateSpec: false, error: null, repoMode: 'existing',
     })
   }
 
@@ -941,8 +941,7 @@ function App() {
     const runtime = isActive ? selectedProject?.currentAgentRuntime : null
     // Get mode from schedule
     const schedule = selectedProject?.schedule
-    const agentSchedule = schedule?.agents?.[agent.name]
-    const task = typeof agentSchedule === 'string' ? agentSchedule : agentSchedule?.task || null
+    const task = getAgentTask(schedule, agent.name)
     
     return (
       <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
@@ -1915,6 +1914,10 @@ function App() {
               >
                 <Settings className="w-4 h-4" />
               </button>
+              <a href={projectApi('/download')} className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="Download workspace as ZIP">
+                <Save className="w-3.5 h-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline">Download</span>
+              </a>
               {repoUrl && (
                 <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="GitHub">
                   <Github className="w-3.5 h-3.5 sm:mr-1.5" />

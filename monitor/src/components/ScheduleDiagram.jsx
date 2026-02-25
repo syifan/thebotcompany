@@ -47,37 +47,89 @@ function MetaCard({ label, color, defaultOpen = false, children }) {
   )
 }
 
+// Normalize schedule to _steps array format
+function normalizeSteps(schedule) {
+  if (!schedule) return []
+  // New format: { _steps: [...] }
+  if (schedule._steps) return schedule._steps
+  // Legacy format: { agents: { leo: {...}, ... }, delay: 20 }
+  if (schedule.agents) {
+    const steps = []
+    if (schedule.delay) steps.push({ delay: schedule.delay })
+    for (const [name, value] of Object.entries(schedule.agents)) {
+      if (name === 'delay') continue
+      steps.push({ [name]: value })
+    }
+    return steps
+  }
+  // Array directly
+  if (Array.isArray(schedule)) return schedule
+  return []
+}
+
+// Extract agent entries (name + value) from steps, skipping delays
+export function getAgentEntries(schedule) {
+  const steps = normalizeSteps(schedule)
+  const entries = []
+  for (const step of steps) {
+    const keys = Object.keys(step)
+    if (keys.length === 1 && keys[0] === 'delay') continue
+    for (const key of keys) {
+      if (key !== 'delay') entries.push([key, step[key]])
+    }
+  }
+  return entries
+}
+
+// Find a specific agent's task from schedule
+export function getAgentTask(schedule, agentName) {
+  const entries = getAgentEntries(schedule)
+  const entry = entries.find(([name]) => name.toLowerCase() === agentName.toLowerCase())
+  if (!entry) return null
+  const value = entry[1]
+  return typeof value === 'string' ? value : value?.task || null
+}
+
 function ScheduleBody({ schedule }) {
   const dark = isDark()
-  const entries = Object.entries(schedule.agents)
-  const topDelay = schedule.delay
+  const steps = normalizeSteps(schedule)
+  let agentIndex = 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {topDelay > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0' }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            fontSize: 11, color: dark ? '#737373' : '#a3a3a3',
-            background: dark ? '#262626' : '#f5f5f5',
-            padding: '3px 10px', borderRadius: 12,
-          }}>
-            <Clock style={{ width: 12, height: 12 }} /> {topDelay}m delay
-          </span>
-        </div>
-      )}
+      {steps.map((step, i) => {
+        const keys = Object.keys(step)
 
-      {entries.map(([name, value], i) => {
+        // Delay step
+        if (keys.length === 1 && keys[0] === 'delay') {
+          return (
+            <div key={`delay-${i}`} style={{ display: 'flex', justifyContent: 'center', padding: '6px 0' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, color: dark ? '#737373' : '#a3a3a3',
+                background: dark ? '#262626' : '#f5f5f5',
+                padding: '3px 10px', borderRadius: 12,
+              }}>
+                <Clock style={{ width: 12, height: 12 }} /> {step.delay}m delay
+              </span>
+            </div>
+          )
+        }
+
+        // Agent step
+        const name = keys.find(k => k !== 'delay')
+        if (!name) return null
+        const value = step[name]
         const task = typeof value === 'string' ? value : value.task || ''
-        const delay = typeof value === 'object' ? value.delay : null
         const vis = typeof value === 'object' ? value.visibility : null
         const visInfo = visConfig[vis || 'full']
         const VisIcon = visInfo?.icon
-        const color = colors[i % colors.length]
+        const color = colors[agentIndex % colors.length]
+        agentIndex++
 
         return (
           <div key={name}>
-            {i > 0 && (
+            {i > 0 && keys[0] !== 'delay' && (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
                 <ArrowDown style={{ width: 16, height: 16, color: dark ? '#525252' : '#d4d4d4' }} />
               </div>
@@ -118,19 +170,6 @@ function ScheduleBody({ schedule }) {
                 </p>
               </div>
             </div>
-
-            {delay > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontSize: 11, color: dark ? '#737373' : '#a3a3a3',
-                  background: dark ? '#262626' : '#f5f5f5',
-                  padding: '3px 10px', borderRadius: 12,
-                }}>
-                  <Clock style={{ width: 12, height: 12 }} /> {delay}m delay
-                </span>
-              </div>
-            )}
           </div>
         )
       })}
@@ -139,8 +178,8 @@ function ScheduleBody({ schedule }) {
 }
 
 function ScheduleDiagram({ schedule }) {
-  if (!schedule || !schedule.agents || Object.keys(schedule.agents).length === 0) return null
-  const entries = Object.entries(schedule.agents)
+  const entries = getAgentEntries(schedule)
+  if (entries.length === 0) return null
 
   return (
     <div className="my-4 not-prose">
@@ -153,20 +192,26 @@ function ScheduleDiagram({ schedule }) {
 
 export function parseScheduleBlock(text) {
   if (!text) return null
-  const match = text.match(/<!--\s*SCHEDULE\s*-->\s*(\{[\s\S]*?\})\s*<!--\s*\/SCHEDULE\s*-->/)
+  const match = text.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/)
   if (!match) return null
-  try { return JSON.parse(match[1]) } catch { return null }
+  try {
+    const raw = JSON.parse(match[1])
+    // Normalize: array → { _steps }, object stays as-is (legacy)
+    if (Array.isArray(raw)) return { _steps: raw }
+    return raw
+  } catch { return null }
 }
 
 export function stripScheduleBlock(text) {
   if (!text) return text
-  return text.replace(/<!--\s*SCHEDULE\s*-->\s*\{[\s\S]*?\}\s*<!--\s*\/SCHEDULE\s*-->/, '').trim()
+  return text.replace(/<!--\s*SCHEDULE\s*-->\s*[\[{][\s\S]*?[\]}]\s*<!--\s*\/SCHEDULE\s*-->/, '').trim()
 }
 
 export function stripAllMetaBlocks(text) {
   if (!text) return text
   return text
-    .replace(/<!--\s*(SCHEDULE|MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/g, '')
+    .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
     .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
