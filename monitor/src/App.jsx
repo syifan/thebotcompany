@@ -98,7 +98,8 @@ function App() {
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
   const [issueFilter, setIssueFilter] = useState('open') // 'open' | 'closed' | 'all'
-  const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null })
+  const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
+  const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
@@ -578,7 +579,7 @@ function App() {
       })
       const data = await res.json()
       if (data.success) {
-        setCreateIssueModal({ open: false, title: '', body: '', receiver: '', creating: false, error: null })
+        setCreateIssueModal({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
         await fetchProjectData()
       } else {
         setCreateIssueModal(prev => ({ ...prev, creating: false, error: data.error || 'Failed to create issue' }))
@@ -2722,20 +2723,22 @@ function App() {
                 value={createIssueModal.title}
                 onChange={(e) => setCreateIssueModal(prev => ({ ...prev, title: e.target.value }))}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('create-issue-body')?.focus() } }}
+                onFocus={() => setCreateIssueModal(prev => ({ ...prev, focusedField: 'title' }))}
                 disabled={createIssueModal.creating}
                 autoFocus
               />
               <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Created as a human issue in the project database</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">{createIssueModal.focusedField === 'title' ? `(optional, Enter to move here)` : '(optional)'}</span></label>
               <textarea
                 id="create-issue-body"
-                placeholder="Additional details, context, acceptance criteria... (⌘+Enter to submit)"
+                placeholder="Additional details, context, acceptance criteria..."
                 className="w-full px-3 py-2 border rounded-md min-h-[100px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                 value={createIssueModal.body}
                 onChange={(e) => setCreateIssueModal(prev => ({ ...prev, body: e.target.value }))}
                 onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') createIssue() }}
+                onFocus={() => setCreateIssueModal(prev => ({ ...prev, focusedField: 'body' }))}
                 disabled={createIssueModal.creating}
               />
             </div>
@@ -2756,7 +2759,7 @@ function App() {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
               <Button onClick={createIssue} disabled={!createIssueModal.title.trim() || createIssueModal.creating}>
-                {createIssueModal.creating ? 'Creating...' : 'Create'}
+                {createIssueModal.creating ? 'Creating...' : createIssueModal.focusedField === 'body' ? `Create (${modKey}+Enter)` : 'Create'}
               </Button>
             </div>
           </div>
