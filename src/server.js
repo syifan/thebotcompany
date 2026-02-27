@@ -2461,11 +2461,41 @@ const server = http.createServer(async (req, res) => {
           }
           const db = runner.getDb();
           const now = new Date().toISOString();
-          const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, author || 'user', commentBody.trim(), now);
+          const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, author || 'human', commentBody.trim(), now);
           db.prepare('UPDATE issues SET updated_at = ? WHERE id = ?').run(now, issueId);
           db.close();
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ id: result.lastInsertRowid }));
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // PATCH /api/projects/:id/issues/:issueId — update issue status
+    const issuePatchMatch = req.method === 'PATCH' && subPath.match(/^issues\/(\d+)$/);
+    if (issuePatchMatch) {
+      if (!requireWrite(req, res)) return;
+      let body = '';
+      req.on('data', d => body += d);
+      req.on('end', () => {
+        try {
+          const issueId = parseInt(issuePatchMatch[1], 10);
+          const { status } = JSON.parse(body);
+          if (!['open', 'closed'].includes(status)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Status must be "open" or "closed"' }));
+            return;
+          }
+          const db = runner.getDb();
+          const now = new Date().toISOString();
+          const closedAt = status === 'closed' ? now : null;
+          db.prepare('UPDATE issues SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?').run(status, now, closedAt, issueId);
+          db.close();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
         } catch (e) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));
