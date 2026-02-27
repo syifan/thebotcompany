@@ -1357,7 +1357,7 @@ class ProjectRunner {
           } else if (decision === 'fail') {
             log(`❌ Verification failed — returning to Ares (${Math.floor(this.milestoneCyclesBudget / 2)} fix cycles)`, this.id);
             broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
-            const fixBudget = Math.max(1, Math.floor(this.milestoneCyclesBudget / 2));
+            const fixBudget = Math.floor(this.milestoneCyclesBudget / 2);
             this.setState({
               milestoneCyclesBudget: this.milestoneCyclesUsed + fixBudget,
               isFixRound: true,
