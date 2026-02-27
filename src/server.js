@@ -178,6 +178,7 @@ class ProjectRunner {
     this.id = id;
     this.path = config.path.replace(/^~/, process.env.HOME);
     this.enabled = config.enabled !== false;
+    this.archived = config.archived === true;
     this.cycleCount = 0;
     this.currentAgent = null;
     this.currentAgentProcess = null;
@@ -771,6 +772,7 @@ class ProjectRunner {
       path: this.path,
       repo: this.repo,
       enabled: this.enabled,
+      archived: this.archived,
       running: this.running,
       paused: this.isPaused,
       pauseReason: this.pauseReason || null,
@@ -2614,6 +2616,35 @@ const server = http.createServer(async (req, res) => {
     }
 
     // POST /api/projects/:id/:action (pause, resume, skip, start, stop)
+    // POST /api/projects/:id/archive or /unarchive
+    if (req.method === 'POST' && (subPath === 'archive' || subPath === 'unarchive')) {
+      if (!requireWrite(req, res)) return;
+      const archive = subPath === 'archive';
+      runner.archived = archive;
+      // Update projects.yaml
+      try {
+        const configPath = path.join(ROOT, 'projects.yaml');
+        const raw = fs.readFileSync(configPath, 'utf-8');
+        const config = yaml.load(raw) || {};
+        if (config.projects && config.projects[projectId]) {
+          if (archive) {
+            config.projects[projectId].archived = true;
+          } else {
+            delete config.projects[projectId].archived;
+          }
+          fs.writeFileSync(configPath, yaml.dump(config));
+        }
+      } catch (e) {
+        log(`Failed to update projects.yaml for archive: ${e.message}`);
+      }
+      if (archive && runner.running) {
+        runner.pause('Archived');
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, archived: archive }));
+      return;
+    }
+
     if (req.method === 'POST' && ['pause', 'resume', 'skip', 'start', 'stop'].includes(subPath)) {
       if (!requireWrite(req, res)) return;
       switch (subPath) {

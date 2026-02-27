@@ -76,6 +76,7 @@ function App() {
   const [projectTokenInput, setProjectTokenInput] = useState('')
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [projectNotifs, setProjectNotifs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('tbc_project_notifs') || '{}') } catch { return {} }
   })
@@ -794,9 +795,8 @@ function App() {
   }
 
   const removeProject = async (projectId) => {
-    if (!confirm(`Remove project "${projectId}"?`)) return
     try {
-      const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+      const res = await authFetch(`/api/projects/${projectId}`, { method: 'DELETE' })
       if (res.ok) {
         if (selectedProject?.id === projectId) {
           setSelectedProject(null)
@@ -1362,6 +1362,60 @@ function App() {
               </div>
           </div>
         </div>
+
+        {/* Danger Zone */}
+        {isWriteMode && (
+          <div className="border-t border-red-200 dark:border-red-900 pt-5 mt-5">
+            <h3 className="text-sm font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider mb-3">Danger Zone</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                <div>
+                  <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                    {selectedProject?.archived ? 'Unarchive Project' : 'Archive Project'}
+                  </span>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                    {selectedProject?.archived ? 'Restore this project to the active dashboard' : 'Hide from dashboard. Data is preserved.'}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const action = selectedProject?.archived ? 'unarchive' : 'archive'
+                    try {
+                      await authFetch(projectApi(`/${action}`), { method: 'POST' })
+                      await fetchGlobalStatus()
+                      await fetchProjectData()
+                      setToast(action === 'archive' ? 'Project archived' : 'Project unarchived')
+                    } catch {}
+                  }}
+                >
+                  {selectedProject?.archived ? 'Unarchive' : 'Archive'}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between p-3 border border-red-200 dark:border-red-800 rounded-lg bg-red-50/50 dark:bg-red-950/20">
+                <div>
+                  <span className="text-sm font-medium text-red-600 dark:text-red-400">Delete Project</span>
+                  <p className="text-xs text-red-400 dark:text-red-500 mt-0.5">Permanently remove this project and all data</p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm(`Are you sure you want to permanently delete "${selectedProject?.id}"? This cannot be undone.`)) return
+                    if (!confirm('This will delete all workspace data, agent skills, and history. Really delete?')) return
+                    try {
+                      await removeProject(selectedProject.id)
+                      setProjectSettingsOpen(false)
+                    } catch {}
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </ModalContent>
     </Modal>
   )
@@ -1408,8 +1462,18 @@ function App() {
           </div>
 
           {/* Project List */}
+          {projects.some(p => p.archived) && (
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => setShowArchived(prev => !prev)}
+                className="text-xs text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+              >
+                {showArchived ? 'Hide archived' : `Show archived (${projects.filter(p => p.archived).length})`}
+              </button>
+            </div>
+          )}
           <div className="space-y-4">
-            {projects.map(project => (
+            {projects.filter(p => showArchived || !p.archived).map(project => (
               <Card key={project.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => selectProject(project)}>
                 <CardContent className="p-4">
                   {/* Mobile: Stack vertically. Desktop: Row */}
@@ -1460,14 +1524,9 @@ function App() {
                           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
                         )}
                       </div>
-                      {isWriteMode && <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={(e) => { e.stopPropagation(); removeProject(project.id) }}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>}
+                      {project.archived && (
+                        <Badge variant="outline" className="text-[10px] text-neutral-400 dark:text-neutral-500 border-neutral-300 dark:border-neutral-600 shrink-0">Archived</Badge>
+                      )}
                     </div>
                   </div>
                 </CardContent>
