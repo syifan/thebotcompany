@@ -203,8 +203,12 @@ function executeBash(input, cwd, remainingMs = 0) {
   if (remainingMs > 0) {
     timeout = Math.min(timeout, remainingMs);
   }
+  // Strip any TBC_DB overrides — agents must use the injected env value
+  let command = input.command;
+  command = command.replace(/\bexport\s+TBC_DB=[^\s;|&]*/g, 'true');
+  command = command.replace(/\bTBC_DB=[^\s;|&]*/g, 'true');
   return new Promise((resolve) => {
-    const proc = spawn('bash', ['-c', input.command], {
+    const proc = spawn('bash', ['-c', command], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout,
