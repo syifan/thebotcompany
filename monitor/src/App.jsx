@@ -256,6 +256,7 @@ function App() {
   const [projectLoading, setProjectLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const logsRef = useRef(null)
+  const reportsScrollRef = useRef(null)
   const prevAgentRef = useRef(null)
 
 
@@ -486,11 +487,11 @@ function App() {
     setConfigError(null)
   }
   
-  const fetchComments = async (page = 1, agent = null, append = false) => {
+  const fetchComments = async (page = 1, agent = null, append = false, silent = false) => {
     const currentProject = selectedProjectRef.current
     const baseApi = currentProject ? `/api/projects/${currentProject.id}` : null
     if (!baseApi) return
-    setCommentsLoading(true)
+    if (!silent) setCommentsLoading(true)
     try {
       const params = new URLSearchParams({ page, per_page: 10 })
       if (agent) params.set('agent', agent)
@@ -503,7 +504,7 @@ function App() {
       setCommentsHasMore((data.page * data.perPage) < data.total)
       setCommentsPage(page)
     } catch (err) { console.error('Failed to fetch comments:', err) }
-    finally { setCommentsLoading(false) }
+    finally { if (!silent) setCommentsLoading(false) }
   }
   
   const loadMoreComments = () => {
@@ -880,7 +881,7 @@ function App() {
       
       // Separate intervals for different data
       const logsInterval = setInterval(fetchLogs, 10000) // Logs every 10s
-      const commentsInterval = setInterval(() => fetchComments(1, localStorage.getItem('selectedAgent') || null, false), 30000) // Comments every 30s
+      const commentsInterval = setInterval(() => fetchComments(1, localStorage.getItem('selectedAgent') || null, false, true), 30000) // Comments every 30s (silent refresh)
       const projectDataInterval = setInterval(fetchProjectData, 30000) // Issues/PRs/agents every 30s
       
       return () => {
@@ -2371,7 +2372,7 @@ function App() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 flex-1 overflow-hidden">
-                  <div className="h-full overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
+                  <div ref={reportsScrollRef} className="h-full overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
                     const { scrollTop, scrollHeight, clientHeight } = e.target
                     if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
                   }}>
