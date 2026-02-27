@@ -904,6 +904,17 @@ function App() {
     return `${m}m ${s}s`
   }
 
+  // Available models (fetched from Anthropic API)
+  const [availableModels, setAvailableModels] = useState([])
+  useEffect(() => {
+    fetch('/api/models')
+      .then(r => r.json())
+      .then(data => {
+        if (data.data) setAvailableModels(data.data)
+      })
+      .catch(() => {})
+  }, [])
+
   // Agent settings modal state
   const [agentSettingsModal, setAgentSettingsModal] = useState({ open: false, agent: null, model: '', saving: false, error: null })
 
@@ -2527,11 +2538,9 @@ function App() {
                 onChange={(e) => setAgentSettingsModal(prev => ({ ...prev, model: e.target.value }))}
               >
                 <option value="">Inherited from global</option>
-                <option value="claude-opus-4-6">claude-opus-4-6</option>
-                <option value="claude-sonnet-4-6">claude-sonnet-4.6</option>
-                <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5</option>
-                <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
-                <option value="claude-haiku-3-5-20241022">claude-haiku-3.5</option>
+                {availableModels.map(m => (
+                  <option key={m.id} value={m.id}>{m.display_name}</option>
+                ))}
               </select>
               <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Leave empty to use the project's default model.</p>
             </div>

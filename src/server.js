@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
+import { runAgentWithAPI } from './agent-runner.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -424,7 +425,13 @@ class ProjectRunner {
     
     // Extract model from frontmatter
     const modelMatch = skill.match(/^model:\s*(.+)$/m);
-    const model = modelMatch ? modelMatch[1].trim() : null;
+    const frontmatterModel = modelMatch ? modelMatch[1].trim() : null;
+    
+    // Check config override (config.managers.<name>.model or config.workers.<name>.model)
+    const config = this.loadConfig();
+    const overrides = (isManager ? config.managers : config.workers) || {};
+    const configModel = overrides[agentName]?.model || null;
+    const model = configModel || frontmatterModel || null;
     
     // Read shared rules: everyone.md + role-specific (worker.md or manager.md)
     let everyone = null;
@@ -603,7 +610,7 @@ class ProjectRunner {
       const model = (config.model || '').toLowerCase();
       let perAgentCost;
       if (model.includes('opus')) perAgentCost = 2.50;
-      else if (model.includes('haiku')) perAgentCost = 0.20;
+      else if (model.includes('haiku')) perAgentCost = 0.50;
       else perAgentCost = 1.50; // sonnet default
 
       const estimatedCycleCost = perAgentCost * agentCount;
@@ -1381,65 +1388,220 @@ class ProjectRunner {
     }
   }
 
+  // Build the full prompt for an agent (shared across CLI and API paths)
+  _buildAgentPrompt(agent, task, visibility) {
+    const skillPath = agent.isManager
+      ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
+      : path.join(this.agentDir, 'workers', `${agent.name}.md`);
+
+    if (!fs.existsSync(skillPath)) {
+      return null;
+    }
+
+    let skillContent = fs.readFileSync(skillPath, 'utf-8');
+
+    // Build shared rules: everyone.md + db.md + role-specific rules (worker.md or manager.md)
+    let sharedRules = '';
+    try {
+      const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
+      sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
+      const visMode = visibility?.mode || 'full';
+      if (visMode !== 'blind') {
+        const dbPath = path.join(ROOT, 'agent', 'db.md');
+        try {
+          let dbContent = fs.readFileSync(dbPath, 'utf-8');
+          if (visMode === 'focused') {
+            dbContent += `\n\n> **Visibility: Focused** — You can only access issues: ${visibility?.issues?.join(', ') || 'none specified'}. Other issues are restricted.\n`;
+          }
+          sharedRules += dbContent + '\n\n---\n\n';
+        } catch {}
+      } else {
+        sharedRules += '\n> **You are in blind mode.** You cannot access the issue tracker (tbc-db). Focus only on the task described above and the repository code.\n\n---\n\n';
+      }
+      const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
+      sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
+    } catch {}
+
+    let taskHeader = '';
+    if (task) {
+      taskHeader = `> **Your assignment: ${task}**\n\n`;
+    }
+
+    // Strip YAML frontmatter (---...---) from skill content before building prompt
+    skillContent = skillContent.replace(/^---[\s\S]*?---\n*/, '');
+    skillContent = (taskHeader + sharedRules + skillContent).replaceAll('{project_dir}', this.agentDir);
+
+    return skillContent;
+  }
+
+  // Post-processing shared by both CLI and API agent runs
+  _postProcessAgentRun(agent, config, { resultText, cost, durationMs, killedByTimeout, exitCode, rawOutput }) {
+    const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
+    const success = !killedByTimeout && (exitCode === 0 || exitCode === undefined);
+
+    // Build token info string for logging
+    let tokenInfo = '';
+    if (cost !== undefined) {
+      tokenInfo = ` | cost: $${cost.toFixed(4)}`;
+    }
+
+    // Log response to agent-specific log file
+    try {
+      const responsesDir = path.join(this.agentDir, 'responses');
+      fs.mkdirSync(responsesDir, { recursive: true });
+      const timestamp = new Date().toLocaleString('sv-SE', { hour12: false }).replace(',', '');
+      const header = `\n${'='.repeat(60)}\n[${timestamp}] Cycle ${this.cycleCount} | Success: ${success}\n${'='.repeat(60)}\n`;
+
+      // Always log raw output for debugging
+      const rawLogPath = path.join(responsesDir, `${agent.name}.raw.log`);
+      fs.appendFileSync(rawLogPath, header + (rawOutput || resultText || '') + '\n');
+
+      // Log parsed result if available
+      if (resultText) {
+        const agentLogPath = path.join(responsesDir, `${agent.name}.log`);
+        fs.appendFileSync(agentLogPath, header + resultText + '\n');
+      }
+    } catch (e) {
+      log(`Failed to log response for ${agent.name}: ${e.message}`, this.id);
+    }
+
+    // Append cost row to cost.csv
+    if (cost !== undefined) {
+      try {
+        const csvPath = path.join(this.agentDir, 'cost.csv');
+        if (!fs.existsSync(csvPath)) {
+          fs.writeFileSync(csvPath, 'time,cycle,agent,cost,durationMs\n');
+        }
+        fs.appendFileSync(csvPath, `${new Date().toISOString()},${this.cycleCount},${agent.name},${cost.toFixed(6)},${durationMs}\n`);
+      } catch {}
+    }
+
+    // Write agent report to SQLite
+    if (resultText || killedByTimeout || !success) {
+      try {
+        let reportBody;
+        if (killedByTimeout || !success) {
+          const errorType = killedByTimeout ? '⏰ Timeout' : '❌ Error';
+          const errorMsg = killedByTimeout
+            ? `Killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`
+            : `Agent failed${exitCode !== undefined ? ` (exit code ${exitCode})` : ''}.`;
+          // Capture partial work on timeout
+          let partialWork = '';
+          if (killedByTimeout) {
+            try {
+              const repoDir = path.join(this.agentDir, 'repo');
+              if (fs.existsSync(path.join(repoDir, '.git'))) {
+                const diffStat = execSync('git diff --stat HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
+                const stagedStat = execSync('git diff --stat --cached HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
+                if (diffStat || stagedStat) {
+                  partialWork = `\n\n### Partial Work Detected\n\nUncommitted changes found in repo:\n\`\`\`\n${(stagedStat ? 'Staged:\n' + stagedStat + '\n' : '')}${(diffStat ? 'Unstaged:\n' + diffStat : '')}\n\`\`\``;
+                }
+              }
+            } catch {}
+          }
+          reportBody = `## ${errorType}\n\n${errorMsg}\n\n- Duration: ${durationStr}${partialWork}`;
+          // Include partial result text if we have it
+          if (resultText) {
+            reportBody += `\n\n### Partial Response\n\n${resultText.trim()}`;
+          }
+        } else {
+          reportBody = resultText.trim();
+        }
+        // Prepend time log to all reports
+        const agentStartTime = new Date(this.currentAgentStartTime).toLocaleString('sv-SE');
+        const endTime = new Date().toLocaleString('sv-SE');
+        reportBody = `> ⏱ Started: ${agentStartTime} | Ended: ${endTime} | Duration: ${durationStr}\n\n${reportBody}`;
+        const db = this.getDb();
+        db.exec(`CREATE TABLE IF NOT EXISTS reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cycle INTEGER NOT NULL,
+          agent TEXT NOT NULL,
+          body TEXT NOT NULL,
+          created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        )`);
+        db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(this.cycleCount, agent.name, reportBody, new Date().toISOString());
+        db.close();
+        log(`Saved report for ${agent.name}`, this.id);
+      } catch (dbErr) {
+        log(`Failed to write report: ${dbErr.message}`, this.id);
+      }
+    }
+
+    log(`${agent.name} done (success: ${success})${tokenInfo}`, this.id);
+    const summary = resultText ? stripMetaBlocks(resultText).slice(0, 500).replace(/\n+/g, ' ').trim() : '';
+    broadcastEvent({ type: 'agent-done', project: this.id, agent: agent.name, success, summary });
+    this.currentAgent = null;
+    this.currentAgentProcess = null;
+    this.currentAgentStartTime = null;
+
+    return { success, resultText };
+  }
+
   async runAgent(agent, config, mode = null, task = null, visibility = null) {
     this.currentAgent = agent.name;
     this.currentAgentStartTime = Date.now();
     const modeStr = mode ? ` [${mode}]` : '';
     log(`Running: ${agent.name}${agent.isManager ? ' (manager)' : ''}${modeStr}`, this.id);
 
-    // Managers come from the TBC repo, workers from the project workspace
-    const skillPath = agent.isManager
-      ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
-      : path.join(this.agentDir, 'workers', `${agent.name}.md`);
-
     // Ensure workspace directory exists for this agent
     const workspaceDir = path.join(this.agentDir, 'workspace', agent.name);
     fs.mkdirSync(workspaceDir, { recursive: true });
 
-    return new Promise((resolve) => {
-      // Build prompt: mode header + everyone.md + skill file, with {project_dir} replaced
-      if (!fs.existsSync(skillPath)) {
-        log(`Skill file not found: ${skillPath}, skipping ${agent.name}`, this.id);
-        return resolve({ code: 1, stdout: '', stderr: `Skill file not found: ${skillPath}`, tokens: { in: 0, out: 0, cache_read: 0 } });
-      }
-      let skillContent = fs.readFileSync(skillPath, 'utf-8');
-      
-      // Build shared rules: everyone.md + db.md + role-specific rules (worker.md or manager.md)
-      let sharedRules = '';
-      try {
-        const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
-        sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
-        const visMode = visibility?.mode || 'full';
-        if (visMode !== 'blind') {
-          const dbPath = path.join(ROOT, 'agent', 'db.md');
-          try {
-            let dbContent = fs.readFileSync(dbPath, 'utf-8');
-            if (visMode === 'focused') {
-              dbContent += `\n\n> **Visibility: Focused** — You can only access issues: ${visibility?.issues?.join(', ') || 'none specified'}. Other issues are restricted.\n`;
-            }
-            sharedRules += dbContent + '\n\n---\n\n';
-          } catch {}
-        } else {
-          sharedRules += '\n> **You are in blind mode.** You cannot access the issue tracker (tbc-db). Focus only on the task described above and the repository code.\n\n---\n\n';
-        }
-        const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
-        sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
-      } catch {}
-      
-      // Inject task assignment at the top
-      let taskHeader = '';
-      if (task) {
-        taskHeader = `> **Your assignment: ${task}**\n\n`;
-      }
-      
-      
-      // Strip YAML frontmatter (---...---) from skill content before building prompt
-      // This prevents Claude CLI from interpreting '---' as a command-line flag
-      skillContent = skillContent.replace(/^---[\s\S]*?---\n*/, '');
-      
-      skillContent = (taskHeader + sharedRules + skillContent).replaceAll('{project_dir}', this.agentDir);
+    // Build the prompt (shared between CLI and API paths)
+    const skillContent = this._buildAgentPrompt(agent, task, visibility);
+    if (!skillContent) {
+      const skillPath = agent.isManager
+        ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
+        : path.join(this.agentDir, 'workers', `${agent.name}.md`);
+      log(`Skill file not found: ${skillPath}, skipping ${agent.name}`, this.id);
+      return { success: false, resultText: '' };
+    }
 
-      const agentModel = agent.rawModel || config.model || 'claude-opus-4-6';
+    const agentModel = agent.rawModel || config.model || 'claude-opus-4-6';
+
+    // Resolve setup token: project-specific > global > none
+    const projectToken = config.setupToken;
+    const globalToken = process.env.ANTHROPIC_AUTH_TOKEN;
+    const resolvedToken = projectToken || globalToken || null;
+
+    if (!resolvedToken) {
+      log(`No setup token configured for ${agent.name} — using default auth.`, this.id);
+    }
+
+    const agentEnv = {
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      TBC_DB: path.join(this.agentDir, 'project.db'),
+      TBC_VISIBILITY: visibility?.mode || 'full',
+      TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
+    };
+
+    // ----- API-based agent runner (default) -----
+    if (!config.useCliAgent) {
+      log(`Using API runner for ${agent.name} (model: ${agentModel})`, this.id);
+
+      const result = await runAgentWithAPI({
+        prompt: skillContent,
+        model: agentModel,
+        token: resolvedToken,
+        cwd: this.path,
+        timeoutMs: config.agentTimeoutMs || 0,
+        env: agentEnv,
+        log: (msg) => log(`  [${agent.name}] ${msg}`, this.id),
+      });
+
+      return this._postProcessAgentRun(agent, config, {
+        resultText: result.resultText,
+        cost: result.cost,
+        durationMs: result.durationMs,
+        killedByTimeout: result.timedOut || false,
+        rawOutput: JSON.stringify({ usage: result.usage, resultText: result.resultText }),
+      });
+    }
+
+    // ----- CLI-based agent runner (fallback: useCliAgent: true) -----
+    log(`Using CLI runner for ${agent.name} (model: ${agentModel})`, this.id);
+
+    return new Promise((resolve) => {
       const args = [
         '-p', skillContent,
         '--model', agentModel,
@@ -1447,34 +1609,16 @@ class ProjectRunner {
         '--output-format', 'json'
       ];
 
-      // Resolve setup token: project-specific > global > none
-      const projectToken = config.setupToken;
-      const globalToken = process.env.ANTHROPIC_AUTH_TOKEN;
-      const resolvedToken = projectToken || globalToken || null;
-
-      if (!resolvedToken) {
-        log(`No setup token configured for ${agent.name} — using default auth.`, this.id);
-      }
-
-      const agentEnv = {
-        ...process.env,
-        CLAUDE_CODE_ENTRYPOINT: 'cli',
-        TBC_DB: path.join(this.agentDir, 'project.db'),
-        TBC_VISIBILITY: visibility?.mode || 'full',
-        TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
-      };
-      // Always explicitly set or remove auth token to avoid
-      // dotenv pollution from process.env leaking into agent spawns
+      const cliEnv = { ...process.env, ...agentEnv };
       if (resolvedToken) {
-        agentEnv.CLAUDE_CODE_OAUTH_TOKEN = resolvedToken;
+        cliEnv.CLAUDE_CODE_OAUTH_TOKEN = resolvedToken;
       }
-      // Clean up any leaked tokens from dotenv
-      delete agentEnv.ANTHROPIC_AUTH_TOKEN;
+      delete cliEnv.ANTHROPIC_AUTH_TOKEN;
 
       this.currentAgentProcess = spawn('claude', args, {
         cwd: this.path,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: agentEnv,
+        env: cliEnv,
       });
 
       let stdout = '';
@@ -1482,7 +1626,6 @@ class ProjectRunner {
       this.currentAgentProcess.stderr.on('data', (d) => stdout += d);
 
       let killedByTimeout = false;
-      // Poll-based timeout: reload config every 60s to pick up changes
       const timeoutInterval = setInterval(() => {
         const freshConfig = this.loadConfig();
         if (freshConfig.agentTimeoutMs > 0) {
@@ -1491,7 +1634,6 @@ class ProjectRunner {
             log(`⏰ Timeout (${Math.floor(elapsed / 60000)}m elapsed, limit ${Math.floor(freshConfig.agentTimeoutMs / 60000)}m), killing ${agent.name}`, this.id);
             killedByTimeout = true;
             this.currentAgentProcess.kill('SIGTERM');
-            // Escalate to SIGKILL after 30s if still alive
             setTimeout(() => {
               try { this.currentAgentProcess?.kill('SIGKILL'); } catch {}
             }, 30000);
@@ -1502,11 +1644,10 @@ class ProjectRunner {
 
       this.currentAgentProcess.on('close', (code) => {
         clearInterval(timeoutInterval);
-        
+
         const durationMs = Date.now() - this.currentAgentStartTime;
-        const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
-        
-        let tokenInfo = '';
+
+        // Parse CLI JSON output
         let cost;
         let resultText = '';
         try {
@@ -1517,12 +1658,10 @@ class ProjectRunner {
               if (data.type === 'result') {
                 if (data.usage) {
                   const u = data.usage;
-                  // Model-aware pricing (per million tokens)
-                  let inputRate = 15, outputRate = 75, cacheRate = 1.5; // opus default
+                  let inputRate = 15, outputRate = 75, cacheRate = 1.5;
                   if (agentModel.includes('sonnet')) { inputRate = 3; outputRate = 15; cacheRate = 0.3; }
-                  else if (agentModel.includes('haiku')) { inputRate = 0.80; outputRate = 4; cacheRate = 0.08; }
+                  else if (agentModel.includes('haiku')) { inputRate = 1; outputRate = 5; cacheRate = 0.1; }
                   cost = ((u.input_tokens * inputRate) + (u.output_tokens * outputRate) + (u.cache_read_input_tokens * cacheRate)) / 1_000_000;
-                  tokenInfo = ` | tokens: in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens} | cost: $${cost.toFixed(4)}`;
                 }
                 if (data.result) {
                   resultText = data.result;
@@ -1531,92 +1670,16 @@ class ProjectRunner {
             }
           }
         } catch {}
-        
-        // Log CLI response to agent-specific log file
-        try {
-          const responsesDir = path.join(this.agentDir, 'responses');
-          fs.mkdirSync(responsesDir, { recursive: true });
-          const timestamp = new Date().toLocaleString('sv-SE', { hour12: false }).replace(',', '');
-          const header = `\n${'='.repeat(60)}\n[${timestamp}] Cycle ${this.cycleCount} | Exit code: ${code}\n${'='.repeat(60)}\n`;
-          
-          // Always log raw output for debugging
-          const rawLogPath = path.join(responsesDir, `${agent.name}.raw.log`);
-          fs.appendFileSync(rawLogPath, header + stdout + '\n');
-          
-          // Log parsed result if available
-          if (resultText) {
-            const agentLogPath = path.join(responsesDir, `${agent.name}.log`);
-            fs.appendFileSync(agentLogPath, header + resultText + '\n');
-          }
-        } catch (e) {
-          log(`Failed to log response for ${agent.name}: ${e.message}`, this.id);
-        }
 
-        // Append cost row to cost.csv
-        if (cost !== undefined) {
-          try {
-            const csvPath = path.join(this.agentDir, 'cost.csv');
-            if (!fs.existsSync(csvPath)) {
-              fs.writeFileSync(csvPath, 'time,cycle,agent,cost,durationMs\n');
-            }
-            fs.appendFileSync(csvPath, `${new Date().toISOString()},${this.cycleCount},${agent.name},${cost.toFixed(6)},${durationMs}\n`);
-          } catch {}
-        }
-
-        // Write agent report to SQLite
-        if (resultText || killedByTimeout || code !== 0) {
-          try {
-            let reportBody;
-            if (killedByTimeout || code !== 0) {
-              const errorType = killedByTimeout ? '⏰ Timeout' : '❌ Error';
-              const errorMsg = killedByTimeout
-                ? `Killed after exceeding the ${Math.floor(config.agentTimeoutMs / 60000)}m timeout limit.`
-                : `Exited with code ${code}.`;
-              // Capture partial work on timeout — check for uncommitted changes
-              let partialWork = '';
-              if (killedByTimeout) {
-                try {
-                  const repoDir = path.join(this.agentDir, 'repo');
-                  if (fs.existsSync(path.join(repoDir, '.git'))) {
-                    const diffStat = execSync('git diff --stat HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
-                    const stagedStat = execSync('git diff --stat --cached HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
-                    if (diffStat || stagedStat) {
-                      partialWork = `\n\n### Partial Work Detected\n\nUncommitted changes found in repo:\n\`\`\`\n${(stagedStat ? 'Staged:\n' + stagedStat + '\n' : '')}${(diffStat ? 'Unstaged:\n' + diffStat : '')}\n\`\`\``;
-                    }
-                  }
-                } catch {}
-              }
-              reportBody = `## ${errorType}\n\n${errorMsg}\n\n- Duration: ${durationStr}\n- Exit code: ${code}${partialWork}`;
-            } else {
-              reportBody = resultText.trim();
-            }
-            // Prepend time log to all reports
-            const startTime = new Date(this.currentAgentStartTime).toLocaleString('sv-SE');
-            const endTime = new Date().toLocaleString('sv-SE');
-            reportBody = `> ⏱ Started: ${startTime} | Ended: ${endTime} | Duration: ${durationStr}\n\n${reportBody}`;
-            const db = this.getDb();
-            db.exec(`CREATE TABLE IF NOT EXISTS reports (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              cycle INTEGER NOT NULL,
-              agent TEXT NOT NULL,
-              body TEXT NOT NULL,
-              created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-            )`);
-            db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(this.cycleCount, agent.name, reportBody, new Date().toISOString());
-            db.close();
-            log(`Saved report for ${agent.name}`, this.id);
-          } catch (dbErr) {
-            log(`Failed to write report: ${dbErr.message}`, this.id);
-          }
-        }
-
-        log(`${agent.name} done (code ${code})${tokenInfo}`, this.id);
-        const summary = resultText ? stripMetaBlocks(resultText).slice(0, 500).replace(/\n+/g, ' ').trim() : '';
-        broadcastEvent({ type: 'agent-done', project: this.id, agent: agent.name, success: code === 0 && !killedByTimeout, summary });
-        this.currentAgent = null;
-        this.currentAgentProcess = null;
-        this.currentAgentStartTime = null;
-        resolve({ success: code === 0 && !killedByTimeout, resultText });
+        const result = this._postProcessAgentRun(agent, config, {
+          resultText,
+          cost,
+          durationMs,
+          killedByTimeout,
+          exitCode: code,
+          rawOutput: stdout,
+        });
+        resolve(result);
       });
     });
   }
@@ -1863,6 +1926,41 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: e.message }));
       }
     });
+    return;
+  }
+
+  // --- Models API (fetch from Anthropic) ---
+
+  if (req.method === 'GET' && url.pathname === '/api/models') {
+    const token = process.env.ANTHROPIC_AUTH_TOKEN;
+    if (!token) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No auth token configured' }));
+      return;
+    }
+    try {
+      const isOAuth = token.startsWith('sk-ant-oat');
+      const headers = { 'anthropic-version': '2023-06-01' };
+      if (isOAuth) {
+        headers['Authorization'] = `Bearer ${token}`;
+        headers['anthropic-beta'] = 'claude-code-20250219,oauth-2025-04-20';
+      } else {
+        headers['x-api-key'] = token;
+      }
+      const resp = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers });
+      if (!resp.ok) {
+        const err = await resp.text();
+        res.writeHead(resp.status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `Anthropic API error: ${resp.status}`, details: err }));
+        return;
+      }
+      const data = await resp.json();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
     return;
   }
 
