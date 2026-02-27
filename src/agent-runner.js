@@ -282,8 +282,12 @@ function getToolDefinitions() {
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
-function executeBash(input, cwd) {
-  const timeout = Math.min(input.timeout || 120000, 600000);
+function executeBash(input, cwd, remainingMs = 0) {
+  let timeout = Math.min(input.timeout || 120000, 600000);
+  // If agent has remaining time, cap the tool timeout to it
+  if (remainingMs > 0) {
+    timeout = Math.min(timeout, remainingMs);
+  }
   return new Promise((resolve) => {
     const proc = spawn('bash', ['-c', input.command], {
       cwd,
@@ -431,9 +435,9 @@ function executeGrep(input, cwd) {
   }
 }
 
-async function executeTool(toolName, toolInput, cwd) {
+async function executeTool(toolName, toolInput, cwd, remainingMs = 0) {
   switch (toolName) {
-    case 'Bash':  return await executeBash(toolInput, cwd);
+    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs);
     case 'Read':  return executeRead(toolInput, cwd);
     case 'Write': return executeWrite(toolInput, cwd);
     case 'Edit':  return executeEdit(toolInput, cwd);
@@ -509,6 +513,16 @@ export async function runAgentWithAPI(opts) {
   // Accumulate usage across all API calls
   const totalUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
 
+  // Hard timeout: abort controller fires after timeoutMs, killing any in-flight work
+  let aborted = false;
+  let hardTimeoutTimer;
+  if (timeoutMs > 0) {
+    hardTimeoutTimer = setTimeout(() => {
+      aborted = true;
+      log(`⏰ Hard timeout after ${Math.floor((Date.now() - startTime) / 60000)}m`);
+    }, timeoutMs);
+  }
+
   // Initial messages
   const messages = [
     {
@@ -525,9 +539,10 @@ export async function runAgentWithAPI(opts) {
   const MAX_ITERATIONS = 200;
   let lastResultText = '';
 
+  try {
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    // Check timeout
-    if (timeoutMs > 0 && (Date.now() - startTime) >= timeoutMs) {
+    // Check timeout (hard timer or elapsed check)
+    if (aborted || (timeoutMs > 0 && (Date.now() - startTime) >= timeoutMs)) {
       log(`Agent timeout after ${iteration} iterations`);
       return {
         success: false,
@@ -594,6 +609,24 @@ export async function runAgentWithAPI(opts) {
       };
     }
 
+    // Check abort after API call returns
+    if (aborted) {
+      if (response.usage) {
+        totalUsage.input_tokens += response.usage.input_tokens || 0;
+        totalUsage.output_tokens += response.usage.output_tokens || 0;
+        totalUsage.cache_read_input_tokens += response.usage.cache_read_input_tokens || 0;
+      }
+      log(`Agent timeout after API call (iteration ${iteration})`);
+      return {
+        success: false,
+        resultText: lastResultText || 'Agent timed out',
+        usage: totalUsage,
+        cost: calculateCost(totalUsage, model),
+        durationMs: Date.now() - startTime,
+        timedOut: true,
+      };
+    }
+
     // Accumulate usage
     if (response.usage) {
       totalUsage.input_tokens += response.usage.input_tokens || 0;
@@ -628,18 +661,36 @@ export async function runAgentWithAPI(opts) {
       // Execute tools and collect results
       const toolResults = [];
       for (const toolUse of toolUseBlocks) {
+        // Check abort before each tool
+        if (aborted) break;
+
         log(`Tool: ${toolUse.name}${toolUse.name === 'Bash' ? ` → ${(toolUse.input.command || '').slice(0, 100)}` : ''}`);
 
         // Set up environment for Bash tool
         let toolCwd = cwd;
         const toolEnv = { ...bashEnv };
 
-        const result = await executeTool(toolUse.name, toolUse.input, toolCwd);
+        // Calculate remaining time for tool timeout
+        const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
+        const result = await executeTool(toolUse.name, toolUse.input, toolCwd, remainingMs);
         toolResults.push({
           type: 'tool_result',
           tool_use_id: toolUse.id,
           content: result,
         });
+      }
+
+      // If aborted during tool execution, return
+      if (aborted) {
+        log(`Agent timeout during tool execution (iteration ${iteration})`);
+        return {
+          success: false,
+          resultText: lastResultText || 'Agent timed out',
+          usage: totalUsage,
+          cost: calculateCost(totalUsage, model),
+          durationMs: Date.now() - startTime,
+          timedOut: true,
+        };
       }
 
       // Add tool results to messages (cache_control is managed at the top of the loop)
@@ -665,4 +716,7 @@ export async function runAgentWithAPI(opts) {
     cost: calculateCost(totalUsage, model),
     durationMs: Date.now() - startTime,
   };
+  } finally {
+    if (hardTimeoutTimer) clearTimeout(hardTimeoutTimer);
+  }
 }
