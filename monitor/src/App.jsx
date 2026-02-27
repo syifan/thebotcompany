@@ -2781,6 +2781,18 @@ function App() {
               {/* Meta */}
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={issueModal.issue.status === 'open' ? 'success' : 'secondary'}>{issueModal.issue.status || 'open'}</Badge>
+                <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={async () => {
+                  const newStatus = issueModal.issue.status === 'open' ? 'closed' : 'open'
+                  try {
+                    await authFetch(projectApi(`/issues/${issueModal.issue.id}`), {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: newStatus })
+                    })
+                    setIssueModal(prev => ({ ...prev, issue: { ...prev.issue, status: newStatus } }))
+                    await fetchProjectData()
+                  } catch {}
+                }}>{issueModal.issue.status === 'open' ? 'Close' : 'Reopen'}</Button>
                 {issueModal.issue.creator && (
                   <span className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1"><User className="w-3 h-3" />{issueModal.issue.creator}</span>
                 )}
