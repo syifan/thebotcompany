@@ -2461,7 +2461,7 @@ const server = http.createServer(async (req, res) => {
           }
           const db = runner.getDb();
           const now = new Date().toISOString();
-          const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, author || 'user', commentBody.trim(), now);
+          const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, author || 'human', commentBody.trim(), now);
           db.prepare('UPDATE issues SET updated_at = ? WHERE id = ?').run(now, issueId);
           db.close();
           res.writeHead(200, { 'Content-Type': 'application/json' });

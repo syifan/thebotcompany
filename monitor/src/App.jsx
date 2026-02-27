@@ -608,7 +608,7 @@ function App() {
       const res = await authFetch(projectApi(`/issues/${issueModal.issue.id}/comments`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ author: 'user', body: issueModal.newComment.trim() })
+        body: JSON.stringify({ author: 'human', body: issueModal.newComment.trim() })
       })
       if (res.ok) {
         // Refresh issue modal
