@@ -2730,10 +2730,11 @@ function App() {
             <div>
               <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
               <textarea
-                placeholder="Additional details, context, acceptance criteria..."
+                placeholder="Additional details, context, acceptance criteria... (⌘+Enter to submit)"
                 className="w-full px-3 py-2 border rounded-md min-h-[100px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                 value={createIssueModal.body}
                 onChange={(e) => setCreateIssueModal(prev => ({ ...prev, body: e.target.value }))}
+                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') createIssue() }}
                 disabled={createIssueModal.creating}
               />
             </div>
