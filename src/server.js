@@ -1575,121 +1575,24 @@ class ProjectRunner {
       TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
     };
 
-    // ----- API-based agent runner (default) -----
-    if (!config.useCliAgent) {
-      log(`Using API runner for ${agent.name} (model: ${agentModel})`, this.id);
+    log(`Using API runner for ${agent.name} (model: ${agentModel})`, this.id);
 
-      const result = await runAgentWithAPI({
-        prompt: skillContent,
-        model: agentModel,
-        token: resolvedToken,
-        cwd: this.path,
-        timeoutMs: config.agentTimeoutMs || 0,
-        env: agentEnv,
-        log: (msg) => log(`  [${agent.name}] ${msg}`, this.id),
-      });
+    const result = await runAgentWithAPI({
+      prompt: skillContent,
+      model: agentModel,
+      token: resolvedToken,
+      cwd: this.path,
+      timeoutMs: config.agentTimeoutMs || 0,
+      env: agentEnv,
+      log: (msg) => log(`  [${agent.name}] ${msg}`, this.id),
+    });
 
-      return this._postProcessAgentRun(agent, config, {
-        resultText: result.resultText,
-        cost: result.cost,
-        durationMs: result.durationMs,
-        killedByTimeout: result.timedOut || false,
-        rawOutput: JSON.stringify({ usage: result.usage, resultText: result.resultText }),
-      });
-    }
-
-    // ----- CLI-based agent runner (fallback: useCliAgent: true) -----
-    log(`Using CLI runner for ${agent.name} (model: ${agentModel})`, this.id);
-
-    return new Promise((resolve) => {
-      const args = [
-        '-p', skillContent,
-        '--model', agentModel,
-        '--dangerously-skip-permissions',
-        '--output-format', 'json'
-      ];
-
-      const cliEnv = { ...process.env, ...agentEnv };
-      // Clean up any leaked tokens from dotenv/process.env
-      delete cliEnv.ANTHROPIC_AUTH_TOKEN;
-      delete cliEnv.ANTHROPIC_API_KEY;
-      delete cliEnv.CLAUDE_CODE_OAUTH_TOKEN;
-      // Set the right env var for the resolved token
-      if (resolvedToken) {
-        const isOAuth = resolvedToken.startsWith('sk-ant-oat');
-        if (isOAuth) {
-          cliEnv.CLAUDE_CODE_OAUTH_TOKEN = resolvedToken;
-        } else {
-          cliEnv.ANTHROPIC_API_KEY = resolvedToken;
-        }
-      }
-
-      this.currentAgentProcess = spawn('claude', args, {
-        cwd: this.path,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: cliEnv,
-      });
-
-      let stdout = '';
-      this.currentAgentProcess.stdout.on('data', (d) => stdout += d);
-      this.currentAgentProcess.stderr.on('data', (d) => stdout += d);
-
-      let killedByTimeout = false;
-      const timeoutInterval = setInterval(() => {
-        const freshConfig = this.loadConfig();
-        if (freshConfig.agentTimeoutMs > 0) {
-          const elapsed = Date.now() - this.currentAgentStartTime;
-          if (elapsed >= freshConfig.agentTimeoutMs) {
-            log(`⏰ Timeout (${Math.floor(elapsed / 60000)}m elapsed, limit ${Math.floor(freshConfig.agentTimeoutMs / 60000)}m), killing ${agent.name}`, this.id);
-            killedByTimeout = true;
-            this.currentAgentProcess.kill('SIGTERM');
-            setTimeout(() => {
-              try { this.currentAgentProcess?.kill('SIGKILL'); } catch {}
-            }, 30000);
-            clearInterval(timeoutInterval);
-          }
-        }
-      }, 60000);
-
-      this.currentAgentProcess.on('close', (code) => {
-        clearInterval(timeoutInterval);
-
-        const durationMs = Date.now() - this.currentAgentStartTime;
-
-        // Parse CLI JSON output
-        let cost;
-        let resultText = '';
-        try {
-          const lines = stdout.trim().split('\n');
-          for (const line of lines) {
-            if (line.startsWith('{')) {
-              const data = JSON.parse(line);
-              if (data.type === 'result') {
-                if (data.usage) {
-                  const u = data.usage;
-                  let inputRate = 15, outputRate = 75, cacheRate = 1.5;
-                  if (agentModel.includes('sonnet')) { inputRate = 3; outputRate = 15; cacheRate = 0.3; }
-                  else if (agentModel.includes('haiku')) { inputRate = 1; outputRate = 5; cacheRate = 0.1; }
-                  cost = ((u.input_tokens * inputRate) + (u.output_tokens * outputRate) + (u.cache_read_input_tokens * cacheRate)) / 1_000_000;
-                }
-                if (data.result) {
-                  resultText = data.result;
-                }
-              }
-            }
-          }
-        } catch {}
-
-        const result = this._postProcessAgentRun(agent, config, {
-          resultText,
-          cost,
-          durationMs,
-          killedByTimeout,
-          exitCode: code,
-          rawOutput: stdout,
-        });
-        resolve(result);
-      });
+    return this._postProcessAgentRun(agent, config, {
+      resultText: result.resultText,
+      cost: result.cost,
+      durationMs: result.durationMs,
+      killedByTimeout: result.timedOut || false,
+      rawOutput: JSON.stringify({ usage: result.usage, resultText: result.resultText }),
     });
   }
 }
