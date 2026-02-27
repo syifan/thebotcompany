@@ -2528,10 +2528,10 @@ function App() {
               >
                 <option value="">Inherited from global</option>
                 <option value="claude-opus-4-6">claude-opus-4-6</option>
-                <option value="claude-sonnet-4-6">claude-sonnet-4.6</option>
-                <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5</option>
+                <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
                 <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
-                <option value="claude-haiku-3-5-20241022">claude-haiku-3.5</option>
+                <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
               </select>
               <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Leave empty to use the project's default model.</p>
             </div>

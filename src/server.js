@@ -603,7 +603,7 @@ class ProjectRunner {
       const model = (config.model || '').toLowerCase();
       let perAgentCost;
       if (model.includes('opus')) perAgentCost = 2.50;
-      else if (model.includes('haiku')) perAgentCost = 0.20;
+      else if (model.includes('haiku')) perAgentCost = 0.50;
       else perAgentCost = 1.50; // sonnet default
 
       const estimatedCycleCost = perAgentCost * agentCount;
@@ -1520,7 +1520,7 @@ class ProjectRunner {
                   // Model-aware pricing (per million tokens)
                   let inputRate = 15, outputRate = 75, cacheRate = 1.5; // opus default
                   if (agentModel.includes('sonnet')) { inputRate = 3; outputRate = 15; cacheRate = 0.3; }
-                  else if (agentModel.includes('haiku')) { inputRate = 0.80; outputRate = 4; cacheRate = 0.08; }
+                  else if (agentModel.includes('haiku')) { inputRate = 1; outputRate = 5; cacheRate = 0.1; }
                   cost = ((u.input_tokens * inputRate) + (u.output_tokens * outputRate) + (u.cache_read_input_tokens * cacheRate)) / 1_000_000;
                   tokenInfo = ` | tokens: in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens} | cost: $${cost.toFixed(4)}`;
                 }
