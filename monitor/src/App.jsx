@@ -2721,7 +2721,7 @@ function App() {
                 className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                 value={createIssueModal.title}
                 onChange={(e) => setCreateIssueModal(prev => ({ ...prev, title: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') createIssue() }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('create-issue-body')?.focus() } }}
                 disabled={createIssueModal.creating}
                 autoFocus
               />
@@ -2730,6 +2730,7 @@ function App() {
             <div>
               <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
               <textarea
+                id="create-issue-body"
                 placeholder="Additional details, context, acceptance criteria... (⌘+Enter to submit)"
                 className="w-full px-3 py-2 border rounded-md min-h-[100px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                 value={createIssueModal.body}
