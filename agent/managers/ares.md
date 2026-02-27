@@ -34,7 +34,9 @@ Decide: is there still work to do, or is the milestone fully achieved?
 ### Step 2: Schedule
 
 Assign workers (see manager.md). Rules specific to Ares:
-- **Always assign a specific issue** — e.g., "Work on issue #42"
+- **Always run `tbc-db issue-list` first** to see actual issue IDs. **Never invent issue numbers.**
+- **Only assign issues that exist in the DB.** If you need a new task, create it with `tbc-db issue-create` first, then assign the returned ID.
+- **Always assign a specific issue** — e.g., "Work on issue #4" (must be a real ID from `tbc-db issue-list`)
 - **Respect locks.** Don't reassign unless their issue is done, blocked, or closed.
 - **One issue per worker.** No multitasking.
 
@@ -44,4 +46,15 @@ When the milestone is fully achieved:
 
 <!-- CLAIM_COMPLETE -->
 
-This triggers Apollo's verification team. 
+This triggers Apollo's verification team.
+
+## ✅ Pre-Submit Checklist
+
+Before finishing your response, verify you included **at least one** of these tags:
+
+| Tag | When to use |
+|-----|-------------|
+| `<!-- SCHEDULE -->` | You have workers to assign this cycle |
+| `<!-- CLAIM_COMPLETE -->` | The milestone is fully achieved and ready for verification |
+
+**If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.

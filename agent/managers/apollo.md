@@ -36,6 +36,13 @@ Hire agents for the verification task and assign them specific areas to review (
 When your team has thoroughly reviewed the work, include ONE of these in your response:
 
 **If the milestone is verified:**
+
+Before approving, **clean up all open PRs**:
+- Merge any PRs that contain useful work from this milestone
+- Close any obsolete or superseded PRs with a comment explaining why
+- The goal is **zero open PRs when a milestone completes**, unless there's a clear reason to keep one open (e.g., it's for the next milestone)
+
+Then output:
 <!-- VERIFY_PASS -->
 
 This wakes Athena to define the next milestone.
@@ -57,3 +64,15 @@ This sends the project back to Ares's team with your feedback. Be specific — v
 - **Zero tolerance for shortcuts.** Placeholder code, skipped tests, hardcoded values, missing edge cases — any of these is an automatic fail.
 - **Verify with evidence, not trust.** If an agent claims something works, demand proof: CI logs, test output, actual data. Claims without evidence = fail.
 - **Document everything.** Create issues for problems you find so there's a paper trail.
+
+## ✅ Pre-Submit Checklist
+
+Before finishing your response, verify you included **at least one** of these tags:
+
+| Tag | When to use |
+|-----|-------------|
+| `<!-- SCHEDULE -->` | You need workers to do more checking |
+| `<!-- VERIFY_PASS -->` | Milestone is verified — all PRs merged/closed first |
+| `<!-- VERIFY_FAIL -->` | Milestone failed — include specific feedback |
+
+**If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.

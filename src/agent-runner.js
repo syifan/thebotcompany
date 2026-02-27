@@ -515,10 +515,12 @@ export async function runAgentWithAPI(opts) {
 
   // Hard timeout: abort controller fires after timeoutMs, killing any in-flight work
   let aborted = false;
+  const abortController = new AbortController();
   let hardTimeoutTimer;
   if (timeoutMs > 0) {
     hardTimeoutTimer = setTimeout(() => {
       aborted = true;
+      abortController.abort();
       log(`⏰ Hard timeout after ${Math.floor((Date.now() - startTime) / 60000)}m`);
     }, timeoutMs);
   }
@@ -597,8 +599,19 @@ export async function runAgentWithAPI(opts) {
 
     let response;
     try {
-      response = await client.messages.create(requestParams);
+      response = await client.messages.create(requestParams, { signal: abortController.signal });
     } catch (err) {
+      if (aborted || err.name === 'AbortError' || abortController.signal.aborted) {
+        log(`Agent timeout during API call (aborted)`);
+        return {
+          success: false,
+          resultText: lastResultText || 'Agent timed out',
+          usage: totalUsage,
+          cost: calculateCost(totalUsage, model),
+          durationMs: Date.now() - startTime,
+          timedOut: true,
+        };
+      }
       log(`API error: ${err.message}`);
       return {
         success: false,

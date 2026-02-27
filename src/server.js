@@ -1098,9 +1098,26 @@ class ProjectRunner {
       
       const task = typeof value === 'string' ? value : value.task || null;
       const vis = this._parseVisibility(value, task);
-      const wResult = await this.runAgent(worker, config, null, task, vis);
-      total++;
-      if (!wResult || !wResult.success) failures++;
+      
+      // Retry on timeout/failure (up to 2 retries)
+      const maxRetries = 2;
+      let attempt = 0;
+      let succeeded = false;
+      while (attempt <= maxRetries && !succeeded && this.running) {
+        if (attempt > 0) {
+          log(`Retrying ${worker.name} (attempt ${attempt + 1}/${maxRetries + 1})`, this.id);
+        }
+        const wResult = await this.runAgent(worker, config, null, task, vis);
+        total++;
+        if (wResult && wResult.success) {
+          succeeded = true;
+        } else {
+          failures++;
+          const wasTimeout = wResult && wResult.killedByTimeout;
+          if (!wasTimeout) break; // Only retry on timeout, not other failures
+          attempt++;
+        }
+      }
     }
     
     return { total, failures };
@@ -1534,7 +1551,7 @@ class ProjectRunner {
     this.currentAgentProcess = null;
     this.currentAgentStartTime = null;
 
-    return { success, resultText };
+    return { success, resultText, killedByTimeout: !!killedByTimeout };
   }
 
   async runAgent(agent, config, mode = null, task = null, visibility = null) {

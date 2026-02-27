@@ -132,7 +132,7 @@ Insert `{"delay": N}` steps wherever you need a pause (waiting for CI, builds, e
 - A delay at the start waits after YOU (the manager) finish, before any worker starts
 - A delay between workers waits after the previous worker finishes
 - Maximum 240 minutes per delay
-- Omit delay steps where you don't need pauses
+- **Only add delays when there is a clear reason** (e.g., waiting for CI to finish, waiting for a build). Do NOT add delays by default or "just in case." If there's no specific reason to wait, don't insert a delay.
 
 ### Worker Visibility
 
