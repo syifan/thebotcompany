@@ -16,7 +16,7 @@ import path from 'path';
 const MODEL_PRICING = {
   opus:   { input: 15,   output: 75,  cacheRead: 1.5  },
   sonnet: { input: 3,    output: 15,  cacheRead: 0.3  },
-  haiku:  { input: 0.80, output: 4,   cacheRead: 0.08 },
+  haiku:  { input: 1, output: 5,   cacheRead: 0.1 },
 };
 
 function getPricing(model) {

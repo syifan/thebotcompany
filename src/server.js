@@ -604,7 +604,7 @@ class ProjectRunner {
       const model = (config.model || '').toLowerCase();
       let perAgentCost;
       if (model.includes('opus')) perAgentCost = 2.50;
-      else if (model.includes('haiku')) perAgentCost = 0.20;
+      else if (model.includes('haiku')) perAgentCost = 0.50;
       else perAgentCost = 1.50; // sonnet default
 
       const estimatedCycleCost = perAgentCost * agentCount;
@@ -1654,7 +1654,7 @@ class ProjectRunner {
                   const u = data.usage;
                   let inputRate = 15, outputRate = 75, cacheRate = 1.5;
                   if (agentModel.includes('sonnet')) { inputRate = 3; outputRate = 15; cacheRate = 0.3; }
-                  else if (agentModel.includes('haiku')) { inputRate = 0.80; outputRate = 4; cacheRate = 0.08; }
+                  else if (agentModel.includes('haiku')) { inputRate = 1; outputRate = 5; cacheRate = 0.1; }
                   cost = ((u.input_tokens * inputRate) + (u.output_tokens * outputRate) + (u.cache_read_input_tokens * cacheRate)) / 1_000_000;
                 }
                 if (data.result) {
@@ -1920,6 +1920,41 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: e.message }));
       }
     });
+    return;
+  }
+
+  // --- Models API (fetch from Anthropic) ---
+
+  if (req.method === 'GET' && url.pathname === '/api/models') {
+    const token = process.env.ANTHROPIC_AUTH_TOKEN;
+    if (!token) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No auth token configured' }));
+      return;
+    }
+    try {
+      const isOAuth = token.startsWith('sk-ant-oat');
+      const headers = { 'anthropic-version': '2023-06-01' };
+      if (isOAuth) {
+        headers['Authorization'] = `Bearer ${token}`;
+        headers['anthropic-beta'] = 'claude-code-20250219,oauth-2025-04-20';
+      } else {
+        headers['x-api-key'] = token;
+      }
+      const resp = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers });
+      if (!resp.ok) {
+        const err = await resp.text();
+        res.writeHead(resp.status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `Anthropic API error: ${resp.status}`, details: err }));
+        return;
+      }
+      const data = await resp.json();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
     return;
   }
 
