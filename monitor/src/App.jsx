@@ -98,7 +98,7 @@ function App() {
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
   const [issueFilter, setIssueFilter] = useState('open') // 'open' | 'closed' | 'all'
-  const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', creating: false, error: null })
+  const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null })
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
@@ -573,12 +573,12 @@ function App() {
           title: createIssueModal.title.trim(),
           body: createIssueModal.body.trim(),
           creator: 'human',
-          assignee: null
+          assignee: createIssueModal.receiver || null
         })
       })
       const data = await res.json()
       if (data.success) {
-        setCreateIssueModal({ open: false, title: '', body: '', creating: false, error: null })
+        setCreateIssueModal({ open: false, title: '', body: '', receiver: '', creating: false, error: null })
         await fetchProjectData()
       } else {
         setCreateIssueModal(prev => ({ ...prev, creating: false, error: data.error || 'Failed to create issue' }))
@@ -2737,6 +2737,20 @@ function App() {
                 onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') createIssue() }}
                 disabled={createIssueModal.creating}
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Receiver <span className="text-neutral-400 font-normal">(optional)</span></label>
+              <select
+                className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                value={createIssueModal.receiver}
+                onChange={(e) => setCreateIssueModal(prev => ({ ...prev, receiver: e.target.value }))}
+                disabled={createIssueModal.creating}
+              >
+                <option value="">None (visible to all)</option>
+                {[...agents.managers, ...agents.workers].map(a => (
+                  <option key={a.name} value={a.name}>{a.name}{a.role ? ` (${a.role})` : ''}</option>
+                ))}
+              </select>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
