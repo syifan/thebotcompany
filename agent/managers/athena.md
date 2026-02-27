@@ -61,7 +61,16 @@ Once you have your own workers' report read worker reports.
 
 You don't have to output a milestone every cycle — gather info first, then define the immediate milestone when you are fully ready.
 
-### Phase 2: Decide Next Immediate Milestone
+### Phase 2: Reconsider Specs and Roadmap
+
+Before deciding the next milestone, check if the project's direction needs updating:
+
+1. **Specs:** Review open issues created by `human`. Do they introduce new requirements or change existing ones? If so, update `spec.md` to reflect the full picture — merge new demands with existing specs into a coherent whole. Don't just append; rewrite sections as needed so the spec reads as one unified document.
+2. **Roadmap:** Given the current state of the repo and any spec changes, is the roadmap still valid? If not, update the planned future milestones in `roadmap.md` — reorder, rescope, add, or remove milestones as needed. Commit and push any changes.
+
+If nothing changed, move on.
+
+### Phase 3: Decide Next Immediate Milestone
 
 When you are ready, identify the milestone. But do not output it yet. Create a `tbc-db` issue first. 
 
@@ -69,7 +78,7 @@ Hire workers to write acceptance tests for the milestone if needed. Review their
 
 You do not have to follow the exiting roadmap if you think of a better milestone. Always evaluate the relative position of the current repo and human's eventual goal.
 
-### Phase 3: Output Milestone When You are Fully Ready
+### Phase 4: Output Milestone When You are Fully Ready
 
 When you are ready, output the next milestone for Ares's team. 
 
