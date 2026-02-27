@@ -76,6 +76,7 @@ function App() {
   const [projectTokenInput, setProjectTokenInput] = useState('')
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [projectNotifs, setProjectNotifs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('tbc_project_notifs') || '{}') } catch { return {} }
   })
@@ -98,7 +99,8 @@ function App() {
   const [prs, setPrs] = useState([])
   const [issues, setIssues] = useState([])
   const [issueFilter, setIssueFilter] = useState('open') // 'open' | 'closed' | 'all'
-  const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', creating: false, error: null })
+  const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
+  const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
@@ -113,6 +115,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [hasGlobalToken, setHasGlobalToken] = useState(false)
   const [globalTokenPreview, setGlobalTokenPreview] = useState(null)
+  const [globalTokenType, setGlobalTokenType] = useState(null)
   const [globalTokenInput, setGlobalTokenInput] = useState('')
   const [tokenSaving, setTokenSaving] = useState(false)
   const [expandedNotifs, setExpandedNotifs] = useState(new Set())
@@ -129,7 +132,7 @@ function App() {
 
   // Fetch settings + notifications on mount
   useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(d => { setHasGlobalToken(!!d.hasGlobalToken); setGlobalTokenPreview(d.globalTokenPreview || null) }).catch(() => {})
+    fetch('/api/settings').then(r => r.json()).then(d => { setHasGlobalToken(!!d.hasGlobalToken); setGlobalTokenPreview(d.globalTokenPreview || null); setGlobalTokenType(d.tokenType || null) }).catch(() => {})
     fetch('/api/notifications').then(r => r.json()).then(d => setNotifList(Array.isArray(d) ? d : [])).catch(() => {})
     if (new URLSearchParams(window.location.search).has('notif')) {
       setNotifCenter(true)
@@ -253,6 +256,7 @@ function App() {
   const [projectLoading, setProjectLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const logsRef = useRef(null)
+  const reportsScrollRef = useRef(null)
   const prevAgentRef = useRef(null)
 
 
@@ -483,11 +487,11 @@ function App() {
     setConfigError(null)
   }
   
-  const fetchComments = async (page = 1, agent = null, append = false) => {
+  const fetchComments = async (page = 1, agent = null, append = false, silent = false) => {
     const currentProject = selectedProjectRef.current
     const baseApi = currentProject ? `/api/projects/${currentProject.id}` : null
     if (!baseApi) return
-    setCommentsLoading(true)
+    if (!silent) setCommentsLoading(true)
     try {
       const params = new URLSearchParams({ page, per_page: 10 })
       if (agent) params.set('agent', agent)
@@ -500,7 +504,7 @@ function App() {
       setCommentsHasMore((data.page * data.perPage) < data.total)
       setCommentsPage(page)
     } catch (err) { console.error('Failed to fetch comments:', err) }
-    finally { setCommentsLoading(false) }
+    finally { if (!silent) setCommentsLoading(false) }
   }
   
   const loadMoreComments = () => {
@@ -572,12 +576,12 @@ function App() {
           title: createIssueModal.title.trim(),
           body: createIssueModal.body.trim(),
           creator: 'human',
-          assignee: null
+          assignee: createIssueModal.receiver || null
         })
       })
       const data = await res.json()
       if (data.success) {
-        setCreateIssueModal({ open: false, title: '', body: '', creating: false, error: null })
+        setCreateIssueModal({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
         await fetchProjectData()
       } else {
         setCreateIssueModal(prev => ({ ...prev, creating: false, error: data.error || 'Failed to create issue' }))
@@ -606,7 +610,7 @@ function App() {
       const res = await authFetch(projectApi(`/issues/${issueModal.issue.id}/comments`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ author: 'user', body: issueModal.newComment.trim() })
+        body: JSON.stringify({ author: 'human', body: issueModal.newComment.trim() })
       })
       if (res.ok) {
         // Refresh issue modal
@@ -792,9 +796,8 @@ function App() {
   }
 
   const removeProject = async (projectId) => {
-    if (!confirm(`Remove project "${projectId}"?`)) return
     try {
-      const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+      const res = await authFetch(`/api/projects/${projectId}`, { method: 'DELETE' })
       if (res.ok) {
         if (selectedProject?.id === projectId) {
           setSelectedProject(null)
@@ -878,7 +881,7 @@ function App() {
       
       // Separate intervals for different data
       const logsInterval = setInterval(fetchLogs, 10000) // Logs every 10s
-      const commentsInterval = setInterval(() => fetchComments(1, localStorage.getItem('selectedAgent') || null, false), 30000) // Comments every 30s
+      const commentsInterval = setInterval(() => fetchComments(1, localStorage.getItem('selectedAgent') || null, false, true), 30000) // Comments every 30s (silent refresh)
       const projectDataInterval = setInterval(fetchProjectData, 30000) // Issues/PRs/agents every 30s
       
       return () => {
@@ -903,6 +906,17 @@ function App() {
     const s = seconds % 60
     return `${m}m ${s}s`
   }
+
+  // Available models (fetched from Anthropic API)
+  const [availableModels, setAvailableModels] = useState([])
+  useEffect(() => {
+    fetch('/api/models')
+      .then(r => r.json())
+      .then(data => {
+        if (data.data) setAvailableModels(data.data)
+      })
+      .catch(() => {})
+  }, [])
 
   // Agent settings modal state
   const [agentSettingsModal, setAgentSettingsModal] = useState({ open: false, agent: null, model: '', saving: false, error: null })
@@ -1143,16 +1157,16 @@ function App() {
           <div className="py-2">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-sm text-neutral-700 dark:text-neutral-300">Claude Setup Token</span>
+                <span className="text-sm text-neutral-700 dark:text-neutral-300">Anthropic Token</span>
                 <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-                  {hasGlobalToken ? `✓ Token: ${globalTokenPreview}` : 'No global token — agents use OAuth login'}
+                  {hasGlobalToken ? `✓ ${globalTokenType === 'oauth' ? 'OAuth' : 'API Key'}: ${globalTokenPreview}` : 'No token configured — paste an OAuth token or API key'}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <input
                 type="password"
-                placeholder={hasGlobalToken ? '••••••••' : 'Paste setup token...'}
+                placeholder={hasGlobalToken ? '••••••••' : 'Paste OAuth token or API key...'}
                 value={globalTokenInput}
                 onChange={e => setGlobalTokenInput(e.target.value)}
                 className="flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
@@ -1169,8 +1183,9 @@ function App() {
                     if (res.ok) {
                       const d = await res.json()
                       setHasGlobalToken(d.hasGlobalToken)
+                      setGlobalTokenType(d.tokenType || null)
                       // Refresh preview
-                      fetch('/api/settings').then(r => r.json()).then(s => setGlobalTokenPreview(s.globalTokenPreview || null)).catch(() => {})
+                      fetch('/api/settings').then(r => r.json()).then(s => { setGlobalTokenPreview(s.globalTokenPreview || null); setGlobalTokenType(s.tokenType || null) }).catch(() => {})
                       setGlobalTokenInput('')
                       setToast('Global token updated')
                     }
@@ -1194,6 +1209,8 @@ function App() {
                       })
                       if (res.ok) {
                         setHasGlobalToken(false)
+                        setGlobalTokenType(null)
+                        setGlobalTokenPreview(null)
                         setToast('Global token removed')
                       }
                     } catch {}
@@ -1231,7 +1248,6 @@ function App() {
   const projNotifSettings = getProjSetting('notifs')
   const projTokenSettings = getProjSetting('token')
   const notifUseGlobal = projNotifSettings.useGlobal !== false
-  const tokenUseGlobal = projTokenSettings.useGlobal !== false
 
   const projectSettingsModal = selectedProject && (
     <Modal open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)}>
@@ -1280,30 +1296,15 @@ function App() {
         {/* Authentication section */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Authentication</h3>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <span className="text-sm text-neutral-700 dark:text-neutral-300">Use Global Setting</span>
-              {tokenUseGlobal && <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-                {hasGlobalToken ? `Global: ${globalTokenPreview}` : 'No global token set'}
-              </p>}
-            </div>
-            <button
-              onClick={() => setProjSetting('token', { useGlobal: !tokenUseGlobal })}
-              className={`relative w-11 h-6 rounded-full transition-colors ${tokenUseGlobal ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${tokenUseGlobal ? 'translate-x-5' : ''}`} />
-            </button>
-          </div>
-          <div className={tokenUseGlobal ? 'opacity-40 pointer-events-none' : ''}>
-            <div className="py-2">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <span className="text-sm text-neutral-700 dark:text-neutral-300">Setup Token</span>
-                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-                    {hasProjectToken ? `✓ ${projectTokenPreview}` : 'No project token set'}
-                  </p>
-                </div>
+          <div className="py-2">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <span className="text-sm text-neutral-700 dark:text-neutral-300">Project Token</span>
+                <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                  {hasProjectToken ? `✓ ${projectTokenPreview}` : hasGlobalToken ? `Using global token (${globalTokenPreview})` : 'No token — set a project token or global token'}
+                </p>
               </div>
+            </div>
               <div className="flex items-center gap-2">
                 <input
                   type="password"
@@ -1360,9 +1361,62 @@ function App() {
                   </button>
                 )}
               </div>
-            </div>
           </div>
         </div>
+
+        {/* Danger Zone */}
+        {isWriteMode && (
+          <div className="border-t border-red-200 dark:border-red-900 pt-5 mt-5">
+            <h3 className="text-sm font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider mb-3">Danger Zone</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                <div>
+                  <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                    {selectedProject?.archived ? 'Unarchive Project' : 'Archive Project'}
+                  </span>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                    {selectedProject?.archived ? 'Restore this project to the active dashboard' : 'Hide from dashboard. Data is preserved.'}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const action = selectedProject?.archived ? 'unarchive' : 'archive'
+                    try {
+                      await authFetch(projectApi(`/${action}`), { method: 'POST' })
+                      await fetchGlobalStatus()
+                      await fetchProjectData()
+                      setToast(action === 'archive' ? 'Project archived' : 'Project unarchived')
+                    } catch {}
+                  }}
+                >
+                  {selectedProject?.archived ? 'Unarchive' : 'Archive'}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between p-3 border border-red-200 dark:border-red-800 rounded-lg bg-red-50/50 dark:bg-red-950/20">
+                <div>
+                  <span className="text-sm font-medium text-red-600 dark:text-red-400">Delete Project</span>
+                  <p className="text-xs text-red-400 dark:text-red-500 mt-0.5">Permanently remove this project and all data</p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm(`Are you sure you want to permanently delete "${selectedProject?.id}"? This cannot be undone.`)) return
+                    if (!confirm('This will delete all workspace data, agent skills, and history. Really delete?')) return
+                    try {
+                      await removeProject(selectedProject.id)
+                      setProjectSettingsOpen(false)
+                    } catch {}
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </ModalContent>
     </Modal>
   )
@@ -1409,8 +1463,18 @@ function App() {
           </div>
 
           {/* Project List */}
+          {projects.some(p => p.archived) && (
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => setShowArchived(prev => !prev)}
+                className="text-xs text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+              >
+                {showArchived ? 'Hide archived' : `Show archived (${projects.filter(p => p.archived).length})`}
+              </button>
+            </div>
+          )}
           <div className="space-y-4">
-            {projects.map(project => (
+            {projects.filter(p => showArchived || !p.archived).map(project => (
               <Card key={project.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => selectProject(project)}>
                 <CardContent className="p-4">
                   {/* Mobile: Stack vertically. Desktop: Row */}
@@ -1461,14 +1525,9 @@ function App() {
                           <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">${project.cost.totalCost.toFixed(2)} · ${project.cost.last24hCost.toFixed(2)}/24h</p>
                         )}
                       </div>
-                      {isWriteMode && <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={(e) => { e.stopPropagation(); removeProject(project.id) }}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>}
+                      {project.archived && (
+                        <Badge variant="outline" className="text-[10px] text-neutral-400 dark:text-neutral-500 border-neutral-300 dark:border-neutral-600 shrink-0">Archived</Badge>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -2313,7 +2372,7 @@ function App() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 flex-1 overflow-hidden">
-                  <div className="h-full overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
+                  <div ref={reportsScrollRef} className="h-full overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
                     const { scrollTop, scrollHeight, clientHeight } = e.target
                     if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
                   }}>
@@ -2527,11 +2586,9 @@ function App() {
                 onChange={(e) => setAgentSettingsModal(prev => ({ ...prev, model: e.target.value }))}
               >
                 <option value="">Inherited from global</option>
-                <option value="claude-opus-4-6">claude-opus-4-6</option>
-                <option value="claude-sonnet-4-6">claude-sonnet-4.6</option>
-                <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5</option>
-                <option value="claude-sonnet-4-20250514">claude-sonnet-4</option>
-                <option value="claude-haiku-3-5-20241022">claude-haiku-3.5</option>
+                {availableModels.map(m => (
+                  <option key={m.id} value={m.id}>{m.display_name}</option>
+                ))}
               </select>
               <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Leave empty to use the project's default model.</p>
             </div>
@@ -2725,26 +2782,44 @@ function App() {
                 className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                 value={createIssueModal.title}
                 onChange={(e) => setCreateIssueModal(prev => ({ ...prev, title: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') createIssue() }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('create-issue-body')?.focus() } }}
+                onFocus={() => setCreateIssueModal(prev => ({ ...prev, focusedField: 'title' }))}
                 disabled={createIssueModal.creating}
                 autoFocus
               />
               <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Created as a human issue in the project database</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">{createIssueModal.focusedField === 'title' ? `(optional, Enter to move here)` : '(optional)'}</span></label>
               <textarea
+                id="create-issue-body"
                 placeholder="Additional details, context, acceptance criteria..."
                 className="w-full px-3 py-2 border rounded-md min-h-[100px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
                 value={createIssueModal.body}
                 onChange={(e) => setCreateIssueModal(prev => ({ ...prev, body: e.target.value }))}
+                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') createIssue() }}
+                onFocus={() => setCreateIssueModal(prev => ({ ...prev, focusedField: 'body' }))}
                 disabled={createIssueModal.creating}
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Receiver <span className="text-neutral-400 font-normal">(optional)</span></label>
+              <select
+                className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
+                value={createIssueModal.receiver}
+                onChange={(e) => setCreateIssueModal(prev => ({ ...prev, receiver: e.target.value }))}
+                disabled={createIssueModal.creating}
+              >
+                <option value="">None (visible to all)</option>
+                {[...agents.managers, ...agents.workers].map(a => (
+                  <option key={a.name} value={a.name}>{a.name}{a.role ? ` (${a.role})` : ''}</option>
+                ))}
+              </select>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
               <Button onClick={createIssue} disabled={!createIssueModal.title.trim() || createIssueModal.creating}>
-                {createIssueModal.creating ? 'Creating...' : 'Create'}
+                {createIssueModal.creating ? 'Creating...' : createIssueModal.focusedField === 'body' ? `Create (${modKey}+Enter)` : 'Create'}
               </Button>
             </div>
           </div>
@@ -2762,37 +2837,81 @@ function App() {
               <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
             </div>
           ) : issueModal.issue ? (
-            <div className="space-y-4">
-              {/* Meta */}
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={issueModal.issue.status === 'open' ? 'success' : 'secondary'}>{issueModal.issue.status || 'open'}</Badge>
+            <div className="space-y-5">
+              {/* Header meta row */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <Badge variant={issueModal.issue.status === 'open' ? 'success' : 'secondary'} className="text-xs">{issueModal.issue.status || 'open'}</Badge>
+                  {issueModal.issue.labels && issueModal.issue.labels.split(',').map(l => l.trim()).filter(Boolean).map(label => (
+                    <Badge key={label} variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-700">{label}</Badge>
+                  ))}
+                </div>
+                {isWriteMode && (
+                  <Button
+                    variant={issueModal.issue.status === 'open' ? 'outline' : 'default'}
+                    size="sm"
+                    className={`text-xs shrink-0 ${issueModal.issue.status === 'open' ? 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950' : 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950'}`}
+                    onClick={async () => {
+                      const newStatus = issueModal.issue.status === 'open' ? 'closed' : 'open'
+                      try {
+                        await authFetch(projectApi(`/issues/${issueModal.issue.id}`), {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: newStatus })
+                        })
+                        setIssueModal(prev => ({ ...prev, issue: { ...prev.issue, status: newStatus } }))
+                        await fetchProjectData()
+                      } catch {}
+                    }}
+                  >{issueModal.issue.status === 'open' ? '✕ Close Issue' : '↻ Reopen Issue'}</Button>
+                )}
+              </div>
+
+              {/* Info grid */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                 {issueModal.issue.creator && (
-                  <span className="text-xs text-neutral-500 dark:text-neutral-400 flex items-center gap-1"><User className="w-3 h-3" />{issueModal.issue.creator}</span>
+                  <>
+                    <span className="text-neutral-400 dark:text-neutral-500">Created by</span>
+                    <span className="flex items-center gap-1 text-neutral-700 dark:text-neutral-200"><User className="w-3 h-3" />{issueModal.issue.creator}</span>
+                  </>
                 )}
                 {issueModal.issue.assignee && (
-                  <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><UserCheck className="w-3 h-3" />{issueModal.issue.assignee}</span>
+                  <>
+                    <span className="text-neutral-400 dark:text-neutral-500">Assigned to</span>
+                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400"><UserCheck className="w-3 h-3" />{issueModal.issue.assignee}</span>
+                  </>
                 )}
-                {issueModal.issue.labels && (
-                  <span className="text-xs text-purple-500 dark:text-purple-400">{issueModal.issue.labels}</span>
+                <span className="text-neutral-400 dark:text-neutral-500">Created</span>
+                <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(issueModal.issue.created_at).toLocaleString()}</span>
+                {issueModal.issue.closed_at && (
+                  <>
+                    <span className="text-neutral-400 dark:text-neutral-500">Closed</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(issueModal.issue.closed_at).toLocaleString()}</span>
+                  </>
                 )}
-                <span className="text-xs text-neutral-400 dark:text-neutral-500 flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(issueModal.issue.created_at).toLocaleString()}</span>
               </div>
 
               {/* Body */}
               {issueModal.issue.body && (
-                <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4 prose prose-sm prose-neutral dark:prose-invert max-w-none ">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{issueModal.issue.body}</ReactMarkdown>
-                </div>
+                <>
+                  <Separator />
+                  <div className="bg-neutral-50 dark:bg-neutral-900 rounded-lg p-4 prose prose-sm prose-neutral dark:prose-invert max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{issueModal.issue.body}</ReactMarkdown>
+                  </div>
+                </>
               )}
 
               {/* Comments */}
               {issueModal.comments.length > 0 && (
                 <>
                   <Separator />
-                  <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300">Comments ({issueModal.comments.length})</h3>
-                  <div className="space-y-3 ">
+                  <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-2">
+                    <span>Comments</span>
+                    <Badge variant="outline" className="text-[10px] font-normal">{issueModal.comments.length}</Badge>
+                  </h3>
+                  <div className="space-y-3">
                     {issueModal.comments.map((comment) => (
-                      <div key={comment.id} className="bg-neutral-50 dark:bg-neutral-900 rounded p-3">
+                      <div key={comment.id} className="bg-neutral-50 dark:bg-neutral-900 rounded-lg p-3 border border-neutral-100 dark:border-neutral-800">
                         <div className="flex items-center gap-2 mb-2">
                           <Avatar className="w-6 h-6">
                             <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
@@ -2800,7 +2919,7 @@ function App() {
                             </AvatarFallback>
                           </Avatar>
                           <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.author}</span>
-                          <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
+                          <span className="text-xs text-neutral-400 dark:text-neutral-500 ml-auto">{new Date(comment.created_at).toLocaleString()}</span>
                         </div>
                         <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
@@ -2814,13 +2933,14 @@ function App() {
                   </div>
                 </>
               )}
+
               {/* Add Comment */}
               {isWriteMode && <>
               <Separator />
-              <div className="flex gap-2">
+              <div className="space-y-2">
                 <textarea
-                  className="flex-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded p-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-neutral-800 dark:text-neutral-100"
-                  rows={2}
+                  className="w-full text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 text-neutral-800 dark:text-neutral-100 placeholder:text-neutral-400"
+                  rows={3}
                   placeholder="Add a comment..."
                   value={issueModal.newComment || ''}
                   onChange={(e) => setIssueModal(prev => ({ ...prev, newComment: e.target.value }))}
@@ -2831,14 +2951,15 @@ function App() {
                     }
                   }}
                 />
-                <Button
-                  size="sm"
-                  disabled={!issueModal.newComment?.trim() || issueModal.commenting}
-                  onClick={submitIssueComment}
-                  className="self-end"
-                >
-                  {issueModal.commenting ? '...' : 'Post'}
-                </Button>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={!issueModal.newComment?.trim() || issueModal.commenting}
+                    onClick={submitIssueComment}
+                  >
+                    {issueModal.commenting ? 'Posting...' : `Post (${modKey}+↵)`}
+                  </Button>
+                </div>
               </div>
               </>}
             </div>

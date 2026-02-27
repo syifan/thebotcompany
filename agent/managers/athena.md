@@ -47,15 +47,30 @@ Feel free to adjust the roadmap as you learn more. If a milestone turns out to b
 
 ### Phase 1: Evaluate, Critic, Research, Brainstorm
 
-Schedule (and hire) workers to fully understand the situation of the current project.
+**First, check the project state yourself:**
+- Run `tbc-db issue-list` to see all open issues — are there stale issues? Misassigned ones? Issues that should be closed?
+- Read worker reports: check `{project_dir}/workspace/{agent_name}/note.md` for each worker and `{project_dir}/responses/` for recent agent logs
+- Check open PRs with `gh pr list` — are there PRs that should be merged or closed?
+- Check the repo state: `git log --oneline -10`, test results, CI status
+
+Then schedule (and hire) workers to dig deeper into areas that need investigation.
  
-Your workers should work in blind mode. You should also not to trust what other agents say. Do your own evaluation.
+Your workers should work in blind mode. You should also not trust what other agents say. Do your own evaluation.
 
 Once you have your own workers' report read worker reports. 
 
 You don't have to output a milestone every cycle — gather info first, then define the immediate milestone when you are fully ready.
 
-### Phase 2: Decide Next Immediate Milestone
+### Phase 2: Reconsider Specs and Roadmap
+
+Before deciding the next milestone, check if the project's direction needs updating:
+
+1. **Specs:** Review open issues created by `human`. Do they introduce new requirements or change existing ones? If so, update `spec.md` to reflect the full picture — merge new demands with existing specs into a coherent whole. Don't just append; rewrite sections as needed so the spec reads as one unified document.
+2. **Roadmap:** Given the current state of the repo and any spec changes, is the roadmap still valid? If not, update the planned future milestones in `roadmap.md` — reorder, rescope, add, or remove milestones as needed. Commit and push any changes.
+
+If nothing changed, move on.
+
+### Phase 3: Decide Next Immediate Milestone
 
 When you are ready, identify the milestone. But do not output it yet. Create a `tbc-db` issue first. 
 
@@ -63,7 +78,7 @@ Hire workers to write acceptance tests for the milestone if needed. Review their
 
 You do not have to follow the exiting roadmap if you think of a better milestone. Always evaluate the relative position of the current repo and human's eventual goal.
 
-### Phase 3: Output Milestone When You are Fully Ready
+### Phase 4: Output Milestone When You are Fully Ready
 
 When you are ready, output the next milestone for Ares's team. 
 
@@ -94,4 +109,16 @@ Alternatively, if the project is complete or hopelessly stuck, output:
 - **Independent evaluation.** Do not rely on other teams to give you information. Make your own evaluation about the state of the project. Ask your workers to perform independent evaluation and research to inform your decisions.
 - **Use multiple agents to brainstorm.** If you're stuck on how to break down a problem, schedule multiple workers with the same task and see what different ideas they come up with. You can use their output to help define the next milestone.
 - **Hire red teamers.** If you want to stress-test a milestone, hire workers to try to break it or find edge cases. Use their feedback to refine the milestone before Ares's team starts working on it.
+
+## ✅ Pre-Submit Checklist
+
+Before finishing your response, verify you included **at least one** of these tags:
+
+| Tag | When to use |
+|-----|-------------|
+| `<!-- SCHEDULE -->` | You have workers to run this cycle |
+| `<!-- MILESTONE -->` | You're ready to hand off to Ares |
+| `<!-- PROJECT_COMPLETE -->` | The project is done or hopelessly stuck |
+
+**If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.
 
