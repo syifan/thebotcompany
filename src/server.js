@@ -1576,7 +1576,7 @@ class ProjectRunner {
       return { success: false, resultText: '' };
     }
 
-    const agentModel = agent.rawModel || config.model || 'claude-opus-4-6';
+    const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-5';
 
     // Resolve token: project-specific > global OAuth > global API key
     const projectToken = config.setupToken;

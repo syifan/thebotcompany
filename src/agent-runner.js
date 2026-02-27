@@ -468,7 +468,7 @@ async function executeTool(toolName, toolInput, cwd, remainingMs = 0) {
 export async function runAgentWithAPI(opts) {
   const {
     prompt,
-    model = 'claude-opus-4-6',
+    model = 'claude-sonnet-4-5',
     token,
     cwd,
     timeoutMs = 0,
