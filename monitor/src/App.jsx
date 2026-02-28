@@ -2406,38 +2406,45 @@ function App() {
                 </CardContent>
               </Card>
 
-              {/* Agent Reports - condensed cards */}
-              {comments.slice(0, 6).map((comment) => (
-                <Card key={comment.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setReportsPanelOpen(true)}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Avatar className="w-6 h-6">
-                        <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-[10px]">
-                          {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
-                      <span className="text-xs text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
-                    </div>
-                    <div className="text-xs text-neutral-600 dark:text-neutral-400 line-clamp-3 break-words">
-                      {stripAllMetaBlocks(comment.body).slice(0, 200)}
-                    </div>
-                    {parseScheduleBlock(comment.body) && (
-                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 truncate">
-                        📋 Has schedule
+              {/* Agent Reports */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2"><MessageSquare className="w-4 h-4" />Agent Reports</span>
+                    <span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">No reports</p>}
+                    {comments.slice(0, 8).map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="p-2.5 rounded-lg border border-neutral-100 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer transition-colors"
+                        onClick={() => setReportsPanelOpen(true)}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <Avatar className="w-5 h-5">
+                            <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-[9px]">
+                              {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
+                          <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
+                        </div>
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2 break-words leading-relaxed">
+                          {stripAllMetaBlocks(comment.body).slice(0, 150)}
+                        </div>
                       </div>
+                    ))}
+                    {comments.length > 8 && (
+                      <button onClick={() => setReportsPanelOpen(true)} className="w-full text-center text-xs text-blue-500 hover:text-blue-700 py-2">
+                        View all {comments.length} reports →
+                      </button>
                     )}
-                  </CardContent>
-                </Card>
-              ))}
-              {comments.length > 6 && (
-                <Card className="cursor-pointer hover:shadow-md transition-shadow flex items-center justify-center" onClick={() => setReportsPanelOpen(true)}>
-                  <CardContent className="p-4 text-center">
-                    <MessageSquare className="w-6 h-6 mx-auto mb-2 text-neutral-400" />
-                    <span className="text-sm text-neutral-500 dark:text-neutral-400">View all {comments.length} reports →</span>
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Issues */}
               <Card className="flex flex-col h-[500px]">
