@@ -2451,8 +2451,8 @@ function App() {
                     <span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="divide-y divide-neutral-100 dark:divide-neutral-800 max-h-96 overflow-y-auto">
+                <CardContent className="pt-0 overflow-hidden">
+                  <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto overflow-x-hidden h-full">
                     {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">No reports</p>}
                     {comments.slice(0, 8).map((comment) => (
                       <div
