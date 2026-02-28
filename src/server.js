@@ -14,6 +14,7 @@ import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
 import { runAgentWithAPI } from './agent-runner.js';
+import { getProvider } from './providers/index.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -46,7 +47,7 @@ const MODEL_TIERS = {
   anthropic: {
     high:  { model: 'claude-opus-4-6' },
     mid:   { model: 'claude-sonnet-4-5' },
-    low:   { model: 'claude-haiku-3-5' },
+    low:   { model: 'claude-haiku-4-5-20251001' },
   },
   openai: {
     high:  { model: 'gpt-5.3-codex', reasoningEffort: 'xhigh' },
@@ -2578,25 +2579,30 @@ const server = http.createServer(async (req, res) => {
         if (!report) { db.close(); res.writeHead(404); res.end('Not found'); return; }
         if (report.summary) { db.close(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ summary: report.summary })); return; }
 
-        // Determine API token and provider for summarization
-        // Prefer a non-OAuth API key since OAuth doesn't support direct API calls
-        let provider, token;
-        if (process.env.ANTHROPIC_API_KEY) { provider = 'anthropic'; token = process.env.ANTHROPIC_API_KEY; }
-        else if (process.env.OPENAI_API_KEY) { provider = 'openai'; token = process.env.OPENAI_API_KEY; }
-        else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) { provider = 'google'; token = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY; }
-        else {
-          // Try project token as last resort (may be OAuth — will fail gracefully)
-          const config = runner.loadConfig() || {};
-          token = config.setupToken || process.env.ANTHROPIC_AUTH_TOKEN || null;
-          provider = token ? (config.setupTokenProvider || detectProviderFromToken(token) || 'anthropic') : 'anthropic';
-        }
+        // Use same token/provider resolution as agent calls
+        const config = runner.loadConfig() || {};
+        const projectToken = config.setupToken;
+        let providerName;
+        if (projectToken && config.setupTokenProvider) providerName = config.setupTokenProvider;
+        else if (projectToken) providerName = detectProviderFromToken(projectToken);
+        else if (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) providerName = 'anthropic';
+        else if (process.env.OPENAI_API_KEY) providerName = 'openai';
+        else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) providerName = 'google';
+        else providerName = 'anthropic';
+
+        const resolved = resolveModelTier('low', providerName);
+        const model = resolved.model;
+
+        // Resolve token same as runAgent
+        let token;
+        if (projectToken) { token = projectToken; }
+        else if (model.startsWith('openai/') || model.startsWith('gpt-')) { token = process.env.OPENAI_API_KEY; }
+        else if (model.startsWith('gemini-') || model.startsWith('google/')) { token = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY; }
+        else { token = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY; }
 
         if (!token) { db.close(); res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No API token configured' })); return; }
 
-        // Use cheap models for summarization
-        const summarizeModels = { anthropic: 'claude-haiku-3-5', openai: 'gpt-4o-mini', google: 'gemini-2.0-flash' };
-        const model = summarizeModels[provider] || 'gpt-4o-mini';
-        log(`Summarize report ${reportId}: provider=${provider}, model=${model}`, runner.id);
+        log(`Summarize report ${reportId}: provider=${providerName}, model=${model}`, runner.id);
 
         // Strip meta blocks from body for cleaner summarization
         const cleanBody = report.body
@@ -2604,39 +2610,30 @@ const server = http.createServer(async (req, res) => {
           .replace(/<!--[\s\S]*?-->/g, '')
           .replace(/\n{3,}/g, '\n\n')
           .trim()
-          .slice(0, 4000); // limit input
+          .slice(0, 4000);
+
+        const prompt = `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}`;
+
+        // Use the provider system (handles OAuth, SDK auth, etc.)
+        const { provider: providerInstance } = getProvider(model);
+        const client = providerInstance.createClient({ token });
 
         let summary;
-        if (provider === 'anthropic') {
-          const isOAuth = token.startsWith('sk-ant-oat');
-          const headers = { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
-          if (isOAuth) headers['Authorization'] = `Bearer ${token}`;
-          else headers['x-api-key'] = token;
-          const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST', headers,
-            body: JSON.stringify({ model, max_tokens: 50, messages: [{ role: 'user', content: `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}` }] }),
+        if (providerName === 'anthropic') {
+          const response = await client.messages.create({
+            model, max_tokens: 60,
+            messages: [{ role: 'user', content: prompt }],
           });
-          const data = await apiRes.json();
-          if (data.error) log(`Summarize API error: ${JSON.stringify(data.error)}`, runner.id);
-          summary = data.content?.[0]?.text?.trim() || null;
-        } else if (provider === 'openai') {
-          const apiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ model, max_tokens: 50, messages: [{ role: 'user', content: `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}` }] }),
+          summary = response.content?.filter(b => b.type === 'text').map(b => b.text).join('').trim() || null;
+        } else if (providerName === 'openai') {
+          const response = await client.chat.completions.create({
+            model: model.replace(/^openai\//, ''), max_tokens: 60,
+            messages: [{ role: 'user', content: prompt }],
           });
-          const data = await apiRes.json();
-          summary = data.choices?.[0]?.message?.content?.trim() || null;
-        } else if (provider === 'google') {
-          const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${token}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}` }] }], generationConfig: { maxOutputTokens: 50 } }),
-          });
-          const data = await apiRes.json();
-          summary = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+          summary = response.choices?.[0]?.message?.content?.trim() || null;
         } else {
-          db.close(); res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: `Unsupported provider: ${provider}` })); return;
+          // Fallback: raw fetch for other providers
+          summary = null;
         }
 
         if (summary) {
