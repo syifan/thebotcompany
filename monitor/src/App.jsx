@@ -1364,59 +1364,54 @@ function App() {
             )}
             {/* Input for new key */}
             <div className="space-y-2">
-              <select
-                value={projectTokenProvider}
-                onChange={e => setProjectTokenProvider(e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-              >
-                <option value="">Select provider...</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="openai">OpenAI</option>
-                <option value="google">Google (Gemini)</option>
-                <option value="minimax">MiniMax</option>
-              </select>
-              <input
-                type="password"
-                placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key...'}
-                value={projectTokenInput}
-                onChange={e => setProjectTokenInput(e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-              />
-              {projectTokenInput && projectTokenProvider && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-green-600 dark:text-green-400">
-                    Provider: {projectTokenProvider.charAt(0).toUpperCase() + projectTokenProvider.slice(1)}
-                  </span>
-                  <button
-                    onClick={async () => {
-                      setProjectTokenSaving(true)
-                      try {
-                        const res = await authFetch(projectApi('/token'), {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ token: projectTokenInput, provider: projectTokenProvider })
-                        })
-                        if (res.ok) {
-                          const d = await res.json()
-                          setHasProjectToken(d.hasProjectToken)
-                          setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
-                          setProjectTokenInput('')
-                          setProjectTokenProvider('')
-                          setToast(`${projectTokenProvider.charAt(0).toUpperCase() + projectTokenProvider.slice(1)} key saved`)
-                        }
-                      } catch {}
-                      setProjectTokenSaving(false)
-                    }}
-                    disabled={projectTokenSaving}
-                    className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-                  >
-                    {projectTokenSaving ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-              )}
-              {projectTokenInput && !projectTokenProvider && (
-                <span className="text-xs text-amber-500">Please select a provider above</span>
-              )}
+              <div className="flex gap-2">
+                <select
+                  value={projectTokenProvider}
+                  onChange={e => setProjectTokenProvider(e.target.value)}
+                  className="w-40 shrink-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                >
+                  <option value="">Provider...</option>
+                  <option value="anthropic">Anthropic (API Key)</option>
+                  <option value="anthropic-oauth">Anthropic (OAuth)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="google">Google (Gemini)</option>
+                  <option value="minimax">MiniMax</option>
+                </select>
+                <input
+                  type="password"
+                  placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key...'}
+                  value={projectTokenInput}
+                  onChange={e => setProjectTokenInput(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                />
+                <button
+                  onClick={async () => {
+                    if (!projectTokenProvider || !projectTokenInput) return
+                    setProjectTokenSaving(true)
+                    try {
+                      const providerValue = projectTokenProvider === 'anthropic-oauth' ? 'anthropic' : projectTokenProvider
+                      const res = await authFetch(projectApi('/token'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: projectTokenInput, provider: providerValue })
+                      })
+                      if (res.ok) {
+                        const d = await res.json()
+                        setHasProjectToken(d.hasProjectToken)
+                        setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
+                        setProjectTokenInput('')
+                        setProjectTokenProvider('')
+                        setToast(`${providerValue.charAt(0).toUpperCase() + providerValue.slice(1)} key saved`)
+                      }
+                    } catch {}
+                    setProjectTokenSaving(false)
+                  }}
+                  disabled={projectTokenSaving || !projectTokenProvider || !projectTokenInput}
+                  className="px-3 py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 shrink-0"
+                >
+                  {projectTokenSaving ? '...' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
