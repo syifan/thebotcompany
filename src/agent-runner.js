@@ -532,10 +532,10 @@ export async function runAgentWithAPI(opts) {
           if (isRetryable && attempt < MAX_RETRIES) {
             // Parse retry-after from error message or use exponential backoff
             const retryMatch = err.message.match(/retry in ([\d.]+)s/i);
-            const delaySec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : Math.pow(2, attempt + 1) * 5;
-            const cappedDelay = Math.min(delaySec, 120);
-            log(`API ${status} error, retrying in ${cappedDelay}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
-            await new Promise(r => setTimeout(r, cappedDelay * 1000));
+            const hintDelay = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 0;
+            const delaySec = Math.max(60, hintDelay); // at least 60s between retries
+            log(`API ${status} error, retrying in ${delaySec}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            await new Promise(r => setTimeout(r, delaySec * 1000));
             if (aborted) {
               return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
             }
