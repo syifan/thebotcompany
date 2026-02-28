@@ -2008,7 +2008,7 @@ function App() {
             </div>
             
             {/* Right: Actions */}
-            <div className="flex items-center gap-2 pl-8 sm:pl-0">
+            <div className="flex items-center gap-2 pl-8 sm:pl-0 flex-wrap">
               <button
                 onClick={() => setNotifCenter(true)}
                 className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
