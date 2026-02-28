@@ -73,6 +73,7 @@ function App() {
   const [config, setConfig] = useState({ config: null, raw: '' })
   const [hasProjectToken, setHasProjectToken] = useState(false)
   const [projectTokenPreview, setProjectTokenPreview] = useState(null)
+  const [projectTokenProviderLabel, setProjectTokenProviderLabel] = useState(null)
   const [projectTokenInput, setProjectTokenInput] = useState('')
   const [projectTokenProvider, setProjectTokenProvider] = useState('')
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
@@ -400,6 +401,7 @@ function App() {
       setConfig(configData)
       setHasProjectToken(!!configData.hasProjectToken)
       setProjectTokenPreview(configData.projectTokenPreview || null)
+      setProjectTokenProviderLabel(configData.provider || null)
       if (!configDirtyRef.current && configData.config) {
         setConfigForm({
           cycleIntervalMs: configData.config.cycleIntervalMs ?? 1800000,
@@ -1331,7 +1333,7 @@ function App() {
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shrink-0">
-                    {detectProvider(projectTokenPreview) || 'API Key'}
+                    {projectTokenProviderLabel ? projectTokenProviderLabel.charAt(0).toUpperCase() + projectTokenProviderLabel.slice(1) : detectProvider(projectTokenPreview) || 'API Key'}
                   </span>
                   <code className="text-xs text-neutral-500 dark:text-neutral-400 truncate">{projectTokenPreview}</code>
                 </div>
@@ -1347,6 +1349,7 @@ function App() {
                       if (res.ok) {
                         setHasProjectToken(false)
                         setProjectTokenPreview(null)
+                        setProjectTokenProviderLabel(null)
                         setToast('Project token removed')
                       }
                     } catch {}
@@ -1399,6 +1402,7 @@ function App() {
                         const d = await res.json()
                         setHasProjectToken(d.hasProjectToken)
                         setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
+                        setProjectTokenProviderLabel(providerValue)
                         setProjectTokenInput('')
                         setProjectTokenProvider('')
                         setToast(`${providerValue.charAt(0).toUpperCase() + providerValue.slice(1)} key saved`)
