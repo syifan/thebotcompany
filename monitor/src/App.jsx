@@ -1481,7 +1481,7 @@ function App() {
 
   if (!selectedProject) {
     return (
-      <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300 ${panelOpen ? "panel-margin" : ""}`}>
+      <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[padding] duration-300 ${panelOpen ? "panel-push" : ""}`}>
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 sm:mb-8">
             <div className="flex items-start sm:items-center justify-between gap-2">
@@ -1988,7 +1988,7 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300 ${panelOpen ? "panel-margin" : ""}`}>
+    <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[padding] duration-300 ${panelOpen ? "panel-push" : ""}`}>
       <div className="max-w-7xl mx-auto">
         {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">

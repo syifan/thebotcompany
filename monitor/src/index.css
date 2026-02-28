@@ -2,10 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Panel margin: only on lg+ screens */
+/* Panel padding: only on md+ screens, pushes content away from panel */
 @media (min-width: 768px) {
-  .panel-margin {
-    margin-right: min(35vw, 560px);
+  .panel-push {
+    padding-right: min(35vw, 560px);
   }
 }
 
