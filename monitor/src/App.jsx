@@ -1992,7 +1992,7 @@ function App() {
   return (
     <div className="flex min-h-screen">
     <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6">
-      <div className="max-w-7xl mx-auto">
+      <div>
         {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">
           {/* Desktop: single row. Mobile: two rows */}
