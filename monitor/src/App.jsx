@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
-import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
+import { Panel, PanelHeader, PanelContent, usePanelOpen } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
 import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
@@ -54,6 +54,7 @@ function SleepCountdown({ sleepUntil }) {
 }
 
 function App() {
+  const panelOpen = usePanelOpen()
   // Multi-project state
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState(null)
@@ -1480,7 +1481,7 @@ function App() {
 
   if (!selectedProject) {
     return (
-      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6">
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300" style={panelOpen ? { marginRight: 'min(35vw, 560px)' } : undefined}>
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 sm:mb-8">
             <div className="flex items-start sm:items-center justify-between gap-2">
@@ -1987,7 +1988,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6">
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300" style={panelOpen ? { marginRight: 'min(35vw, 560px)' } : undefined}>
       <div className="max-w-7xl mx-auto">
         {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">
