@@ -5,7 +5,7 @@
 /* Panel padding: only on md+ screens, pushes content away from panel */
 @media (min-width: 768px) {
   .panel-push {
-    padding-right: min(35vw, 560px);
+    padding-right: max(380px, min(35vw, 560px));
   }
 }
 
