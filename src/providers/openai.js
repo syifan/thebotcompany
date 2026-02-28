@@ -73,7 +73,7 @@ export class OpenAIProvider extends BaseProvider {
       instructions: systemPrompt,
       input,
       tools,
-      store: false,
+      store: true,
     };
 
     if (reasoningEffort) {
