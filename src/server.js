@@ -1587,8 +1587,10 @@ class ProjectRunner {
           cycle INTEGER NOT NULL,
           agent TEXT NOT NULL,
           body TEXT NOT NULL,
+          summary TEXT,
           created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         )`);
+        try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
         db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(this.cycleCount, agent.name, reportBody, new Date().toISOString());
         db.close();
         log(`Saved report for ${agent.name}`, this.id);
@@ -2543,6 +2545,8 @@ const server = http.createServer(async (req, res) => {
           body TEXT NOT NULL,
           created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         )`);
+        // Migrate: add summary column if missing
+        try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
         const agent = url.searchParams.get('agent');
         const page = parseInt(url.searchParams.get('page')) || 1;
         const perPage = parseInt(url.searchParams.get('per_page')) || 20;
@@ -2559,6 +2563,92 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ reports: [], total: 0, page: 1, perPage: 20 }));
+      }
+      return;
+    }
+
+    // POST /api/projects/:id/reports/:reportId/summarize — lazy summarization
+    const summarizeMatch = req.method === 'POST' && subPath.match(/^reports\/(\d+)\/summarize$/);
+    if (summarizeMatch) {
+      const reportId = parseInt(summarizeMatch[1], 10);
+      try {
+        const db = runner.getDb();
+        try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
+        const report = db.prepare('SELECT * FROM reports WHERE id = ?').get(reportId);
+        if (!report) { db.close(); res.writeHead(404); res.end('Not found'); return; }
+        if (report.summary) { db.close(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ summary: report.summary })); return; }
+
+        // Determine API token and provider for summarization
+        // Prefer a non-OAuth API key since OAuth doesn't support direct API calls
+        let provider, token;
+        if (process.env.ANTHROPIC_API_KEY) { provider = 'anthropic'; token = process.env.ANTHROPIC_API_KEY; }
+        else if (process.env.OPENAI_API_KEY) { provider = 'openai'; token = process.env.OPENAI_API_KEY; }
+        else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) { provider = 'google'; token = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY; }
+        else {
+          // Try project token as last resort (may be OAuth — will fail gracefully)
+          const config = runner.loadConfig() || {};
+          token = config.setupToken || process.env.ANTHROPIC_AUTH_TOKEN || null;
+          provider = token ? (config.setupTokenProvider || detectProviderFromToken(token) || 'anthropic') : 'anthropic';
+        }
+
+        if (!token) { db.close(); res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No API token configured' })); return; }
+
+        // Use cheap models for summarization
+        const summarizeModels = { anthropic: 'claude-haiku-3-5', openai: 'gpt-4o-mini', google: 'gemini-2.0-flash' };
+        const model = summarizeModels[provider] || 'gpt-4o-mini';
+        log(`Summarize report ${reportId}: provider=${provider}, model=${model}`, runner.id);
+
+        // Strip meta blocks from body for cleaner summarization
+        const cleanBody = report.body
+          .replace(/^>\s*⏱.*$/m, '')
+          .replace(/<!--[\s\S]*?-->/g, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+          .slice(0, 4000); // limit input
+
+        let summary;
+        if (provider === 'anthropic') {
+          const isOAuth = token.startsWith('sk-ant-oat');
+          const headers = { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
+          if (isOAuth) headers['Authorization'] = `Bearer ${token}`;
+          else headers['x-api-key'] = token;
+          const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST', headers,
+            body: JSON.stringify({ model, max_tokens: 50, messages: [{ role: 'user', content: `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}` }] }),
+          });
+          const data = await apiRes.json();
+          if (data.error) log(`Summarize API error: ${JSON.stringify(data.error)}`, runner.id);
+          summary = data.content?.[0]?.text?.trim() || null;
+        } else if (provider === 'openai') {
+          const apiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ model, max_tokens: 50, messages: [{ role: 'user', content: `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}` }] }),
+          });
+          const data = await apiRes.json();
+          summary = data.choices?.[0]?.message?.content?.trim() || null;
+        } else if (provider === 'google') {
+          const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${token}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}` }] }], generationConfig: { maxOutputTokens: 50 } }),
+          });
+          const data = await apiRes.json();
+          summary = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+        } else {
+          db.close(); res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: `Unsupported provider: ${provider}` })); return;
+        }
+
+        if (summary) {
+          db.prepare('UPDATE reports SET summary = ? WHERE id = ?').run(summary, reportId);
+        }
+        db.close();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ summary }));
+      } catch (e) {
+        log(`Summarize error: ${e.message}`, runner.id);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
       }
       return;
     }

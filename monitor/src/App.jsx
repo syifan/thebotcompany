@@ -53,6 +53,43 @@ function SleepCountdown({ sleepUntil }) {
   return <span className="text-sm font-mono text-blue-600">{remaining}</span>
 }
 
+// Lazy report summary component — triggers summarization on first render if missing
+const summaryCache = new Map() // reportId -> summary string | 'loading' | 'error'
+
+function ReportSummary({ reportId, projectId, summary: initialSummary, className }) {
+  const [summary, setSummary] = useState(initialSummary || summaryCache.get(reportId) || null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (summary || loading || summaryCache.get(reportId) === 'loading') return
+    if (summaryCache.get(reportId) === 'error') return
+    const cached = summaryCache.get(reportId)
+    if (cached && cached !== 'loading' && cached !== 'error') { setSummary(cached); return }
+
+    summaryCache.set(reportId, 'loading')
+    setLoading(true)
+    fetch(`/api/projects/${projectId}/reports/${reportId}/summarize`, { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.summary) {
+          summaryCache.set(reportId, data.summary)
+          setSummary(data.summary)
+        } else {
+          summaryCache.set(reportId, 'error')
+        }
+      })
+      .catch(() => summaryCache.set(reportId, 'error'))
+      .finally(() => setLoading(false))
+  }, [reportId, projectId, summary, loading])
+
+  if (!summary && !loading) return null
+  return (
+    <span className={className || "text-xs text-neutral-500 dark:text-neutral-400 italic"}>
+      {loading ? '…' : summary}
+    </span>
+  )
+}
+
 function App() {
   // Multi-project state
   const [projects, setProjects] = useState([])
@@ -2440,8 +2477,8 @@ function App() {
                             <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
                           ); })()}
                         </div>
-                        <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2 break-words leading-relaxed pl-7">
-                          {stripAllMetaBlocks(comment.body).slice(0, 150)}
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1 break-words leading-relaxed pl-7">
+                          <ReportSummary reportId={comment.id} projectId={selectedProject} summary={comment.summary} />
                         </div>
                       </div>
                     ))}
@@ -3055,6 +3092,7 @@ function App() {
                       <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
                     ); })()}
                   </div>
+                  <ReportSummary reportId={comment.id} projectId={selectedProject} summary={comment.summary} className="text-xs text-neutral-500 dark:text-neutral-400 italic block mb-1" />
                   <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
                     {parseScheduleBlock(comment.body) && (
