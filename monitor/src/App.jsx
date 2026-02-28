@@ -2415,15 +2415,15 @@ function App() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                  <div className="divide-y divide-neutral-100 dark:divide-neutral-800 max-h-96 overflow-y-auto">
                     {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">No reports</p>}
                     {comments.slice(0, 8).map((comment) => (
                       <div
                         key={comment.id}
-                        className="p-2.5 rounded-lg border border-neutral-100 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700 cursor-pointer transition-colors"
+                        className="py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors -mx-1 px-1 rounded"
                         onClick={() => setReportsPanelOpen(true)}
                       >
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-0.5">
                           <Avatar className="w-5 h-5">
                             <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-[9px]">
                               {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
@@ -2432,7 +2432,7 @@ function App() {
                           <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
                           <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
                         </div>
-                        <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2 break-words leading-relaxed">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2 break-words leading-relaxed pl-7">
                           {stripAllMetaBlocks(comment.body).slice(0, 150)}
                         </div>
                       </div>
