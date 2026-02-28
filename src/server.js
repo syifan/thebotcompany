@@ -31,6 +31,56 @@ function maskToken(token) {
   return token.slice(0, 4) + '****' + token.slice(-4);
 }
 
+function detectTokenProvider(token) {
+  if (!token) return null;
+  if (token.startsWith('sk-ant-')) return 'anthropic';
+  if (token.startsWith('sk-proj-') || token.startsWith('sk-')) return 'openai';
+  if (token.startsWith('AIzaSy')) return 'google';
+  // MiniMax keys cannot be reliably auto-detected by prefix.
+  // Use explicit provider field in project token settings.
+  return 'unknown';
+}
+
+// Model tier system — maps abstract tiers to provider-specific models
+const MODEL_TIERS = {
+  anthropic: {
+    high:  { model: 'claude-opus-4-6' },
+    mid:   { model: 'claude-sonnet-4-5' },
+    low:   { model: 'claude-haiku-3-5' },
+  },
+  openai: {
+    high:  { model: 'gpt-5.3-codex', reasoningEffort: 'xhigh' },
+    mid:   { model: 'gpt-5.3-codex', reasoningEffort: 'high' },
+    low:   { model: 'gpt-5.3-codex', reasoningEffort: 'medium' },
+  },
+  google: {
+    high:  { model: 'gemini-3.1-pro-preview', reasoningEffort: 'high' },
+    mid:   { model: 'gemini-3.1-pro-preview', reasoningEffort: 'medium' },
+    low:   { model: 'gemini-3-flash-preview' },
+  },
+  minimax: {
+    high:  { model: 'minimax/MiniMax-M2.5' },
+    mid:   { model: 'minimax/MiniMax-M2.5' },
+    low:   { model: 'minimax/MiniMax-M2.5' },
+  },
+};
+
+function resolveModelTier(tierOrModel, provider) {
+  const tier = (tierOrModel || '').toLowerCase().trim();
+  const tiers = MODEL_TIERS[provider];
+  if (tiers && tiers[tier]) {
+    return tiers[tier];
+  }
+  // Not a tier — treat as explicit model name
+  return { model: tierOrModel };
+}
+
+function detectProviderFromToken(token) {
+  if (!token) return 'anthropic';
+  const p = detectTokenProvider(token);
+  return (p === 'unknown' || !p) ? 'anthropic' : p;
+}
+
 // Strip meta directive blocks from agent responses (keep human-readable text only)
 function stripMetaBlocks(text) {
   if (!text) return text;
@@ -266,7 +316,7 @@ class ProjectRunner {
   }
 
   loadConfig() {
-    const defaults = { cycleIntervalMs: 0, agentTimeoutMs: 3600000, model: 'claude-sonnet-4-5', budgetPer24h: 0 };
+    const defaults = { cycleIntervalMs: 0, agentTimeoutMs: 3600000, model: 'mid', budgetPer24h: 0 };
     try {
       const raw = fs.readFileSync(this.configPath, 'utf-8');
       const config = yaml.load(raw) || {};
@@ -1454,9 +1504,10 @@ class ProjectRunner {
   }
 
   // Post-processing shared by both CLI and API agent runs
-  _postProcessAgentRun(agent, config, { resultText, cost, durationMs, killedByTimeout, exitCode, rawOutput }) {
+  _postProcessAgentRun(agent, config, { resultText, cost, durationMs, killedByTimeout, exitCode, rawOutput, apiSuccess }) {
     const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
-    const success = !killedByTimeout && (exitCode === 0 || exitCode === undefined);
+    // For API runner: use apiSuccess if provided; for CLI runner: use exitCode
+    const success = !killedByTimeout && (apiSuccess !== undefined ? apiSuccess : (exitCode === 0 || exitCode === undefined));
 
     // Build token info string for logging
     let tokenInfo = '';
@@ -1583,15 +1634,52 @@ class ProjectRunner {
       return { success: false, resultText: '' };
     }
 
-    const agentModel = agent.rawModel || config.model || 'claude-sonnet-4-5';
+    const agentTierOrModel = agent.rawModel || config.model || 'mid';
 
-    // Resolve token: project-specific > global OAuth > global API key
+    // Resolve token: project-specific > global tokens by provider
     const projectToken = config.setupToken;
-    const globalToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
-    const resolvedToken = projectToken || globalToken || null;
+    // Detect provider: explicit config > token auto-detect > env fallback
+    let provider;
+    if (projectToken && config.setupTokenProvider) {
+      provider = config.setupTokenProvider;
+    } else if (projectToken) {
+      provider = detectProviderFromToken(projectToken);
+    } else if (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) {
+      provider = 'anthropic';
+    } else if (process.env.OPENAI_API_KEY) {
+      provider = 'openai';
+    } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+      provider = 'google';
+    } else if (process.env.MINIMAX_API_KEY) {
+      provider = 'minimax';
+    } else {
+      provider = 'anthropic';
+    }
+
+    // Resolve tier to concrete model + optional reasoning effort
+    const resolved = resolveModelTier(agentTierOrModel, provider);
+    const agentModel = resolved.model;
+    const reasoningEffort = resolved.reasoningEffort || null;
+
+    const isOpenAIModel = agentModel.startsWith('openai/') || agentModel.startsWith('gpt-') || agentModel.startsWith('o3') || agentModel.startsWith('o4-');
+    const isGoogleModel = agentModel.startsWith('google/') || agentModel.startsWith('gemini-');
+    const isMiniMaxModel = agentModel.startsWith('minimax/') || agentModel.startsWith('MiniMax-');
+
+    let resolvedToken;
+    if (projectToken) {
+      resolvedToken = projectToken;
+    } else if (isOpenAIModel) {
+      resolvedToken = process.env.OPENAI_API_KEY || null;
+    } else if (isGoogleModel) {
+      resolvedToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+    } else if (isMiniMaxModel) {
+      resolvedToken = process.env.MINIMAX_API_KEY || null;
+    } else {
+      resolvedToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
+    }
 
     if (!resolvedToken) {
-      log(`No setup token configured for ${agent.name} — using default auth.`, this.id);
+      log(`No API token configured for ${agent.name} (model: ${agentModel})`, this.id);
     }
 
     const agentEnv = {
@@ -1601,12 +1689,14 @@ class ProjectRunner {
       TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
     };
 
-    log(`Using API runner for ${agent.name} (model: ${agentModel})`, this.id);
+    const tierLabel = resolved.reasoningEffort ? `${agentModel} (${resolved.reasoningEffort})` : agentModel;
+    log(`Using API runner for ${agent.name} (model: ${tierLabel})`, this.id);
 
     const result = await runAgentWithAPI({
       prompt: skillContent,
       model: agentModel,
       token: resolvedToken,
+      reasoningEffort,
       cwd: this.path,
       timeoutMs: config.agentTimeoutMs || 0,
       env: agentEnv,
@@ -1619,6 +1709,7 @@ class ProjectRunner {
       cost: result.cost,
       durationMs: result.durationMs,
       killedByTimeout: result.timedOut || false,
+      apiSuccess: result.success,
       rawOutput: JSON.stringify({ usage: result.usage, resultText: result.resultText }),
     });
   }
@@ -1824,13 +1915,20 @@ const server = http.createServer(async (req, res) => {
   // --- Settings (global token) ---
 
   if (req.method === 'GET' && url.pathname === '/api/settings') {
-    const token = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
-    const tokenType = token ? (token.startsWith('sk-ant-oat') ? 'oauth' : 'api_key') : null;
+    const anthropicToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
+    const openaiToken = process.env.OPENAI_API_KEY || null;
+    const googleToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+    // Backward compat: hasGlobalToken and globalTokenPreview refer to Anthropic
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      hasGlobalToken: !!token,
-      globalTokenPreview: token ? maskToken(token) : null,
-      tokenType,
+      hasGlobalToken: !!anthropicToken,
+      globalTokenPreview: anthropicToken ? maskToken(anthropicToken) : null,
+      tokenType: anthropicToken ? (anthropicToken.startsWith('sk-ant-oat') ? 'oauth' : 'api_key') : null,
+      providers: {
+        anthropic: { hasToken: !!anthropicToken, preview: anthropicToken ? maskToken(anthropicToken) : null },
+        openai: { hasToken: !!openaiToken, preview: openaiToken ? maskToken(openaiToken) : null },
+        google: { hasToken: !!googleToken, preview: googleToken ? maskToken(googleToken) : null },
+      },
     }));
     return;
   }
@@ -1841,31 +1939,62 @@ const server = http.createServer(async (req, res) => {
     req.on('data', d => body += d);
     req.on('end', () => {
       try {
-        const { token } = JSON.parse(body);
+        const { token, provider: forceProvider } = JSON.parse(body);
         const envPath = path.join(TBC_HOME, '.env');
         let envContent = '';
         try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch {}
 
-        // Clear both token types from .env
-        envContent = envContent
-          .replace(/^ANTHROPIC_AUTH_TOKEN=.*\n?/m, '')
-          .replace(/^ANTHROPIC_API_KEY=.*\n?/m, '');
-        delete process.env.ANTHROPIC_AUTH_TOKEN;
-        delete process.env.ANTHROPIC_API_KEY;
+        // Detect provider from token or explicit provider field
+        const provider = forceProvider || detectTokenProvider(token) || 'anthropic';
+
+        // Provider → env var mapping
+        const providerEnvVars = {
+          anthropic: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'],
+          openai: ['OPENAI_API_KEY'],
+          google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+        };
+
+        // Clear existing env vars for this provider
+        const varsToClean = providerEnvVars[provider] || [];
+        for (const v of varsToClean) {
+          envContent = envContent.replace(new RegExp(`^${v}=.*\\n?`, 'm'), '');
+          delete process.env[v];
+        }
 
         if (token) {
-          // Auto-detect token type and store in the right env var
-          const isOAuth = token.startsWith('sk-ant-oat');
-          const envVar = isOAuth ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY';
+          // Pick the right env var
+          let envVar;
+          if (provider === 'anthropic') {
+            envVar = token.startsWith('sk-ant-oat') ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY';
+          } else if (provider === 'openai') {
+            envVar = 'OPENAI_API_KEY';
+          } else if (provider === 'google') {
+            envVar = 'GEMINI_API_KEY';
+          } else {
+            envVar = 'ANTHROPIC_API_KEY';
+          }
           envContent = envContent.trimEnd() + `\n${envVar}=${token}\n`;
           process.env[envVar] = token;
         }
 
         fs.writeFileSync(envPath, envContent);
-        const activeToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
-        const tokenType = activeToken ? (activeToken.startsWith('sk-ant-oat') ? 'oauth' : 'api_key') : null;
+
+        // Return updated status for all providers
+        const anthropicToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
+        const openaiToken = process.env.OPENAI_API_KEY || null;
+        const googleToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, hasGlobalToken: !!activeToken, tokenType }));
+        res.end(JSON.stringify({
+          success: true,
+          provider,
+          hasGlobalToken: !!anthropicToken,
+          tokenType: anthropicToken ? (anthropicToken.startsWith('sk-ant-oat') ? 'oauth' : 'api_key') : null,
+          providers: {
+            anthropic: { hasToken: !!anthropicToken, preview: anthropicToken ? maskToken(anthropicToken) : null },
+            openai: { hasToken: !!openaiToken, preview: openaiToken ? maskToken(openaiToken) : null },
+            google: { hasToken: !!googleToken, preview: googleToken ? maskToken(googleToken) : null },
+          },
+        }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
@@ -2325,7 +2454,8 @@ const server = http.createServer(async (req, res) => {
       const safeConfig = { ...config };
       delete safeConfig.setupToken;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken, projectTokenPreview: projectToken ? maskToken(projectToken) : null }));
+      const detectedProvider = config.setupTokenProvider || (projectToken ? detectProviderFromToken(projectToken) : null) || (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'anthropic');
+      res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken, projectTokenPreview: projectToken ? maskToken(projectToken) : null, provider: detectedProvider, tiers: MODEL_TIERS[detectedProvider] || {} }));
       return;
     }
 
@@ -2336,12 +2466,17 @@ const server = http.createServer(async (req, res) => {
       req.on('data', c => body += c);
       req.on('end', () => {
         try {
-          const { token } = JSON.parse(body);
+          const { token, provider: explicitProvider } = JSON.parse(body);
           const config = runner.loadConfig();
           if (token) {
             config.setupToken = token;
           } else {
             delete config.setupToken;
+          }
+          if (explicitProvider) {
+            config.setupTokenProvider = explicitProvider;
+          } else if (!token) {
+            delete config.setupTokenProvider;
           }
           // Write back preserving existing config structure
           const configPath = runner.configPath;
@@ -2350,6 +2485,11 @@ const server = http.createServer(async (req, res) => {
             existing.setupToken = token;
           } else {
             delete existing.setupToken;
+          }
+          if (explicitProvider) {
+            existing.setupTokenProvider = explicitProvider;
+          } else if (!token) {
+            delete existing.setupTokenProvider;
           }
           fs.writeFileSync(configPath, yaml.dump(existing));
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2631,7 +2771,7 @@ const server = http.createServer(async (req, res) => {
       runner.archived = archive;
       // Update projects.yaml
       try {
-        const configPath = path.join(ROOT, 'projects.yaml');
+        const configPath = path.join(TBC_HOME, 'projects.yaml');
         const raw = fs.readFileSync(configPath, 'utf-8');
         const config = yaml.load(raw) || {};
         if (config.projects && config.projects[projectId]) {

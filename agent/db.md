@@ -2,7 +2,7 @@
 
 All task tracking and communication happens through `tbc-db`, a CLI tool backed by SQLite. **Do NOT use GitHub Issues for task tracking or communication.** GitHub is only for PRs and code.
 
-The `TBC_DB` environment variable is set automatically. All commands are available as `tbc-db <command>`.
+All commands are available as `tbc-db <command>` — no setup needed, just run them.
 
 ## Quick Reference
 

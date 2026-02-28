@@ -90,13 +90,19 @@ Example frontmatter:
 ---
 reports_to: ares
 role: CI Pipeline Engineer
-model: claude-sonnet-4-5
+model: mid
 ---
 ```
 
-### Model selection:
+### Model tiers:
 
-Default workers to **claude-sonnet-4-5**. Downgrade to Sonnet 4.6 only for simple/repetitive tasks.
+Use abstract tiers instead of specific model names. The system resolves tiers to the correct model for the project's provider (Anthropic, OpenAI, etc.):
+
+- **high** — Deep reasoning, complex architecture, hard debugging
+- **mid** — Default for all agents. Good balance of capability and cost
+- **low** — Simple/repetitive tasks, boilerplate, formatting
+
+Default workers to **mid**. Use `high` or `low` only with a clear reason.
 
 When writing skill files, search online for best practices relevant to the worker's role only if needed. Write clear, specific skill files.
 

@@ -1,5 +1,5 @@
 ---
-model: claude-sonnet-4-5
+model: mid
 role: Execution Manager
 ---
 # Ares
@@ -52,9 +52,9 @@ This triggers Apollo's verification team.
 
 Before finishing your response, verify you included **at least one** of these tags:
 
-| Tag | When to use |
-|-----|-------------|
-| `<!-- SCHEDULE -->` | You have workers to assign this cycle |
+| Tag                       | When to use                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| `<!-- SCHEDULE -->`       | You have workers to assign this cycle                      |
 | `<!-- CLAIM_COMPLETE -->` | The milestone is fully achieved and ready for verification |
 
 **If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.

@@ -1,5 +1,5 @@
 ---
-model: claude-sonnet-4-5
+model: mid
 role: Verification Manager
 ---
 # Apollo
@@ -69,10 +69,10 @@ This sends the project back to Ares's team with your feedback. Be specific — v
 
 Before finishing your response, verify you included **at least one** of these tags:
 
-| Tag | When to use |
-|-----|-------------|
-| `<!-- SCHEDULE -->` | You need workers to do more checking |
+| Tag                    | When to use                                         |
+| ---------------------- | --------------------------------------------------- |
+| `<!-- SCHEDULE -->`    | You need workers to do more checking                |
 | `<!-- VERIFY_PASS -->` | Milestone is verified — all PRs merged/closed first |
-| `<!-- VERIFY_FAIL -->` | Milestone failed — include specific feedback |
+| `<!-- VERIFY_FAIL -->` | Milestone failed — include specific feedback        |
 
 **If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.

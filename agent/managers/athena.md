@@ -1,5 +1,5 @@
 ---
-model: claude-sonnet-4-5
+model: mid
 role: Strategy
 ---
 # Athena
@@ -114,10 +114,10 @@ Alternatively, if the project is complete or hopelessly stuck, output:
 
 Before finishing your response, verify you included **at least one** of these tags:
 
-| Tag | When to use |
-|-----|-------------|
-| `<!-- SCHEDULE -->` | You have workers to run this cycle |
-| `<!-- MILESTONE -->` | You're ready to hand off to Ares |
+| Tag                         | When to use                             |
+| --------------------------- | --------------------------------------- |
+| `<!-- SCHEDULE -->`         | You have workers to run this cycle      |
+| `<!-- MILESTONE -->`        | You're ready to hand off to Ares        |
 | `<!-- PROJECT_COMPLETE -->` | The project is done or hopelessly stuck |
 
 **If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.

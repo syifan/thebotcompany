@@ -1,52 +1,23 @@
 /**
- * Agent Runner - Direct Anthropic API integration for TheBotCompany
+ * Agent Runner - Multi-provider agent loop for TheBotCompany
  *
- * Replaces Claude CLI spawning with direct API calls using @anthropic-ai/sdk.
- * Implements an autonomous agent loop with tool execution.
+ * Supports Anthropic (Claude) and OpenAI models via a provider abstraction.
+ * Tools: Bash, Read, Write, Edit, Glob, Grep — all implemented locally.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-
-// ---------------------------------------------------------------------------
-// Pricing (per million tokens)
-// ---------------------------------------------------------------------------
-const MODEL_PRICING = {
-  opus:   { input: 15,   output: 75,  cacheRead: 1.5  },
-  sonnet: { input: 3,    output: 15,  cacheRead: 0.3  },
-  haiku:  { input: 1, output: 5,   cacheRead: 0.1 },
-};
-
-function getPricing(model) {
-  if (model.includes('sonnet')) return MODEL_PRICING.sonnet;
-  if (model.includes('haiku'))  return MODEL_PRICING.haiku;
-  return MODEL_PRICING.opus;
-}
-
-function calculateCost(usage, model) {
-  const pricing = getPricing(model);
-  const inputTokens = usage.input_tokens || 0;
-  const outputTokens = usage.output_tokens || 0;
-  const cacheRead = usage.cache_read_input_tokens || 0;
-  return (
-    (inputTokens * pricing.input) +
-    (outputTokens * pricing.output) +
-    (cacheRead * pricing.cacheRead)
-  ) / 1_000_000;
-}
+import { getProvider } from './providers/index.js';
 
 // ---------------------------------------------------------------------------
 // Glob implementation using Node.js fs
 // ---------------------------------------------------------------------------
 function globFiles(pattern, cwd) {
-  // Use simple recursive glob implementation
   const results = [];
   const base = cwd || process.cwd();
 
   function matchGlob(filePath, pat) {
-    // Convert glob pattern to regex
     const regexStr = pat
       .replace(/\*\*/g, '<<<GLOBSTAR>>>')
       .replace(/\*/g, '[^/]*')
@@ -64,7 +35,6 @@ function globFiles(pattern, cwd) {
       return;
     }
     for (const entry of entries) {
-      // Skip hidden dirs and node_modules
       if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
       const fullPath = path.join(dir, entry.name);
       const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
@@ -101,11 +71,11 @@ function grepFiles(pattern, searchPath, options = {}) {
             line: i + 1,
             content: lines[i],
           });
-          regex.lastIndex = 0; // Reset regex state
+          regex.lastIndex = 0;
         }
       }
     } catch {
-      // Skip files that can't be read (binary, permissions, etc.)
+      // Skip files that can't be read
     }
   }
 
@@ -125,7 +95,6 @@ function grepFiles(pattern, searchPath, options = {}) {
         if (entry.isDirectory()) {
           walk(fullPath);
         } else {
-          // Apply glob filter if provided
           if (options.glob) {
             const ext = path.extname(entry.name);
             const globPattern = options.glob.replace('*.', '');
@@ -141,9 +110,8 @@ function grepFiles(pattern, searchPath, options = {}) {
   return results;
 }
 
-
 // ---------------------------------------------------------------------------
-// Tool Definitions (Claude Code canonical casing)
+// Tool Definitions (canonical format — Anthropic input_schema style)
 // ---------------------------------------------------------------------------
 function getToolDefinitions() {
   return [
@@ -153,14 +121,8 @@ function getToolDefinitions() {
       input_schema: {
         type: 'object',
         properties: {
-          command: {
-            type: 'string',
-            description: 'The bash command to execute',
-          },
-          timeout: {
-            type: 'number',
-            description: 'Optional timeout in milliseconds (default 120000, max 600000)',
-          },
+          command: { type: 'string', description: 'The bash command to execute' },
+          timeout: { type: 'number', description: 'Optional timeout in milliseconds (default 120000, max 600000)' },
         },
         required: ['command'],
       },
@@ -171,18 +133,9 @@ function getToolDefinitions() {
       input_schema: {
         type: 'object',
         properties: {
-          file_path: {
-            type: 'string',
-            description: 'Absolute path to the file to read',
-          },
-          offset: {
-            type: 'number',
-            description: 'Line number to start reading from (1-indexed)',
-          },
-          limit: {
-            type: 'number',
-            description: 'Number of lines to read',
-          },
+          file_path: { type: 'string', description: 'Absolute path to the file to read' },
+          offset: { type: 'number', description: 'Line number to start reading from (1-indexed)' },
+          limit: { type: 'number', description: 'Number of lines to read' },
         },
         required: ['file_path'],
       },
@@ -193,14 +146,8 @@ function getToolDefinitions() {
       input_schema: {
         type: 'object',
         properties: {
-          file_path: {
-            type: 'string',
-            description: 'Absolute path to the file to write',
-          },
-          content: {
-            type: 'string',
-            description: 'The content to write to the file',
-          },
+          file_path: { type: 'string', description: 'Absolute path to the file to write' },
+          content: { type: 'string', description: 'The content to write to the file' },
         },
         required: ['file_path', 'content'],
       },
@@ -211,22 +158,10 @@ function getToolDefinitions() {
       input_schema: {
         type: 'object',
         properties: {
-          file_path: {
-            type: 'string',
-            description: 'Absolute path to the file to edit',
-          },
-          old_string: {
-            type: 'string',
-            description: 'The exact string to find and replace',
-          },
-          new_string: {
-            type: 'string',
-            description: 'The replacement string',
-          },
-          replace_all: {
-            type: 'boolean',
-            description: 'Replace all occurrences (default false)',
-          },
+          file_path: { type: 'string', description: 'Absolute path to the file to edit' },
+          old_string: { type: 'string', description: 'The exact string to find and replace' },
+          new_string: { type: 'string', description: 'The replacement string' },
+          replace_all: { type: 'boolean', description: 'Replace all occurrences (default false)' },
         },
         required: ['file_path', 'old_string', 'new_string'],
       },
@@ -237,14 +172,8 @@ function getToolDefinitions() {
       input_schema: {
         type: 'object',
         properties: {
-          pattern: {
-            type: 'string',
-            description: 'Glob pattern to match (e.g. "**/*.js")',
-          },
-          path: {
-            type: 'string',
-            description: 'Directory to search in (default: working directory)',
-          },
+          pattern: { type: 'string', description: 'Glob pattern to match (e.g. "**/*.js")' },
+          path: { type: 'string', description: 'Directory to search in (default: working directory)' },
         },
         required: ['pattern'],
       },
@@ -255,22 +184,10 @@ function getToolDefinitions() {
       input_schema: {
         type: 'object',
         properties: {
-          pattern: {
-            type: 'string',
-            description: 'Regex pattern to search for',
-          },
-          path: {
-            type: 'string',
-            description: 'File or directory to search in',
-          },
-          glob: {
-            type: 'string',
-            description: 'Glob pattern to filter files (e.g. "*.js")',
-          },
-          case_insensitive: {
-            type: 'boolean',
-            description: 'Case insensitive search',
-          },
+          pattern: { type: 'string', description: 'Regex pattern to search for' },
+          path: { type: 'string', description: 'File or directory to search in' },
+          glob: { type: 'string', description: 'Glob pattern to filter files (e.g. "*.js")' },
+          case_insensitive: { type: 'boolean', description: 'Case insensitive search' },
         },
         required: ['pattern'],
       },
@@ -278,26 +195,24 @@ function getToolDefinitions() {
   ];
 }
 
-
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
-function executeBash(input, cwd, remainingMs = 0, runtime = null) {
+function executeBash(input, cwd, remainingMs = 0, bashEnv = null) {
   let timeout = Math.min(input.timeout || 120000, 600000);
-  // If agent has remaining time, cap the tool timeout to it
   if (remainingMs > 0) {
     timeout = Math.min(timeout, remainingMs);
   }
+  // Strip any TBC_DB overrides — agents must use the injected env value
+  let command = input.command;
+  command = command.replace(/\bexport\s+TBC_DB=[^\s;|&]*/g, 'true');
+  command = command.replace(/\bTBC_DB=[^\s;|&]*/g, 'true');
   return new Promise((resolve) => {
-    if (runtime?.signal?.aborted) {
-      resolve('Command cancelled: agent was terminated.');
-      return;
-    }
-
-    const proc = spawn('bash', ['-c', input.command], {
+    const proc = spawn('bash', ['-c', command], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout,
+      ...(bashEnv ? { env: bashEnv } : {}),
     });
     runtime?.registerProcess?.(proc);
 
@@ -330,7 +245,6 @@ function executeBash(input, cwd, remainingMs = 0, runtime = null) {
       if (code !== 0 && code !== null) {
         result += `\nExit code: ${code}`;
       }
-      // Truncate very long output
       if (result.length > 100000) {
         result = result.slice(0, 50000) + '\n\n... (output truncated) ...\n\n' + result.slice(-50000);
       }
@@ -350,20 +264,14 @@ function executeBash(input, cwd, remainingMs = 0, runtime = null) {
 
 function executeRead(input, cwd) {
   let filePath = input.file_path;
-  if (!path.isAbsolute(filePath)) {
-    filePath = path.join(cwd, filePath);
-  }
-
+  if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const offset = (input.offset || 1) - 1; // Convert to 0-indexed
+    const offset = (input.offset || 1) - 1;
     const limit = input.limit || lines.length;
     const slice = lines.slice(offset, offset + limit);
-
-    return slice
-      .map((line, i) => `${String(offset + i + 1).padStart(6)}\t${line}`)
-      .join('\n');
+    return slice.map((line, i) => `${String(offset + i + 1).padStart(6)}\t${line}`).join('\n');
   } catch (err) {
     return `Error reading file: ${err.message}`;
   }
@@ -371,15 +279,10 @@ function executeRead(input, cwd) {
 
 function executeWrite(input, cwd) {
   let filePath = input.file_path;
-  if (!path.isAbsolute(filePath)) {
-    filePath = path.join(cwd, filePath);
-  }
-
+  if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
   try {
     const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(filePath, input.content);
     return `Successfully wrote to ${filePath}`;
   } catch (err) {
@@ -389,31 +292,24 @@ function executeWrite(input, cwd) {
 
 function executeEdit(input, cwd) {
   let filePath = input.file_path;
-  if (!path.isAbsolute(filePath)) {
-    filePath = path.join(cwd, filePath);
-  }
-
+  if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const oldStr = input.old_string;
     const newStr = input.new_string;
-
     if (!content.includes(oldStr)) {
       return `Error: old_string not found in file. Make sure it matches exactly.`;
     }
-
     let updated;
     if (input.replace_all) {
       updated = content.replaceAll(oldStr, newStr);
     } else {
       const idx = content.indexOf(oldStr);
-      // Check uniqueness
       if (content.indexOf(oldStr, idx + 1) !== -1) {
         return `Error: old_string is not unique in the file. Provide more context or use replace_all.`;
       }
       updated = content.slice(0, idx) + newStr + content.slice(idx + oldStr.length);
     }
-
     fs.writeFileSync(filePath, updated);
     return `Successfully edited ${filePath}`;
   } catch (err) {
@@ -424,7 +320,6 @@ function executeEdit(input, cwd) {
 function executeGlob(input, cwd) {
   const searchPath = input.path || cwd;
   const resolvedPath = path.isAbsolute(searchPath) ? searchPath : path.join(cwd, searchPath);
-
   try {
     const files = globFiles(input.pattern, resolvedPath);
     if (files.length === 0) return 'No files matched the pattern.';
@@ -437,14 +332,12 @@ function executeGlob(input, cwd) {
 function executeGrep(input, cwd) {
   const searchPath = input.path || cwd;
   const resolvedPath = path.isAbsolute(searchPath) ? searchPath : path.join(cwd, searchPath);
-
   try {
     const matches = grepFiles(input.pattern, resolvedPath, {
       caseInsensitive: input.case_insensitive,
       glob: input.glob,
     });
     if (matches.length === 0) return 'No matches found.';
-    // Limit output
     const limited = matches.slice(0, 200);
     const output = limited.map(m => `${m.file}:${m.line}: ${m.content}`).join('\n');
     if (matches.length > 200) {
@@ -456,9 +349,9 @@ function executeGrep(input, cwd) {
   }
 }
 
-async function executeTool(toolName, toolInput, cwd, remainingMs = 0, runtime = null) {
+async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null) {
   switch (toolName) {
-    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, runtime);
+    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv);
     case 'Read':  return executeRead(toolInput, cwd);
     case 'Write': return executeWrite(toolInput, cwd);
     case 'Edit':  return executeEdit(toolInput, cwd);
@@ -468,18 +361,17 @@ async function executeTool(toolName, toolInput, cwd, remainingMs = 0, runtime = 
   }
 }
 
-
 // ---------------------------------------------------------------------------
-// Main Agent Runner
+// Main Agent Runner (provider-agnostic)
 // ---------------------------------------------------------------------------
 
 /**
- * Run an agent using the Anthropic API directly.
+ * Run an agent using the configured provider's API.
  *
  * @param {Object} opts
  * @param {string} opts.prompt       - The full system prompt / skill content
- * @param {string} opts.model        - Model name (e.g. 'claude-opus-4-6')
- * @param {string} opts.token        - Auth token (OAuth or API key)
+ * @param {string} opts.model        - Model name (e.g. 'claude-opus-4-6', 'openai/gpt-4.1')
+ * @param {string} opts.token        - Auth token (OAuth, API key, or OpenAI key)
  * @param {string} opts.cwd          - Working directory for tool execution
  * @param {number} opts.timeoutMs    - Max runtime in milliseconds (0 = unlimited)
  * @param {Object} opts.env          - Environment variables for Bash commands
@@ -490,8 +382,9 @@ async function executeTool(toolName, toolInput, cwd, remainingMs = 0, runtime = 
 export async function runAgentWithAPI(opts) {
   const {
     prompt,
-    model = 'claude-sonnet-4-5',
+    model: rawModel = 'claude-opus-4-6',
     token,
+    reasoningEffort,
     cwd,
     timeoutMs = 0,
     env = {},
@@ -500,43 +393,23 @@ export async function runAgentWithAPI(opts) {
   } = opts;
 
   const startTime = Date.now();
+  const { provider, model } = getProvider(rawModel);
   const isOAuth = token && token.startsWith('sk-ant-oat');
 
-  // Configure client
-  const clientOpts = {};
-  if (isOAuth) {
-    clientOpts.apiKey = null;
-    clientOpts.authToken = token;
-    clientOpts.defaultHeaders = {
-      'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14',
-      'user-agent': 'claude-cli/2.1.2 (external, cli)',
-      'x-app': 'cli',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    };
-  } else if (token) {
-    clientOpts.apiKey = token;
-  }
+  // Create provider client
+  const client = provider.createClient({ token, isOAuth });
 
-  const client = new Anthropic(clientOpts);
-
-  // Build system prompt
-  let systemPrompt = prompt;
-  if (isOAuth) {
-    systemPrompt = 'You are Claude Code, Anthropic\'s official CLI for Claude.\n\n' + systemPrompt;
-  }
+  // Format tools for this provider
+  const canonicalTools = getToolDefinitions();
+  const tools = provider.formatTools(canonicalTools);
 
   // Set up env for Bash commands
   const bashEnv = { ...process.env, ...env };
 
-  // Patch cwd into bash environment
-  const originalCwd = process.cwd();
+  // Accumulated usage (normalized)
+  const totalUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
 
-  const tools = getToolDefinitions();
-
-  // Accumulate usage across all API calls
-  const totalUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
-
-  // Hard timeout / external cancel: abort API calls and kill in-flight tool subprocesses
+  // Hard timeout via AbortController
   let aborted = false;
   let abortReason = null;
   const abortController = new AbortController();
@@ -580,210 +453,204 @@ export async function runAgentWithAPI(opts) {
     }, timeoutMs);
   }
 
-  // Initial messages
+  // Helper to build result object
+  function makeResult(success, resultText, extra = {}) {
+    return {
+      success,
+      resultText,
+      usage: totalUsage,
+      cost: provider.calculateCost(totalUsage, model),
+      durationMs: Date.now() - startTime,
+      ...extra,
+    };
+  }
+
+  // Initial messages (provider-agnostic format, converted in buildRequest)
   const messages = [
     {
       role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: 'Begin your work now. Follow the instructions in the system prompt.',
-        },
-      ],
+      content: [{ type: 'text', text: 'Begin your work now. Follow the instructions in the system prompt.' }],
     },
   ];
 
   const MAX_ITERATIONS = 200;
   let lastResultText = '';
+  let lastInputTokens = 0;
 
   try {
-  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-    // Check timeout (hard timer or elapsed check)
-    if (aborted || (timeoutMs > 0 && (Date.now() - startTime) >= timeoutMs)) {
-      log(`Agent timeout after ${iteration} iterations`);
-      return {
-        success: false,
-        resultText: lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'),
-        usage: totalUsage,
-        cost: calculateCost(totalUsage, model),
-        durationMs: Date.now() - startTime,
-        timedOut: abortReason === 'timeout',
-      };
-    }
+    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      if (aborted || (timeoutMs > 0 && (Date.now() - startTime) >= timeoutMs)) {
+        log(`Agent timeout after ${iteration} iterations`);
+        return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+      }
 
-    // Strip cache_control from all messages, then re-add to the last 2 user messages
-    // (Anthropic allows max 4 cache_control blocks: 1 system + up to 3 in messages)
-    for (const msg of messages) {
-      if (Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          delete block.cache_control;
+      // Auto-compact conversation history when approaching context limit
+      // Use lastInputTokens (from most recent API call) not cumulative total
+      const TOKEN_LIMIT = 160000; // leave headroom below 200K
+      if (lastInputTokens > TOKEN_LIMIT && messages.length > 5) {
+        let keep = Math.max(3, Math.floor(messages.length * 0.4));
+        // Ensure we don't split assistant/tool-result pairs — the kept portion
+        // must start with an assistant message (not a tool result)
+        let splitIdx = messages.length - keep;
+        while (splitIdx < messages.length - 1) {
+          const msg = messages[splitIdx];
+          const hasToolResults = Array.isArray(msg.content) &&
+            msg.content[0]?.type && (msg.content[0].type === 'tool_result' || msg.content[0].type === 'function_call_output');
+          if (msg.role === 'user' && hasToolResults) {
+            splitIdx--; // include the preceding assistant message
+          } else {
+            break;
+          }
+        }
+        if (splitIdx < 1) splitIdx = 1;
+        const toCompact = messages.splice(1, splitIdx - 1);
+        log(`Compacting ${toCompact.length} messages (last request: ${lastInputTokens} tokens)...`);
+
+        // Build a text representation of old messages for summarization
+        const compactText = toCompact.map((m, i) => {
+          const role = m.role || 'unknown';
+          let text = '';
+          if (Array.isArray(m.content)) {
+            text = m.content.map(c => {
+              if (c.type === 'text') return c.text;
+              if (c.type === 'tool_use') return `[Tool call: ${c.name}(${JSON.stringify(c.input).slice(0, 200)})]`;
+              if (c.type === 'tool_result') return `[Tool result: ${(typeof c.content === 'string' ? c.content : JSON.stringify(c.content)).slice(0, 500)}]`;
+              return `[${c.type}]`;
+            }).join('\n');
+          } else if (typeof m.content === 'string') {
+            text = m.content;
+          }
+          return `[${role}] ${text.slice(0, 1000)}`;
+        }).join('\n---\n');
+
+        // Use a cheap/fast model for summarization
+        try {
+          const summaryParams = provider.buildRequest({
+            model: model.includes('opus') ? model.replace('opus', 'sonnet') : model,
+            systemPrompt: 'Summarize this agent conversation history concisely. Focus on: what tasks were attempted, what succeeded/failed, what files were modified, current state, and any important decisions. Be specific about file paths, issue numbers, and error messages. Output only the summary.',
+            messages: [{
+              role: 'user',
+              content: [{ type: 'text', text: compactText.slice(0, 80000) }],
+            }],
+            tools: [],
+            isOAuth,
+          });
+
+          const summaryResponse = await provider.callAPI(client, summaryParams, abortController.signal);
+          totalUsage.inputTokens += summaryResponse.usage.inputTokens;
+          totalUsage.outputTokens += summaryResponse.usage.outputTokens;
+          totalUsage.cacheReadTokens += summaryResponse.usage.cacheReadTokens || 0;
+
+          const summary = summaryResponse.content || '(compaction failed — earlier context was dropped)';
+          log(`Compacted ${toCompact.length} messages into summary (${summary.length} chars)`);
+
+          messages.splice(1, 0, {
+            role: 'user',
+            content: [{ type: 'text', text: `[System: The conversation history was auto-compacted to stay within context limits. Here is a summary of the earlier work:]\n\n${summary}` }],
+          });
+        } catch (compactErr) {
+          log(`Compaction summarization failed: ${compactErr.message}, falling back to trim`);
+          messages.splice(1, 0, {
+            role: 'user',
+            content: [{ type: 'text', text: `[System: ${toCompact.length} earlier messages were trimmed to stay within context limits. Continue your work based on what you can see.]` }],
+          });
         }
       }
-    }
-    // Add cache_control to the last 2 user messages' last content block
-    const userMessages = messages.filter(m => m.role === 'user');
-    for (const um of userMessages.slice(-2)) {
-      if (Array.isArray(um.content) && um.content.length > 0) {
-        um.content[um.content.length - 1].cache_control = { type: 'ephemeral' };
-      }
-    }
 
-    // Build API request
-    const requestParams = {
-      model,
-      max_tokens: 16384,
-      system: [
-        {
-          type: 'text',
-          text: systemPrompt,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      tools,
-      messages,
-    };
+      // Provider-specific cache hints
+      provider.applyCacheHints(messages);
 
-    // Enable extended thinking for opus models
-    if (model.includes('opus')) {
-      requestParams.temperature = 1; // Required for extended thinking
-      requestParams.thinking = {
-        type: 'enabled',
-        budget_tokens: 10000,
-      };
-    }
+      // Build request
+      const params = provider.buildRequest({
+        model, systemPrompt: prompt, messages, tools, isOAuth, reasoningEffort,
+      });
 
-    let response;
-    try {
-      response = await client.messages.create(requestParams, { signal: abortController.signal });
-    } catch (err) {
-      if (aborted || err.name === 'AbortError' || abortController.signal.aborted) {
-        log(`Agent ${abortReason === 'timeout' ? 'timeout' : 'termination'} during API call`);
-        return {
-          success: false,
-          resultText: lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'),
-          usage: totalUsage,
-          cost: calculateCost(totalUsage, model),
-          durationMs: Date.now() - startTime,
-          timedOut: abortReason === 'timeout',
-        };
-      }
-      log(`API error: ${err.message}`);
-      return {
-        success: false,
-        resultText: `API error: ${err.message}`,
-        usage: totalUsage,
-        cost: calculateCost(totalUsage, model),
-        durationMs: Date.now() - startTime,
-      };
-    }
-
-    // Check abort after API call returns
-    if (aborted) {
-      if (response.usage) {
-        totalUsage.input_tokens += response.usage.input_tokens || 0;
-        totalUsage.output_tokens += response.usage.output_tokens || 0;
-        totalUsage.cache_read_input_tokens += response.usage.cache_read_input_tokens || 0;
-      }
-      log(`Agent timeout after API call (iteration ${iteration})`);
-      return {
-        success: false,
-        resultText: lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'),
-        usage: totalUsage,
-        cost: calculateCost(totalUsage, model),
-        durationMs: Date.now() - startTime,
-        timedOut: abortReason === 'timeout',
-      };
-    }
-
-    // Accumulate usage
-    if (response.usage) {
-      totalUsage.input_tokens += response.usage.input_tokens || 0;
-      totalUsage.output_tokens += response.usage.output_tokens || 0;
-      totalUsage.cache_read_input_tokens += response.usage.cache_read_input_tokens || 0;
-    }
-
-    // Extract text from response
-    const textBlocks = response.content.filter(b => b.type === 'text');
-    if (textBlocks.length > 0) {
-      lastResultText = textBlocks.map(b => b.text).join('\n');
-    }
-
-    // Check stop reason
-    if (response.stop_reason === 'end_turn' || response.stop_reason === 'max_tokens') {
-      return {
-        success: true,
-        resultText: lastResultText,
-        usage: totalUsage,
-        cost: calculateCost(totalUsage, model),
-        durationMs: Date.now() - startTime,
-      };
-    }
-
-    // Handle tool use
-    if (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-
-      // Add assistant's response to messages
-      messages.push({ role: 'assistant', content: response.content });
-
-      // Execute tools and collect results
-      const toolResults = [];
-      for (const toolUse of toolUseBlocks) {
-        // Check abort before each tool
-        if (aborted) break;
-
-        log(`Tool: ${toolUse.name}${toolUse.name === 'Bash' ? ` → ${(toolUse.input.command || '').slice(0, 100)}` : ''}`);
-
-        // Set up environment for Bash tool
-        let toolCwd = cwd;
-        const toolEnv = { ...bashEnv };
-
-        // Calculate remaining time for tool timeout
-        const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
-        const result = await executeTool(toolUse.name, toolUse.input, toolCwd, remainingMs, runtime);
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
-          content: result,
-        });
+      // Call API with retry for transient errors (429, 503)
+      let response;
+      const MAX_RETRIES = 3;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          response = await provider.callAPI(client, params, abortController.signal);
+          break; // success
+        } catch (err) {
+          if (aborted || err.name === 'AbortError' || abortController.signal.aborted) {
+            log(`Agent timeout during API call (aborted)`);
+            return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+          }
+          const status = err.status || err.code || 0;
+          const isRetryable = status === 429 || status === 503 || /rate.limit|overloaded|unavailable|quota/i.test(err.message);
+          if (isRetryable && attempt < MAX_RETRIES) {
+            // Parse retry-after from error message or use exponential backoff
+            const retryMatch = err.message.match(/retry in ([\d.]+)s/i);
+            const hintDelay = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 0;
+            const delaySec = Math.max(60, hintDelay); // at least 60s between retries
+            log(`API ${status} error, retrying in ${delaySec}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+            await new Promise(r => setTimeout(r, delaySec * 1000));
+            if (aborted) {
+              return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+            }
+            continue;
+          }
+          log(`API error: ${err.message}`);
+          return makeResult(false, `API error: ${err.message}`);
+        }
       }
 
-      // If aborted during tool execution, return
       if (aborted) {
-        log(`Agent timeout during tool execution (iteration ${iteration})`);
-        return {
-          success: false,
-          resultText: lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'),
-          usage: totalUsage,
-          cost: calculateCost(totalUsage, model),
-          durationMs: Date.now() - startTime,
-          timedOut: abortReason === 'timeout',
-        };
+        totalUsage.inputTokens += response.usage.inputTokens;
+        totalUsage.outputTokens += response.usage.outputTokens;
+        totalUsage.cacheReadTokens += response.usage.cacheReadTokens || 0;
+        log(`Agent timeout after API call (iteration ${iteration})`);
+        return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
       }
 
-      // Add tool results to messages (cache_control is managed at the top of the loop)
-      messages.push({ role: 'user', content: toolResults });
-    } else {
-      // Unknown stop reason, bail
-      log(`Unexpected stop reason: ${response.stop_reason}`);
-      return {
-        success: true,
-        resultText: lastResultText,
-        usage: totalUsage,
-        cost: calculateCost(totalUsage, model),
-        durationMs: Date.now() - startTime,
-      };
-    }
-  }
+      // Accumulate usage
+      lastInputTokens = response.usage.inputTokens;
+      totalUsage.inputTokens += response.usage.inputTokens;
+      totalUsage.outputTokens += response.usage.outputTokens;
+      totalUsage.cacheReadTokens += response.usage.cacheReadTokens || 0;
 
-  // Exceeded max iterations
-  return {
-    success: false,
-    resultText: lastResultText || 'Agent exceeded maximum iterations',
-    usage: totalUsage,
-    cost: calculateCost(totalUsage, model),
-    durationMs: Date.now() - startTime,
-  };
+      // Extract text
+      if (response.content) {
+        lastResultText = response.content;
+      }
+
+      // Check stop reason
+      if (response.stopReason === 'end_turn' || response.stopReason === 'max_tokens') {
+        return makeResult(true, lastResultText);
+      }
+
+      // Handle tool use
+      if (response.stopReason === 'tool_use') {
+        // Add assistant message to history
+        messages.push(provider.buildAssistantMessage(response));
+
+        // Execute tools
+        const toolResults = [];
+        for (const tc of response.toolCalls) {
+          if (aborted) break;
+
+          log(`Tool: ${tc.name}${tc.name === 'Bash' ? ` → ${(tc.input.command || '').slice(0, 300)}` : ''}`);
+
+          const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
+          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv);
+          toolResults.push({ toolCallId: tc.id, content: result });
+        }
+
+        if (aborted) {
+          log(`Agent timeout during tool execution (iteration ${iteration})`);
+          return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+        }
+
+        // Add tool results to messages
+        messages.push(provider.buildToolResultMessage(toolResults));
+      } else {
+        log(`Unexpected stop reason: ${response.stopReason}`);
+        return makeResult(true, lastResultText);
+      }
+    }
+
+    return makeResult(false, lastResultText || 'Agent exceeded maximum iterations');
   } finally {
     if (hardTimeoutTimer) clearTimeout(hardTimeoutTimer);
     if (externalAbortHandler) {
