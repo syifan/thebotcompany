@@ -2359,11 +2359,8 @@ function App() {
                   )}
                 </CardContent>
               </Card>
-            </div>
 
-            {/* Row 2: Managers, Workers, PRs */}
-            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
-              {/* Managers */}
+              {/* Managers, Workers, PRs */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
                 <CardContent>
@@ -2407,11 +2404,8 @@ function App() {
                   </div>
                 </CardContent>
               </Card>
-            </div>
 
-            {/* Row 3: Agent Reports + Issues */}
-            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
-              {/* Agent Reports */}
+              {/* Agent Reports + Issues */}
               <Card className="flex flex-col h-[500px]">
                 <CardHeader className="pb-3 shrink-0">
                   <CardTitle className="flex items-center justify-between">
