@@ -2478,7 +2478,7 @@ function App() {
                           ); })()}
                         </div>
                         <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1 break-words leading-relaxed pl-7">
-                          <ReportSummary reportId={comment.id} projectId={selectedProject} summary={comment.summary} />
+                          <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} />
                         </div>
                       </div>
                     ))}
@@ -3092,8 +3092,8 @@ function App() {
                       <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
                     ); })()}
                   </div>
-                  <ReportSummary reportId={comment.id} projectId={selectedProject} summary={comment.summary} className="text-xs text-neutral-500 dark:text-neutral-400 italic block mb-1" />
-                  <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all">
+                  <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} className="text-xs text-neutral-500 dark:text-neutral-400 italic block mb-1" />
+                  <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all overflow-x-auto [&_table]:text-xs [&_pre]:overflow-x-auto">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
                     {parseScheduleBlock(comment.body) && (
                       <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
