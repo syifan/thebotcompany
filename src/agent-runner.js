@@ -198,7 +198,7 @@ function getToolDefinitions() {
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
-function executeBash(input, cwd, remainingMs = 0, bashEnv = null) {
+function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null) {
   let timeout = Math.min(input.timeout || 120000, 600000);
   if (remainingMs > 0) {
     timeout = Math.min(timeout, remainingMs);
@@ -208,17 +208,30 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null) {
   command = command.replace(/\bexport\s+TBC_DB=[^\s;|&]*/g, 'true');
   command = command.replace(/\bTBC_DB=[^\s;|&]*/g, 'true');
   return new Promise((resolve) => {
+    if (runtime?.signal?.aborted) {
+      resolve('Command cancelled: agent was terminated.');
+      return;
+    }
+
     const proc = spawn('bash', ['-c', command], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout,
       ...(bashEnv ? { env: bashEnv } : {}),
     });
+    runtime?.registerProcess?.(proc);
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
     proc.stdout.on('data', (d) => { stdout += d; });
     proc.stderr.on('data', (d) => { stderr += d; });
+
+    const onAbort = () => {
+      try { proc.kill('SIGTERM'); } catch {}
+      setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} }, 5000);
+    };
+    runtime?.signal?.addEventListener('abort', onAbort, { once: true });
 
     const timer = setTimeout(() => {
       proc.kill('SIGTERM');
@@ -226,7 +239,11 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null) {
     }, timeout);
 
     proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      runtime?.signal?.removeEventListener('abort', onAbort);
+      runtime?.unregisterProcess?.(proc);
       let result = '';
       if (stdout) result += stdout;
       if (stderr) result += (result ? '\n' : '') + stderr;
@@ -240,7 +257,11 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null) {
     });
 
     proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      runtime?.signal?.removeEventListener('abort', onAbort);
+      runtime?.unregisterProcess?.(proc);
       resolve(`Error executing command: ${err.message}`);
     });
   });
@@ -333,9 +354,9 @@ function executeGrep(input, cwd) {
   }
 }
 
-async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null) {
+async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null) {
   switch (toolName) {
-    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv);
+    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime);
     case 'Read':  return executeRead(toolInput, cwd);
     case 'Write': return executeWrite(toolInput, cwd);
     case 'Edit':  return executeEdit(toolInput, cwd);
@@ -359,6 +380,7 @@ async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = 
  * @param {string} opts.cwd          - Working directory for tool execution
  * @param {number} opts.timeoutMs    - Max runtime in milliseconds (0 = unlimited)
  * @param {Object} opts.env          - Environment variables for Bash commands
+ * @param {AbortSignal} opts.abortSignal - Optional external abort signal
  * @param {function} opts.log        - Logging function (optional)
  * @returns {Promise<Object>}        - { success, resultText, usage, cost, durationMs }
  */
@@ -371,6 +393,7 @@ export async function runAgentWithAPI(opts) {
     cwd,
     timeoutMs = 0,
     env = {},
+    abortSignal = null,
     log = () => {},
   } = opts;
 
@@ -391,14 +414,46 @@ export async function runAgentWithAPI(opts) {
   // Accumulated usage (normalized)
   const totalUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
 
-  // Hard timeout via AbortController
+  // Hard timeout / external cancel: abort API calls and kill in-flight tool subprocesses
   let aborted = false;
+  let abortReason = null;
   const abortController = new AbortController();
+  const runningProcesses = new Set();
+  const runtime = {
+    signal: abortController.signal,
+    registerProcess: (proc) => runningProcesses.add(proc),
+    unregisterProcess: (proc) => runningProcesses.delete(proc),
+  };
+
+  const killRunningProcesses = (signal) => {
+    for (const proc of runningProcesses) {
+      try { proc.kill(signal); } catch {}
+    }
+  };
+
+  const abortRun = (reason) => {
+    if (aborted) return;
+    aborted = true;
+    abortReason = reason;
+    abortController.abort();
+    killRunningProcesses('SIGTERM');
+    setTimeout(() => killRunningProcesses('SIGKILL'), 5000);
+  };
+
+  let externalAbortHandler = null;
+  if (abortSignal) {
+    if (abortSignal.aborted) {
+      abortRun('killed');
+    } else {
+      externalAbortHandler = () => abortRun('killed');
+      abortSignal.addEventListener('abort', externalAbortHandler, { once: true });
+    }
+  }
+
   let hardTimeoutTimer;
   if (timeoutMs > 0) {
     hardTimeoutTimer = setTimeout(() => {
-      aborted = true;
-      abortController.abort();
+      abortRun('timeout');
       log(`⏰ Hard timeout after ${Math.floor((Date.now() - startTime) / 60000)}m`);
     }, timeoutMs);
   }
@@ -431,7 +486,7 @@ export async function runAgentWithAPI(opts) {
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       if (aborted || (timeoutMs > 0 && (Date.now() - startTime) >= timeoutMs)) {
         log(`Agent timeout after ${iteration} iterations`);
-        return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+        return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
       }
 
       // Auto-compact conversation history when approaching context limit
@@ -524,8 +579,8 @@ export async function runAgentWithAPI(opts) {
           break; // success
         } catch (err) {
           if (aborted || err.name === 'AbortError' || abortController.signal.aborted) {
-            log(`Agent timeout during API call (aborted)`);
-            return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+            log(`Agent ${abortReason === 'timeout' ? 'timeout' : 'termination'} during API call`);
+            return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
           }
           const status = err.status || err.code || 0;
           const isRetryable = status === 429 || status === 503 || /rate.limit|overloaded|unavailable|quota/i.test(err.message);
@@ -537,7 +592,7 @@ export async function runAgentWithAPI(opts) {
             log(`API ${status} error, retrying in ${delaySec}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
             await new Promise(r => setTimeout(r, delaySec * 1000));
             if (aborted) {
-              return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+              return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
             }
             continue;
           }
@@ -551,7 +606,7 @@ export async function runAgentWithAPI(opts) {
         totalUsage.outputTokens += response.usage.outputTokens;
         totalUsage.cacheReadTokens += response.usage.cacheReadTokens || 0;
         log(`Agent timeout after API call (iteration ${iteration})`);
-        return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+        return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
       }
 
       // Accumulate usage
@@ -583,13 +638,13 @@ export async function runAgentWithAPI(opts) {
           log(`Tool: ${tc.name}${tc.name === 'Bash' ? ` → ${(tc.input.command || '').slice(0, 300)}` : ''}`);
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
-          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv);
+          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime);
           toolResults.push({ toolCallId: tc.id, content: result });
         }
 
         if (aborted) {
           log(`Agent timeout during tool execution (iteration ${iteration})`);
-          return makeResult(false, lastResultText || 'Agent timed out', { timedOut: true });
+          return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
         }
 
         // Add tool results to messages
@@ -603,5 +658,8 @@ export async function runAgentWithAPI(opts) {
     return makeResult(false, lastResultText || 'Agent exceeded maximum iterations');
   } finally {
     if (hardTimeoutTimer) clearTimeout(hardTimeoutTimer);
+    if (externalAbortHandler) {
+      abortSignal.removeEventListener('abort', externalAbortHandler);
+    }
   }
 }

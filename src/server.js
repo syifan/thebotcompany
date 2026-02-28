@@ -1603,6 +1603,10 @@ class ProjectRunner {
   async runAgent(agent, config, mode = null, task = null, visibility = null) {
     this.currentAgent = agent.name;
     this.currentAgentStartTime = Date.now();
+    const runAbortController = new AbortController();
+    this.currentAgentProcess = {
+      kill: () => runAbortController.abort(),
+    };
     const modeStr = mode ? ` [${mode}]` : '';
     log(`Running: ${agent.name}${agent.isManager ? ' (manager)' : ''}${modeStr}`, this.id);
 
@@ -1617,6 +1621,9 @@ class ProjectRunner {
         ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
         : path.join(this.agentDir, 'workers', `${agent.name}.md`);
       log(`Skill file not found: ${skillPath}, skipping ${agent.name}`, this.id);
+      this.currentAgent = null;
+      this.currentAgentProcess = null;
+      this.currentAgentStartTime = null;
       return { success: false, resultText: '' };
     }
 
@@ -1679,6 +1686,7 @@ class ProjectRunner {
       cwd: this.path,
       timeoutMs: config.agentTimeoutMs || 0,
       env: agentEnv,
+      abortSignal: runAbortController.signal,
       log: (msg) => log(`  [${agent.name}] ${msg}`, this.id),
     });
 
