@@ -108,7 +108,11 @@ export class MiniMaxProvider extends BaseProvider {
     const choice = response.choices?.[0];
     const message = choice?.message || {};
 
-    let textContent = message.content || '';
+    // MiniMax models include <think> tags in content for reasoning.
+    // Preserve full content (with <think>) for message history,
+    // but extract clean text for display.
+    const rawContent = message.content || '';
+    let textContent = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     const toolCalls = [];
     const rawFunctionCalls = [];
 
@@ -151,15 +155,18 @@ export class MiniMaxProvider extends BaseProvider {
         cacheReadTokens: 0,
       },
       _textContent: textContent,
+      _rawContent: rawContent,  // preserve <think> tags for history
       _functionCalls: rawFunctionCalls,
     };
   }
 
   buildAssistantMessage(normalized) {
+    // Use raw content (with <think> tags) for message history
+    // to maintain reasoning chain continuity as required by MiniMax
     return {
       role: 'assistant',
       content: normalized.content,
-      _textContent: normalized._textContent,
+      _textContent: normalized._rawContent || normalized._textContent,
       _functionCalls: normalized._functionCalls,
     };
   }
