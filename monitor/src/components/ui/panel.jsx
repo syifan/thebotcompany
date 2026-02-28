@@ -103,7 +103,7 @@ function Panel({ open, onClose, children, id: propId }) {
           onClick={onClose}
         />
         <div
-          className={`fixed inset-0 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
+          className={`fixed inset-0 bg-white dark:bg-neutral-800 flex flex-col overflow-hidden transition-transform duration-300 ease-in-out ${
             shouldAnimate ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
@@ -115,7 +115,7 @@ function Panel({ open, onClose, children, id: propId }) {
 
   // Desktop: portal into PanelSlot
   const desktopContent = _slotRef ? createPortal(
-    <div className="hidden md:block w-full h-full">
+    <div className="hidden md:flex md:flex-col w-full h-full overflow-hidden">
       {children}
     </div>,
     _slotRef
@@ -146,7 +146,7 @@ function PanelSlot() {
   return (
     <div
       ref={ref}
-      className={`hidden md:block shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden h-screen sticky top-0 transition-[width] duration-300 ease-in-out ${
+      className={`hidden md:block shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden h-screen sticky top-0 transition-[width] duration-300 ease-in-out ${
         renderedId && shouldAnimate ? 'w-[min(35vw,560px)] min-w-[380px]' : 'w-0'
       }`}
     />
@@ -169,7 +169,7 @@ function PanelHeader({ children, onClose }) {
 }
 
 function PanelContent({ children }) {
-  return <div className="p-4">{children}</div>
+  return <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden">{children}</div>
 }
 
 function PanelProvider({ children }) {
