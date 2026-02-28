@@ -1497,9 +1497,10 @@ class ProjectRunner {
   }
 
   // Post-processing shared by both CLI and API agent runs
-  _postProcessAgentRun(agent, config, { resultText, cost, durationMs, killedByTimeout, exitCode, rawOutput }) {
+  _postProcessAgentRun(agent, config, { resultText, cost, durationMs, killedByTimeout, exitCode, rawOutput, apiSuccess }) {
     const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
-    const success = !killedByTimeout && (exitCode === 0 || exitCode === undefined);
+    // For API runner: use apiSuccess if provided; for CLI runner: use exitCode
+    const success = !killedByTimeout && (apiSuccess !== undefined ? apiSuccess : (exitCode === 0 || exitCode === undefined));
 
     // Build token info string for logging
     let tokenInfo = '';
@@ -1686,6 +1687,7 @@ class ProjectRunner {
       cost: result.cost,
       durationMs: result.durationMs,
       killedByTimeout: result.timedOut || false,
+      apiSuccess: result.success,
       rawOutput: JSON.stringify({ usage: result.usage, resultText: result.resultText }),
     });
   }
