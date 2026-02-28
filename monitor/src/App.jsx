@@ -54,7 +54,6 @@ function SleepCountdown({ sleepUntil }) {
 }
 
 function App() {
-  const panelOpen = usePanelOpen()
   // Multi-project state
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState(null)
@@ -2136,7 +2135,7 @@ function App() {
             )}
 
             {/* Row 1: State, Cost & Budget, Config */}
-            <div className={`grid grid-cols-1 ${panelOpen ? "xl:grid-cols-3" : "lg:grid-cols-3"} gap-4`}>
+            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
               {/* State */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" />Orchestrator State</CardTitle></CardHeader>
@@ -2363,7 +2362,7 @@ function App() {
             </div>
 
             {/* Row 2: Managers, Workers, PRs */}
-            <div className={`grid grid-cols-1 ${panelOpen ? "xl:grid-cols-3" : "lg:grid-cols-3"} gap-4 mt-4`}>
+            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
               {/* Managers */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
@@ -2411,7 +2410,7 @@ function App() {
             </div>
 
             {/* Row 3: Agent Reports + Issues */}
-            <div className={`grid grid-cols-1 ${panelOpen ? "xl:grid-cols-2" : "lg:grid-cols-2"} gap-4 mt-4`}>
+            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
               {/* Agent Reports */}
               <Card className="flex flex-col h-[500px]">
                 <CardHeader className="pb-3 shrink-0">
