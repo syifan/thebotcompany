@@ -36,6 +36,7 @@ function detectTokenProvider(token) {
   if (token.startsWith('sk-ant-')) return 'anthropic';
   if (token.startsWith('sk-proj-') || token.startsWith('sk-')) return 'openai';
   if (token.startsWith('AIzaSy')) return 'google';
+  if (token.startsWith('eyJ')) return 'minimax';
   return 'unknown';
 }
 
@@ -55,6 +56,11 @@ const MODEL_TIERS = {
     high:  { model: 'gemini-3.1-pro-preview', reasoningEffort: 'high' },
     mid:   { model: 'gemini-3.1-pro-preview', reasoningEffort: 'medium' },
     low:   { model: 'gemini-3-flash-preview' },
+  },
+  minimax: {
+    high:  { model: 'minimax/MiniMax-M2.1' },
+    mid:   { model: 'minimax/MiniMax-M2.1-lightning' },
+    low:   { model: 'minimax/MiniMax-M1' },
   },
 };
 
@@ -1634,6 +1640,8 @@ class ProjectRunner {
       provider = 'openai';
     } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
       provider = 'google';
+    } else if (process.env.MINIMAX_API_KEY) {
+      provider = 'minimax';
     } else {
       provider = 'anthropic';
     }
@@ -1645,6 +1653,7 @@ class ProjectRunner {
 
     const isOpenAIModel = agentModel.startsWith('openai/') || agentModel.startsWith('gpt-') || agentModel.startsWith('o3') || agentModel.startsWith('o4-');
     const isGoogleModel = agentModel.startsWith('google/') || agentModel.startsWith('gemini-');
+    const isMiniMaxModel = agentModel.startsWith('minimax/') || agentModel.startsWith('MiniMax-');
 
     let resolvedToken;
     if (projectToken) {
@@ -1653,6 +1662,8 @@ class ProjectRunner {
       resolvedToken = process.env.OPENAI_API_KEY || null;
     } else if (isGoogleModel) {
       resolvedToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+    } else if (isMiniMaxModel) {
+      resolvedToken = process.env.MINIMAX_API_KEY || null;
     } else {
       resolvedToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
     }

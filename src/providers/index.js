@@ -5,13 +5,16 @@
 import { AnthropicProvider } from './anthropic.js';
 import { OpenAIProvider } from './openai.js';
 import { GeminiProvider } from './gemini.js';
+import { MiniMaxProvider } from './minimax.js';
 
 const anthropic = new AnthropicProvider();
 const openai = new OpenAIProvider();
 const gemini = new GeminiProvider();
+const minimax = new MiniMaxProvider();
 
 const OPENAI_MODELS = ['gpt-4.1', 'o3', 'o4-mini', 'gpt-5.3-codex'];
 const GEMINI_MODELS = ['gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+const MINIMAX_MODELS = ['MiniMax-M2.1', 'MiniMax-M2.1-lightning', 'MiniMax-M2', 'MiniMax-M1', 'MiniMax-Text-01'];
 
 /**
  * Get provider and cleaned model name from a model string.
@@ -27,14 +30,23 @@ export function getProvider(model) {
   if (model.startsWith('google/')) {
     return { provider: gemini, model };
   }
+  if (model.startsWith('minimax/')) {
+    return { provider: minimax, model };
+  }
   if (OPENAI_MODELS.includes(model)) {
     return { provider: openai, model: `openai/${model}` };
   }
   if (GEMINI_MODELS.includes(model)) {
     return { provider: gemini, model };
   }
+  if (MINIMAX_MODELS.includes(model)) {
+    return { provider: minimax, model: `minimax/${model}` };
+  }
   if (model.startsWith('gemini-')) {
     return { provider: gemini, model };
+  }
+  if (model.startsWith('MiniMax-')) {
+    return { provider: minimax, model: `minimax/${model}` };
   }
   if (model.startsWith('anthropic/')) {
     return { provider: anthropic, model: model.replace(/^anthropic\//, '') };
