@@ -2444,7 +2444,7 @@ function App() {
               </Card>
 
               {/* Agent Reports */}
-              <Card>
+              <Card className="h-[500px]">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2"><MessageSquare className="w-4 h-4" />Agent Reports</span>
