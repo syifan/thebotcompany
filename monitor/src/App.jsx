@@ -74,6 +74,7 @@ function App() {
   const [hasProjectToken, setHasProjectToken] = useState(false)
   const [projectTokenPreview, setProjectTokenPreview] = useState(null)
   const [projectTokenInput, setProjectTokenInput] = useState('')
+  const [projectTokenProvider, setProjectTokenProvider] = useState('')
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
@@ -1363,17 +1364,28 @@ function App() {
             )}
             {/* Input for new key */}
             <div className="space-y-2">
+              <select
+                value={projectTokenProvider}
+                onChange={e => setProjectTokenProvider(e.target.value)}
+                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+              >
+                <option value="">Select provider...</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="openai">OpenAI</option>
+                <option value="google">Google (Gemini)</option>
+                <option value="minimax">MiniMax</option>
+              </select>
               <input
                 type="password"
-                placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key (auto-detects provider)...'}
+                placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key...'}
                 value={projectTokenInput}
                 onChange={e => setProjectTokenInput(e.target.value)}
                 className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
               />
-              {projectTokenInput && (
+              {projectTokenInput && projectTokenProvider && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${detectProvider(projectTokenInput) ? 'text-green-600 dark:text-green-400' : 'text-amber-500'}`}>
-                    {detectProvider(projectTokenInput) ? `✓ Detected: ${detectProvider(projectTokenInput)}` : '? Unknown provider'}
+                  <span className="text-xs text-green-600 dark:text-green-400">
+                    Provider: {projectTokenProvider.charAt(0).toUpperCase() + projectTokenProvider.slice(1)}
                   </span>
                   <button
                     onClick={async () => {
@@ -1382,14 +1394,15 @@ function App() {
                         const res = await authFetch(projectApi('/token'), {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ token: projectTokenInput })
+                          body: JSON.stringify({ token: projectTokenInput, provider: projectTokenProvider })
                         })
                         if (res.ok) {
                           const d = await res.json()
                           setHasProjectToken(d.hasProjectToken)
                           setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
                           setProjectTokenInput('')
-                          setToast(`${detectProvider(projectTokenInput) || 'API'} key saved`)
+                          setProjectTokenProvider('')
+                          setToast(`${projectTokenProvider.charAt(0).toUpperCase() + projectTokenProvider.slice(1)} key saved`)
                         }
                       } catch {}
                       setProjectTokenSaving(false)
@@ -1400,6 +1413,9 @@ function App() {
                     {projectTokenSaving ? 'Saving...' : 'Save'}
                   </button>
                 </div>
+              )}
+              {projectTokenInput && !projectTokenProvider && (
+                <span className="text-xs text-amber-500">Please select a provider above</span>
               )}
             </div>
           </div>
