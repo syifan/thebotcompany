@@ -2593,7 +2593,9 @@ function App() {
                         <span className="text-[10px] font-normal normal-case">{new Date(file.modified).toLocaleString()}</span>
                       </summary>
                       {file.content && (
-                        <pre className="text-xs text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap mt-1 border-t border-neutral-200 dark:border-neutral-700 pt-3">{file.content}</pre>
+                        <div className="text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none mt-1 border-t border-neutral-200 dark:border-neutral-700 pt-3 [&_pre]:bg-transparent [&_pre]:p-0 [&_pre]:border-0">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{file.content}</ReactMarkdown>
+                        </div>
                       )}
                     </details>
                   ))
