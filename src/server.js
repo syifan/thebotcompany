@@ -60,7 +60,7 @@ const MODEL_TIERS = {
   minimax: {
     high:  { model: 'minimax/MiniMax-M2.5' },
     mid:   { model: 'minimax/MiniMax-M2.1' },
-    low:   { model: 'minimax/MiniMax-M2.1-lightning' },
+    low:   { model: 'minimax/MiniMax-M2' },
   },
 };
 

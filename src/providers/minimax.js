@@ -8,11 +8,10 @@ import { BaseProvider } from './base.js';
 
 const MODEL_PRICING = {
   'MiniMax-M2.5':           { input: 0.3,  output: 1.2 },
+  'MiniMax-M2.5-highspeed': { input: 0.6,  output: 2.4 },
   'MiniMax-M2.1':           { input: 0.3,  output: 1.2 },
-  'MiniMax-M2.1-lightning': { input: 0.3,  output: 2.4 },
+  'MiniMax-M2.1-highspeed': { input: 0.6,  output: 2.4 },
   'MiniMax-M2':             { input: 0.3,  output: 1.2 },
-  'MiniMax-M1':             { input: 0.2,  output: 1.1 },
-  'MiniMax-Text-01':        { input: 0.4,  output: 1.4 },
 };
 
 function getPricing(model) {
