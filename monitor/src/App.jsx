@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
-import { Panel, PanelHeader, PanelContent, usePanelOpen } from '@/components/ui/panel'
+import { PanelProvider, Panel, PanelHeader, PanelContent, usePanelOpen } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
 import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
@@ -1099,7 +1099,7 @@ function App() {
   const notifPermission = notifSupported ? Notification.permission : 'default'
 
   const settingsModal = (
-    <Panel open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+    <Panel id="settings" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
       <PanelHeader onClose={() => setSettingsOpen(false)}>Settings</PanelHeader>
       <PanelContent>
         <div className="pb-5">
@@ -1283,7 +1283,7 @@ function App() {
   const notifUseGlobal = projNotifSettings.useGlobal !== false
 
   const projectSettingsModal = selectedProject && (
-    <Panel open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)}>
+    <Panel id="project-settings" open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)}>
       <PanelHeader onClose={() => setProjectSettingsOpen(false)}>Project Settings</PanelHeader>
       <PanelContent>
         {/* Notifications section */}
@@ -1961,7 +1961,7 @@ function App() {
 
         {settingsModal}
         {/* Notification Center (project list) */}
-        <Panel open={notifCenter} onClose={() => setNotifCenter(false)}>
+        <Panel id="notifications" open={notifCenter} onClose={() => setNotifCenter(false)}>
           <PanelHeader onClose={() => setNotifCenter(false)}>
             <div className="flex items-center justify-between w-full">
               <span>Notifications</span>
@@ -2545,7 +2545,7 @@ function App() {
       </div>
 
       {/* Agent Details Modal */}
-      <Panel open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
+      <Panel id="agent-detail" open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
         <PanelHeader onClose={() => setAgentModal({ ...agentModal, open: false })}>
           <span className="capitalize">{agentModal.agent}</span>
           {agentModal.data?.isManager && <Badge variant="secondary" className="ml-2">Manager</Badge>}
@@ -2885,7 +2885,7 @@ function App() {
       </Modal>
 
       {/* Issue Detail Modal */}
-      <Panel open={issueModal.open} onClose={() => setIssueModal({ ...issueModal, open: false })}>
+      <Panel id="issue-detail" open={issueModal.open} onClose={() => setIssueModal({ ...issueModal, open: false })}>
         <PanelHeader onClose={() => setIssueModal({ ...issueModal, open: false })}>
           {issueModal.issue ? `#${issueModal.issue.id} ${issueModal.issue.title}` : 'Issue'}
         </PanelHeader>

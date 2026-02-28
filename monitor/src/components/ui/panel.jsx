@@ -1,45 +1,82 @@
 import * as React from "react"
 
-const panelRegistry = { count: 0, listeners: new Set() }
+const PanelContext = React.createContext(null)
 
-function notifyListeners() {
-  const isOpen = panelRegistry.count > 0
-  panelRegistry.listeners.forEach(fn => fn(isOpen))
-}
-
-function usePanelOpen() {
-  const [isOpen, setIsOpen] = React.useState(panelRegistry.count > 0)
-  React.useEffect(() => {
-    panelRegistry.listeners.add(setIsOpen)
-    return () => panelRegistry.listeners.delete(setIsOpen)
-  }, [])
-  return isOpen
-}
-
-const PANEL_WIDTH = 'min(35vw, 560px)'
-
-function Panel({ open, onClose, children }) {
-  const [visible, setVisible] = React.useState(false)
+function PanelProvider({ children }) {
+  const [activePanelId, setActivePanelId] = React.useState(null)
   const [animate, setAnimate] = React.useState(false)
+  const [renderedId, setRenderedId] = React.useState(null)
+  const closersRef = React.useRef({}) // id -> onClose callback
+
+  const register = React.useCallback((id, onClose) => {
+    // Close any other open panel
+    const currentId = activePanelIdRef.current
+    if (currentId && currentId !== id && closersRef.current[currentId]) {
+      closersRef.current[currentId]()
+    }
+    closersRef.current[id] = onClose
+    setActivePanelId(id)
+  }, [])
+
+  const unregister = React.useCallback((id) => {
+    delete closersRef.current[id]
+    setActivePanelId(prev => prev === id ? null : prev)
+  }, [])
+
+  // Keep a ref to activePanelId for sync access in register
+  const activePanelIdRef = React.useRef(null)
+  activePanelIdRef.current = activePanelId
+
+  const isOpen = activePanelId !== null
 
   React.useEffect(() => {
-    if (open) {
-      panelRegistry.count++
-      notifyListeners()
-      setVisible(true)
+    if (activePanelId) {
+      setRenderedId(activePanelId)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => setAnimate(true))
       })
     } else {
       setAnimate(false)
-      panelRegistry.count = Math.max(0, panelRegistry.count - 1)
-      notifyListeners()
-      const timer = setTimeout(() => setVisible(false), 300)
+      const timer = setTimeout(() => setRenderedId(null), 300)
       return () => clearTimeout(timer)
+    }
+  }, [activePanelId])
+
+  return (
+    <PanelContext.Provider value={{ activePanelId, renderedId, animate, register, unregister, isOpen }}>
+      {children}
+    </PanelContext.Provider>
+  )
+}
+
+function usePanelOpen() {
+  const ctx = React.useContext(PanelContext)
+  return ctx?.isOpen || false
+}
+
+function Panel({ open, onClose, children, id: propId }) {
+  const ctx = React.useContext(PanelContext)
+  const idRef = React.useRef(propId || Math.random().toString(36).slice(2))
+  const id = idRef.current
+  const onCloseRef = React.useRef(onClose)
+  onCloseRef.current = onClose
+
+  React.useEffect(() => {
+    if (open) {
+      ctx?.register(id, () => onCloseRef.current?.())
+    } else {
+      ctx?.unregister(id)
     }
   }, [open])
 
-  if (!visible && !open) return null
+  React.useEffect(() => {
+    return () => ctx?.unregister(id)
+  }, [])
+
+  const isActive = ctx?.renderedId === id
+  const shouldAnimate = ctx?.animate && ctx?.activePanelId === id
+
+  if (!isActive) return null
 
   return (
     <>
@@ -47,12 +84,12 @@ function Panel({ open, onClose, children }) {
       <div className="sm:hidden">
         <div className="fixed inset-0 z-50">
           <div
-            className={`fixed inset-0 bg-black/50 transition-opacity duration-300 ${animate ? 'opacity-100' : 'opacity-0'}`}
+            className={`fixed inset-0 bg-black/50 transition-opacity duration-300 ${shouldAnimate ? 'opacity-100' : 'opacity-0'}`}
             onClick={onClose}
           />
           <div
             className={`fixed inset-0 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
-              animate ? 'translate-x-0' : 'translate-x-full'
+              shouldAnimate ? 'translate-x-0' : 'translate-x-full'
             }`}
           >
             {children}
@@ -64,9 +101,9 @@ function Panel({ open, onClose, children }) {
       <div className="hidden sm:block">
         <div
           className={`fixed top-0 right-0 bottom-0 z-40 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
-            animate ? 'translate-x-0' : 'translate-x-full'
+            shouldAnimate ? 'translate-x-0' : 'translate-x-full'
           }`}
-          style={{ width: PANEL_WIDTH, minWidth: 380 }}
+          style={{ width: 'min(35vw, 560px)', minWidth: 380 }}
         >
           {children}
         </div>
@@ -94,4 +131,4 @@ function PanelContent({ children }) {
   return <div className="p-4">{children}</div>
 }
 
-export { Panel, PanelHeader, PanelContent, usePanelOpen, PANEL_WIDTH }
+export { PanelProvider, Panel, PanelHeader, PanelContent, usePanelOpen }
