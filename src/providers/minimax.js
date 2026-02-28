@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import { BaseProvider } from './base.js';
 
 const MODEL_PRICING = {
+  'MiniMax-M2.5':           { input: 0.3,  output: 1.2 },
   'MiniMax-M2.1':           { input: 0.3,  output: 1.2 },
   'MiniMax-M2.1-lightning': { input: 0.3,  output: 2.4 },
   'MiniMax-M2':             { input: 0.3,  output: 1.2 },

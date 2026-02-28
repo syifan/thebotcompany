@@ -58,8 +58,8 @@ const MODEL_TIERS = {
     low:   { model: 'gemini-3-flash-preview' },
   },
   minimax: {
-    high:  { model: 'minimax/MiniMax-M2.1' },
-    mid:   { model: 'minimax/MiniMax-M2' },
+    high:  { model: 'minimax/MiniMax-M2.5' },
+    mid:   { model: 'minimax/MiniMax-M2.1' },
     low:   { model: 'minimax/MiniMax-M2.1-lightning' },
   },
 };
