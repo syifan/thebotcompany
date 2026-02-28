@@ -65,25 +65,30 @@ export class GeminiProvider extends BaseProvider {
           contents.push({ role: 'user', parts: [{ text: msg.content || '' }] });
         }
       } else if (msg.role === 'assistant' || msg.role === 'model') {
-        const parts = [];
-        if (msg._textContent) {
-          parts.push({ text: msg._textContent });
-        }
-        if (msg._functionCalls) {
-          for (const fc of msg._functionCalls) {
-            parts.push({
-              functionCall: {
-                name: fc.name,
-                args: fc.args,
-              },
-            });
+        // Use raw parts if available to preserve thought signatures
+        if (msg._rawParts && msg._rawParts.length > 0) {
+          contents.push({ role: 'model', parts: msg._rawParts });
+        } else {
+          const parts = [];
+          if (msg._textContent) {
+            parts.push({ text: msg._textContent });
           }
-        }
-        if (parts.length === 0 && msg.content) {
-          parts.push({ text: typeof msg.content === 'string' ? msg.content : '' });
-        }
-        if (parts.length > 0) {
-          contents.push({ role: 'model', parts });
+          if (msg._functionCalls) {
+            for (const fc of msg._functionCalls) {
+              parts.push({
+                functionCall: {
+                  name: fc.name,
+                  args: fc.args,
+                },
+              });
+            }
+          }
+          if (parts.length === 0 && msg.content) {
+            parts.push({ text: typeof msg.content === 'string' ? msg.content : '' });
+          }
+          if (parts.length > 0) {
+            contents.push({ role: 'model', parts });
+          }
         }
       }
     }
@@ -136,9 +141,13 @@ export class GeminiProvider extends BaseProvider {
     const toolCalls = [];
     const rawFunctionCalls = [];
 
+    // Preserve raw parts for thought signature support
+    let rawParts = [];
+
     if (response.candidates && response.candidates[0]) {
       const candidate = response.candidates[0];
-      for (const part of (candidate.content?.parts || [])) {
+      rawParts = candidate.content?.parts || [];
+      for (const part of rawParts) {
         if (part.text) {
           textContent += (textContent ? '\n' : '') + part.text;
         } else if (part.functionCall) {
@@ -192,10 +201,22 @@ export class GeminiProvider extends BaseProvider {
       },
       _textContent: textContent,
       _functionCalls: rawFunctionCalls,
+      _rawParts: rawParts,
     };
   }
 
   buildAssistantMessage(normalized) {
+    // If we have raw parts (which include thought/thoughtSignature), use them
+    // directly to preserve thought signatures required by Gemini thinking mode.
+    if (normalized._rawParts && normalized._rawParts.length > 0) {
+      return {
+        role: 'model',
+        content: normalized.content,
+        _textContent: normalized._textContent,
+        _functionCalls: normalized._functionCalls,
+        _rawParts: normalized._rawParts,
+      };
+    }
     return {
       role: 'model',
       content: normalized.content,
