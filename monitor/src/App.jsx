@@ -120,6 +120,7 @@ function App() {
   const [loginInput, setLoginInput] = useState('')
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem('tbc_notifications') === 'true')
+  const [reportsPanelOpen, setReportsPanelOpen] = useState(false)
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -2405,59 +2406,38 @@ function App() {
                 </CardContent>
               </Card>
 
-              {/* Agent Reports + Issues */}
-              <Card className="flex flex-col h-[500px]">
-                <CardHeader className="pb-3 shrink-0">
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4" />Agent Reports
-                      {selectedAgent && (
-                        <Badge variant="secondary" className="ml-2 capitalize">
-                          {selectedAgent}
-                          <button onClick={clearAgentFilter} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
-                        </Badge>
-                      )}
-                    </span>
-                    <span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 flex-1 overflow-hidden">
-                  <div ref={reportsScrollRef} className="h-full overflow-y-auto overflow-x-hidden pr-2" onScroll={(e) => {
-                    const { scrollTop, scrollHeight, clientHeight } = e.target
-                    if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
-                  }}>
-                    {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-8">No reports found</p>}
-                    {comments.map((comment, idx) => (
-                      <div key={comment.id}>
-                        {idx > 0 && <Separator className="my-4" />}
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <Avatar className="w-6 h-6 sm:w-8 sm:h-8">
-                              <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
-                                {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
-                            <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
-                          </div>
-                          <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
-                            {parseScheduleBlock(comment.body) && (
-                              <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
-                            )}
-                            <MetaBlockBadges text={comment.body} />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {commentsLoading && (
-                      <div className="flex items-center justify-center py-4 gap-2 text-neutral-400 dark:text-neutral-500">
-                        <RefreshCw className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span>
+              {/* Agent Reports - condensed cards */}
+              {comments.slice(0, 6).map((comment) => (
+                <Card key={comment.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setReportsPanelOpen(true)}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-[10px]">
+                          {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
+                      <span className="text-xs text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
+                    </div>
+                    <div className="text-xs text-neutral-600 dark:text-neutral-400 line-clamp-3 break-words">
+                      {stripAllMetaBlocks(comment.body).slice(0, 200)}
+                    </div>
+                    {parseScheduleBlock(comment.body) && (
+                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 truncate">
+                        📋 Has schedule
                       </div>
                     )}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ))}
+              {comments.length > 6 && (
+                <Card className="cursor-pointer hover:shadow-md transition-shadow flex items-center justify-center" onClick={() => setReportsPanelOpen(true)}>
+                  <CardContent className="p-4 text-center">
+                    <MessageSquare className="w-6 h-6 mx-auto mb-2 text-neutral-400" />
+                    <span className="text-sm text-neutral-500 dark:text-neutral-400">View all {comments.length} reports →</span>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Issues */}
               <Card className="flex flex-col h-[500px]">
@@ -3016,6 +2996,58 @@ function App() {
           ) : (
             <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load issue</p>
           )}
+        </PanelContent>
+      </Panel>
+
+      {/* Agent Reports Panel */}
+      <Panel id="reports" open={reportsPanelOpen} onClose={() => setReportsPanelOpen(false)}>
+        <PanelHeader onClose={() => setReportsPanelOpen(false)}>
+          <span className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />Agent Reports
+            {selectedAgent && (
+              <Badge variant="secondary" className="ml-2 capitalize">
+                {selectedAgent}
+                <button onClick={clearAgentFilter} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
+              </Badge>
+            )}
+            <span className="text-sm font-normal text-neutral-400 ml-auto">{comments.length} loaded</span>
+          </span>
+        </PanelHeader>
+        <PanelContent>
+          <div ref={reportsScrollRef} className="overflow-x-hidden" onScroll={(e) => {
+            const { scrollTop, scrollHeight, clientHeight } = e.target
+            if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
+          }}>
+            {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-8">No reports found</p>}
+            {comments.map((comment, idx) => (
+              <div key={comment.id}>
+                {idx > 0 && <Separator className="my-4" />}
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Avatar className="w-6 h-6 sm:w-8 sm:h-8">
+                      <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
+                        {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
+                    <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
+                  </div>
+                  <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
+                    {parseScheduleBlock(comment.body) && (
+                      <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
+                    )}
+                    <MetaBlockBadges text={comment.body} />
+                  </div>
+                </div>
+              </div>
+            ))}
+            {commentsLoading && (
+              <div className="flex items-center justify-center py-4 gap-2 text-neutral-400 dark:text-neutral-500">
+                <RefreshCw className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span>
+              </div>
+            )}
+          </div>
         </PanelContent>
       </Panel>
 
