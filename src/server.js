@@ -1618,9 +1618,19 @@ class ProjectRunner {
 
     // Resolve token: project-specific > global tokens by provider
     const projectToken = config.setupToken;
-    const provider = projectToken
-      ? detectProviderFromToken(projectToken)
-      : detectProviderFromToken(process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY);
+    // Detect provider: project token first, then prefer Anthropic if available
+    let provider;
+    if (projectToken) {
+      provider = detectProviderFromToken(projectToken);
+    } else if (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) {
+      provider = 'anthropic';
+    } else if (process.env.OPENAI_API_KEY) {
+      provider = 'openai';
+    } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+      provider = 'google';
+    } else {
+      provider = 'anthropic';
+    }
 
     // Resolve tier to concrete model + optional reasoning effort
     const resolved = resolveModelTier(agentTierOrModel, provider);
@@ -2415,7 +2425,7 @@ const server = http.createServer(async (req, res) => {
       const safeConfig = { ...config };
       delete safeConfig.setupToken;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      const detectedProvider = projectToken ? detectProviderFromToken(projectToken) : detectProviderFromToken(process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY);
+      const detectedProvider = projectToken ? detectProviderFromToken(projectToken) : (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'anthropic';
       res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken, projectTokenPreview: projectToken ? maskToken(projectToken) : null, provider: detectedProvider, tiers: MODEL_TIERS[detectedProvider] || {} }));
       return;
     }
