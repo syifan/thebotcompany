@@ -2008,11 +2008,11 @@ function App() {
             </div>
             
             {/* Right: Actions */}
-            <div className="flex items-center gap-2 pl-8 sm:pl-0 flex-wrap">
+            <div className="flex items-center gap-1.5 pl-8 sm:pl-0 shrink-0">
               <button
                 onClick={() => setNotifCenter(true)}
-                className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
-                title="Notification Center"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
+                title="Notifications"
               >
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
@@ -2023,42 +2023,37 @@ function App() {
               </button>
               <button
                 onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
-                className={`px-2 py-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
+                className={`p-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
                 title={isWriteMode ? 'Write mode (click to lock)' : 'Read-only (click to unlock)'}
               >
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
               <button
                 onClick={() => setProjectSettingsOpen(true)}
-                className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
                 title="Project Settings"
               >
                 <Settings className="w-4 h-4" />
               </button>
-              <a href={projectApi('/download')} className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="Download workspace as ZIP">
-                <Save className="w-3.5 h-3.5 sm:mr-1.5" />
-                <span className="hidden sm:inline">Download</span>
+              <a href={projectApi('/download')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Download workspace as ZIP">
+                <Save className="w-4 h-4" />
               </a>
               {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="GitHub">
-                  <Github className="w-3.5 h-3.5 sm:mr-1.5" />
-                  <span className="hidden sm:inline">GitHub</span>
+                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Open on GitHub">
+                  <Github className="w-4 h-4" />
                 </a>
               )}
               {isWriteMode && (selectedProject.paused ? (
-                <button onClick={() => controlAction('resume')} className="px-2 sm:px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium inline-flex items-center" title="Resume">
-                  <Play className="w-3.5 h-3.5 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Resume</span>
+                <button onClick={() => controlAction('resume')} className="p-1.5 rounded bg-green-500 hover:bg-green-600 text-white transition-colors" title="Resume project">
+                  <Play className="w-4 h-4" />
                 </button>
               ) : (
-                <button onClick={() => controlAction('pause')} className="px-2 sm:px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded text-xs text-neutral-700 dark:text-neutral-300 font-medium inline-flex items-center" title="Pause">
-                  <Pause className="w-3.5 h-3.5 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Pause</span>
+                <button onClick={() => controlAction('pause')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors" title="Pause project">
+                  <Pause className="w-4 h-4" />
                 </button>
               ))}
-              {isWriteMode && <button onClick={openBootstrapModal} className="px-2 sm:px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-medium inline-flex items-center" title="Bootstrap">
-                <RotateCcw className="w-3.5 h-3.5 sm:mr-1.5" />
-                <span className="hidden sm:inline">Bootstrap</span>
+              {isWriteMode && <button onClick={openBootstrapModal} className="p-1.5 rounded bg-red-500 hover:bg-red-600 text-white transition-colors" title="Bootstrap project">
+                <RotateCcw className="w-4 h-4" />
               </button>}
             </div>
           </div>
