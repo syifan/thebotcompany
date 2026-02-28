@@ -1,66 +1,69 @@
 import * as React from "react"
 
-const PanelContext = React.createContext(null)
+// Simple global panel state - no context needed
+let _activePanelId = null
+let _renderedId = null
+let _animate = false
+const _closers = {}
+const _listeners = new Set()
 
-function PanelProvider({ children }) {
-  const [activePanelId, setActivePanelId] = React.useState(null)
-  const [animate, setAnimate] = React.useState(false)
-  const [renderedId, setRenderedId] = React.useState(null)
-  const closersRef = React.useRef({})
-  const activePanelIdRef = React.useRef(null)
+function _notify() {
+  _listeners.forEach(fn => fn({}))
+}
 
-  const register = React.useCallback((id, onClose) => {
-    const currentId = activePanelIdRef.current
-    if (currentId && currentId !== id && closersRef.current[currentId]) {
-      // Defer the close to avoid setState during render
-      setTimeout(() => closersRef.current[currentId]?.(), 0)
-    }
-    closersRef.current[id] = onClose
-    activePanelIdRef.current = id
-    setActivePanelId(id)
-  }, [])
+function _register(id, onClose) {
+  if (_activePanelId && _activePanelId !== id && _closers[_activePanelId]) {
+    const prevClose = _closers[_activePanelId]
+    setTimeout(() => prevClose(), 0)
+  }
+  _closers[id] = onClose
+  _activePanelId = id
+  _renderedId = id
+  // Animate after a frame
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      _animate = true
+      _notify()
+    })
+  })
+  _animate = false
+  _notify()
+}
 
-  const unregister = React.useCallback((id) => {
-    delete closersRef.current[id]
-    if (activePanelIdRef.current === id) {
-      activePanelIdRef.current = null
-      setActivePanelId(null)
-    }
-  }, [])
-
-  React.useEffect(() => {
-    if (activePanelId) {
-      setRenderedId(activePanelId)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setAnimate(true))
-      })
-    } else {
-      setAnimate(false)
-      const timer = setTimeout(() => setRenderedId(null), 300)
-      return () => clearTimeout(timer)
-    }
-  }, [activePanelId])
-
-  const isOpen = activePanelId !== null
-
-  const value = React.useMemo(() => ({
-    activePanelId, renderedId, animate, register, unregister, isOpen
-  }), [activePanelId, renderedId, animate, isOpen])
-
-  return (
-    <PanelContext.Provider value={value}>
-      {children}
-    </PanelContext.Provider>
-  )
+function _unregister(id) {
+  delete _closers[id]
+  if (_activePanelId === id) {
+    _activePanelId = null
+    _animate = false
+    _notify()
+    setTimeout(() => {
+      if (!_activePanelId) {
+        _renderedId = null
+        _notify()
+      }
+    }, 300)
+  }
 }
 
 function usePanelOpen() {
-  const ctx = React.useContext(PanelContext)
-  return ctx?.isOpen ?? false
+  const [, forceUpdate] = React.useState({})
+  React.useEffect(() => {
+    _listeners.add(forceUpdate)
+    return () => _listeners.delete(forceUpdate)
+  }, [])
+  return _activePanelId !== null
+}
+
+function usePanelState() {
+  const [, forceUpdate] = React.useState({})
+  React.useEffect(() => {
+    _listeners.add(forceUpdate)
+    return () => _listeners.delete(forceUpdate)
+  }, [])
+  return { activePanelId: _activePanelId, renderedId: _renderedId, animate: _animate }
 }
 
 function Panel({ open, onClose, children, id: propId }) {
-  const ctx = React.useContext(PanelContext)
   const idRef = React.useRef(propId || Math.random().toString(36).slice(2))
   const id = idRef.current
   const onCloseRef = React.useRef(onClose)
@@ -68,18 +71,20 @@ function Panel({ open, onClose, children, id: propId }) {
 
   React.useEffect(() => {
     if (open) {
-      ctx?.register(id, () => onCloseRef.current?.())
+      _register(id, () => onCloseRef.current?.())
     } else {
-      ctx?.unregister(id)
+      _unregister(id)
     }
   }, [open, id])
 
   React.useEffect(() => {
-    return () => ctx?.unregister(id)
+    return () => _unregister(id)
   }, [id])
 
-  const isActive = ctx?.renderedId === id
-  const shouldAnimate = ctx?.animate && ctx?.activePanelId === id
+  const { renderedId, animate, activePanelId } = usePanelState()
+
+  const isActive = renderedId === id
+  const shouldAnimate = animate && activePanelId === id
 
   if (!isActive) return null
 
@@ -134,6 +139,11 @@ function PanelHeader({ children, onClose }) {
 
 function PanelContent({ children }) {
   return <div className="p-4">{children}</div>
+}
+
+// PanelProvider is now a no-op wrapper for backward compat
+function PanelProvider({ children }) {
+  return children
 }
 
 export { PanelProvider, Panel, PanelHeader, PanelContent, usePanelOpen }
