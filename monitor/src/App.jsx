@@ -1165,13 +1165,13 @@ function App() {
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">API Keys</h3>
           <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-3">Paste any API key — provider is auto-detected from the key prefix.</p>
           <div className="py-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="password"
                 placeholder="Paste API key (Anthropic, OpenAI, or Google)..."
                 value={globalTokenInput}
                 onChange={e => setGlobalTokenInput(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
               />
               {globalTokenInput && detectProvider(globalTokenInput) && (
                 <span className="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">✓ {detectProvider(globalTokenInput)}</span>
@@ -1328,12 +1328,12 @@ function App() {
           <div className="py-2 space-y-3">
             {/* Current key status */}
             {hasProjectToken ? (
-              <div className="flex items-center justify-between p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shrink-0">
                     {detectProvider(projectTokenPreview) || 'API Key'}
                   </span>
-                  <code className="text-xs text-neutral-500 dark:text-neutral-400">{projectTokenPreview}</code>
+                  <code className="text-xs text-neutral-500 dark:text-neutral-400 truncate">{projectTokenPreview}</code>
                 </div>
                 <button
                   onClick={async () => {
@@ -1364,11 +1364,11 @@ function App() {
             )}
             {/* Input for new key */}
             <div className="space-y-2">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <select
                   value={projectTokenProvider}
                   onChange={e => setProjectTokenProvider(e.target.value)}
-                  className="w-40 shrink-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                  className="w-full sm:w-40 shrink-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
                 >
                   <option value="">Provider...</option>
                   <option value="anthropic">Anthropic (API Key)</option>
@@ -1382,7 +1382,7 @@ function App() {
                   placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key...'}
                   value={projectTokenInput}
                   onChange={e => setProjectTokenInput(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                  className="flex-1 min-w-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
                 />
                 <button
                   onClick={async () => {
