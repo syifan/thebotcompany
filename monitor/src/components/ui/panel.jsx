@@ -6,28 +6,27 @@ function PanelProvider({ children }) {
   const [activePanelId, setActivePanelId] = React.useState(null)
   const [animate, setAnimate] = React.useState(false)
   const [renderedId, setRenderedId] = React.useState(null)
-  const closersRef = React.useRef({}) // id -> onClose callback
+  const closersRef = React.useRef({})
+  const activePanelIdRef = React.useRef(null)
 
   const register = React.useCallback((id, onClose) => {
-    // Close any other open panel
     const currentId = activePanelIdRef.current
     if (currentId && currentId !== id && closersRef.current[currentId]) {
-      closersRef.current[currentId]()
+      // Defer the close to avoid setState during render
+      setTimeout(() => closersRef.current[currentId]?.(), 0)
     }
     closersRef.current[id] = onClose
+    activePanelIdRef.current = id
     setActivePanelId(id)
   }, [])
 
   const unregister = React.useCallback((id) => {
     delete closersRef.current[id]
-    setActivePanelId(prev => prev === id ? null : prev)
+    if (activePanelIdRef.current === id) {
+      activePanelIdRef.current = null
+      setActivePanelId(null)
+    }
   }, [])
-
-  // Keep a ref to activePanelId for sync access in register
-  const activePanelIdRef = React.useRef(null)
-  activePanelIdRef.current = activePanelId
-
-  const isOpen = activePanelId !== null
 
   React.useEffect(() => {
     if (activePanelId) {
@@ -42,8 +41,14 @@ function PanelProvider({ children }) {
     }
   }, [activePanelId])
 
+  const isOpen = activePanelId !== null
+
+  const value = React.useMemo(() => ({
+    activePanelId, renderedId, animate, register, unregister, isOpen
+  }), [activePanelId, renderedId, animate, isOpen])
+
   return (
-    <PanelContext.Provider value={{ activePanelId, renderedId, animate, register, unregister, isOpen }}>
+    <PanelContext.Provider value={value}>
       {children}
     </PanelContext.Provider>
   )
@@ -51,7 +56,7 @@ function PanelProvider({ children }) {
 
 function usePanelOpen() {
   const ctx = React.useContext(PanelContext)
-  return ctx?.isOpen || false
+  return ctx?.isOpen ?? false
 }
 
 function Panel({ open, onClose, children, id: propId }) {
@@ -67,11 +72,11 @@ function Panel({ open, onClose, children, id: propId }) {
     } else {
       ctx?.unregister(id)
     }
-  }, [open])
+  }, [open, id])
 
   React.useEffect(() => {
     return () => ctx?.unregister(id)
-  }, [])
+  }, [id])
 
   const isActive = ctx?.renderedId === id
   const shouldAnimate = ctx?.animate && ctx?.activePanelId === id
@@ -80,7 +85,7 @@ function Panel({ open, onClose, children, id: propId }) {
 
   return (
     <>
-      {/* Mobile/tablet: full-screen overlay (below lg breakpoint) */}
+      {/* Mobile/tablet: full-screen overlay */}
       <div className="md:hidden">
         <div className="fixed inset-0 z-50">
           <div
@@ -97,7 +102,7 @@ function Panel({ open, onClose, children, id: propId }) {
         </div>
       </div>
 
-      {/* Desktop: fixed right panel (lg and above) */}
+      {/* Desktop: fixed right panel */}
       <div className="hidden md:block">
         <div
           className={`fixed top-0 right-0 bottom-0 z-40 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
