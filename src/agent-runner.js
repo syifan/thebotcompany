@@ -424,6 +424,7 @@ export async function runAgentWithAPI(opts) {
 
   const MAX_ITERATIONS = 200;
   let lastResultText = '';
+  let lastInputTokens = 0;
 
   try {
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
@@ -433,8 +434,9 @@ export async function runAgentWithAPI(opts) {
       }
 
       // Auto-compact conversation history when approaching context limit
+      // Use lastInputTokens (from most recent API call) not cumulative total
       const TOKEN_LIMIT = 160000; // leave headroom below 200K
-      if (totalUsage.inputTokens > TOKEN_LIMIT && messages.length > 5) {
+      if (lastInputTokens > TOKEN_LIMIT && messages.length > 5) {
         let keep = Math.max(3, Math.floor(messages.length * 0.4));
         // Ensure we don't split assistant/tool-result pairs — the kept portion
         // must start with an assistant message (not a tool result)
@@ -451,7 +453,7 @@ export async function runAgentWithAPI(opts) {
         }
         if (splitIdx < 1) splitIdx = 1;
         const toCompact = messages.splice(1, splitIdx - 1);
-        log(`Compacting ${toCompact.length} messages (input tokens: ${totalUsage.inputTokens})...`);
+        log(`Compacting ${toCompact.length} messages (last request: ${lastInputTokens} tokens)...`);
 
         // Build a text representation of old messages for summarization
         const compactText = toCompact.map((m, i) => {
@@ -534,6 +536,7 @@ export async function runAgentWithAPI(opts) {
       }
 
       // Accumulate usage
+      lastInputTokens = response.usage.inputTokens;
       totalUsage.inputTokens += response.usage.inputTokens;
       totalUsage.outputTokens += response.usage.outputTokens;
       totalUsage.cacheReadTokens += response.usage.cacheReadTokens || 0;
