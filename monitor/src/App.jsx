@@ -2135,7 +2135,7 @@ function App() {
             )}
 
             {/* Row 1: State, Cost & Budget, Config */}
-            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
               {/* State */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" />Orchestrator State</CardTitle></CardHeader>
@@ -2362,7 +2362,7 @@ function App() {
             </div>
 
             {/* Row 2: Managers, Workers, PRs */}
-            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
               {/* Managers */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
@@ -2410,7 +2410,7 @@ function App() {
             </div>
 
             {/* Row 3: Agent Reports + Issues */}
-            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+            <div className="grid gap-4 mt-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
               {/* Agent Reports */}
               <Card className="flex flex-col h-[500px]">
                 <CardHeader className="pb-3 shrink-0">
