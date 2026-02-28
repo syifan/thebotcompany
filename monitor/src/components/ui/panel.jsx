@@ -80,8 +80,8 @@ function Panel({ open, onClose, children, id: propId }) {
 
   return (
     <>
-      {/* Mobile: full-screen overlay */}
-      <div className="sm:hidden">
+      {/* Mobile/tablet: full-screen overlay (below lg breakpoint) */}
+      <div className="lg:hidden">
         <div className="fixed inset-0 z-50">
           <div
             className={`fixed inset-0 bg-black/50 transition-opacity duration-300 ${shouldAnimate ? 'opacity-100' : 'opacity-0'}`}
@@ -97,8 +97,8 @@ function Panel({ open, onClose, children, id: propId }) {
         </div>
       </div>
 
-      {/* Desktop: fixed right panel */}
-      <div className="hidden sm:block">
+      {/* Desktop: fixed right panel (lg and above) */}
+      <div className="hidden lg:block">
         <div
           className={`fixed top-0 right-0 bottom-0 z-40 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
             shouldAnimate ? 'translate-x-0' : 'translate-x-full'

@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Panel margin: only on lg+ screens */
+@media (min-width: 1024px) {
+  .panel-margin {
+    margin-right: min(35vw, 560px);
+  }
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;

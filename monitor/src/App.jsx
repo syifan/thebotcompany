@@ -1481,7 +1481,7 @@ function App() {
 
   if (!selectedProject) {
     return (
-      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300" style={panelOpen ? { marginRight: 'min(35vw, 560px)' } : undefined}>
+      <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300 ${panelOpen ? "panel-margin" : ""}`}>
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 sm:mb-8">
             <div className="flex items-start sm:items-center justify-between gap-2">
@@ -1988,7 +1988,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300" style={panelOpen ? { marginRight: 'min(35vw, 560px)' } : undefined}>
+    <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[margin] duration-300 ${panelOpen ? "panel-margin" : ""}`}>
       <div className="max-w-7xl mx-auto">
         {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">
@@ -2137,7 +2137,7 @@ function App() {
             )}
 
             {/* Row 1: State, Cost & Budget, Config */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 ${panelOpen ? "xl:grid-cols-3" : "lg:grid-cols-3"} gap-4`}>
               {/* State */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" />Orchestrator State</CardTitle></CardHeader>
@@ -2364,7 +2364,7 @@ function App() {
             </div>
 
             {/* Row 2: Managers, Workers, PRs */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+            <div className={`grid grid-cols-1 ${panelOpen ? "xl:grid-cols-3" : "lg:grid-cols-3"} gap-4 mt-4`}>
               {/* Managers */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
@@ -2412,7 +2412,7 @@ function App() {
             </div>
 
             {/* Row 3: Agent Reports + Issues */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <div className={`grid grid-cols-1 ${panelOpen ? "xl:grid-cols-2" : "lg:grid-cols-2"} gap-4 mt-4`}>
               {/* Agent Reports */}
               <Card className="flex flex-col h-[500px]">
                 <CardHeader className="pb-3 shrink-0">
