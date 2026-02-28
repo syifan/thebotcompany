@@ -2625,14 +2625,23 @@ const server = http.createServer(async (req, res) => {
             messages: [{ role: 'user', content: prompt }],
           });
           summary = response.content?.filter(b => b.type === 'text').map(b => b.text).join('').trim() || null;
-        } else if (providerName === 'openai') {
+        } else if (providerName === 'openai' || providerName === 'minimax') {
+          // Both OpenAI and MiniMax use OpenAI-compatible chat completions
           const response = await client.chat.completions.create({
-            model: model.replace(/^openai\//, ''), max_tokens: 60,
+            model: model.replace(/^(openai|minimax)\//, ''), max_tokens: 60,
             messages: [{ role: 'user', content: prompt }],
           });
           summary = response.choices?.[0]?.message?.content?.trim() || null;
+        } else if (providerName === 'google') {
+          const modelName = model.replace(/^google\//, '');
+          const response = await client.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: { maxOutputTokens: 60 },
+          });
+          summary = response.text?.trim() || null;
         } else {
-          // Fallback: raw fetch for other providers
+          log(`Summarize: unsupported provider ${providerName}`, runner.id);
           summary = null;
         }
 
