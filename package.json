@@ -23,6 +23,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
+    "@google/genai": "^1.43.0",
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.2.4",
     "js-yaml": "^4.1.0",

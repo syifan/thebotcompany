@@ -51,6 +51,11 @@ const MODEL_TIERS = {
     mid:   { model: 'gpt-5.3-codex', reasoningEffort: 'high' },
     low:   { model: 'gpt-5.3-codex', reasoningEffort: 'medium' },
   },
+  google: {
+    high:  { model: 'gemini-3.1-pro-preview', reasoningEffort: 'high' },
+    mid:   { model: 'gemini-3.1-pro-preview', reasoningEffort: 'medium' },
+    low:   { model: 'gemini-3-flash-preview' },
+  },
 };
 
 function resolveModelTier(tierOrModel, provider) {
