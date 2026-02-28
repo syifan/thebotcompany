@@ -2406,7 +2406,7 @@ function App() {
               </Card>
 
               {/* Agent Reports + Issues */}
-              <Card className="flex flex-col h-[500px]">
+              <Card className="flex flex-col h-[500px]" style={{ gridColumn: 'span 2' }}>
                 <CardHeader className="pb-3 shrink-0">
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
