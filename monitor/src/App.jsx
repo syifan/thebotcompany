@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
-import { PanelProvider, Panel, PanelHeader, PanelContent, usePanelOpen } from '@/components/ui/panel'
+import { PanelProvider, Panel, PanelSlot, PanelHeader, PanelContent, usePanelOpen } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
 import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
@@ -1481,7 +1481,8 @@ function App() {
 
   if (!selectedProject) {
     return (
-      <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[padding] duration-300 ${panelOpen ? "panel-push" : ""}`}>
+      <div className="flex min-h-screen">
+      <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="mb-6 sm:mb-8">
             <div className="flex items-start sm:items-center justify-between gap-2">
@@ -1984,11 +1985,14 @@ function App() {
           </PanelContent>
         </Panel>
       </div>
+      <PanelSlot />
+      </div>
     )
   }
 
   return (
-    <div className={`min-h-screen bg-neutral-50 dark:bg-neutral-950 p-6 transition-[padding] duration-300 ${panelOpen ? "panel-push" : ""}`}>
+    <div className="flex min-h-screen">
+    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header - Mobile Friendly */}
         <div className="mb-6 space-y-3">
@@ -3088,6 +3092,8 @@ function App() {
           </div>
         </div>
       )}
+    </div>
+    <PanelSlot />
     </div>
   )
 }

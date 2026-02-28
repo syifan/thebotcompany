@@ -2,12 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Panel padding: only on md+ screens, pushes content away from panel */
-@media (min-width: 768px) {
-  .panel-push {
-    padding-right: max(380px, min(35vw, 560px));
-  }
-}
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;

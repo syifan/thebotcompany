@@ -1,6 +1,7 @@
 import * as React from "react"
+import { createPortal } from "react-dom"
 
-// Simple global panel state - no context needed
+// Global panel state
 let _activePanelId = null
 let _renderedId = null
 let _animate = false
@@ -19,15 +20,14 @@ function _register(id, onClose) {
   _closers[id] = onClose
   _activePanelId = id
   _renderedId = id
-  // Animate after a frame
+  _animate = false
+  _notify()
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       _animate = true
       _notify()
     })
   })
-  _animate = false
-  _notify()
 }
 
 function _unregister(id) {
@@ -44,6 +44,9 @@ function _unregister(id) {
     }, 300)
   }
 }
+
+// Ref to the PanelSlot DOM node
+let _slotRef = null
 
 function usePanelOpen() {
   const [, forceUpdate] = React.useState({})
@@ -63,11 +66,16 @@ function usePanelState() {
   return { activePanelId: _activePanelId, renderedId: _renderedId, animate: _animate }
 }
 
+/**
+ * Panel portals its children into the PanelSlot DOM node.
+ */
 function Panel({ open, onClose, children, id: propId }) {
   const idRef = React.useRef(propId || Math.random().toString(36).slice(2))
   const id = idRef.current
   const onCloseRef = React.useRef(onClose)
   onCloseRef.current = onClose
+
+  const { renderedId, animate, activePanelId } = usePanelState()
 
   React.useEffect(() => {
     if (open) {
@@ -81,44 +89,67 @@ function Panel({ open, onClose, children, id: propId }) {
     return () => _unregister(id)
   }, [id])
 
-  const { renderedId, animate, activePanelId } = usePanelState()
-
   const isActive = renderedId === id
   const shouldAnimate = animate && activePanelId === id
 
   if (!isActive) return null
 
-  return (
-    <>
-      {/* Mobile/tablet: full-screen overlay */}
-      <div className="md:hidden">
-        <div className="fixed inset-0 z-50">
-          <div
-            className={`fixed inset-0 bg-black/50 transition-opacity duration-300 ${shouldAnimate ? 'opacity-100' : 'opacity-0'}`}
-            onClick={onClose}
-          />
-          <div
-            className={`fixed inset-0 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
-              shouldAnimate ? 'translate-x-0' : 'translate-x-full'
-            }`}
-          >
-            {children}
-          </div>
-        </div>
-      </div>
-
-      {/* Desktop: fixed right panel */}
-      <div className="hidden md:block">
+  // Mobile: full-screen overlay (rendered in place)
+  const mobileOverlay = (
+    <div className="md:hidden">
+      <div className="fixed inset-0 z-50">
         <div
-          className={`fixed top-0 right-0 bottom-0 z-40 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
+          className={`fixed inset-0 bg-black/50 transition-opacity duration-300 ${shouldAnimate ? 'opacity-100' : 'opacity-0'}`}
+          onClick={onClose}
+        />
+        <div
+          className={`fixed inset-0 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden transition-transform duration-300 ease-in-out ${
             shouldAnimate ? 'translate-x-0' : 'translate-x-full'
           }`}
-          style={{ width: 'min(35vw, 560px)', minWidth: 380 }}
         >
           {children}
         </div>
       </div>
+    </div>
+  )
+
+  // Desktop: portal into PanelSlot
+  const desktopContent = _slotRef ? createPortal(
+    <div className="hidden md:block w-full h-full">
+      {children}
+    </div>,
+    _slotRef
+  ) : null
+
+  return (
+    <>
+      {mobileOverlay}
+      {desktopContent}
     </>
+  )
+}
+
+/**
+ * Place this as a sibling to your main content inside a flex container.
+ * Panel content is portaled here on desktop.
+ */
+function PanelSlot() {
+  const ref = React.useRef(null)
+  const { renderedId, animate, activePanelId } = usePanelState()
+  const shouldAnimate = animate && activePanelId === renderedId
+
+  React.useEffect(() => {
+    _slotRef = ref.current
+    return () => { _slotRef = null }
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className={`hidden md:block shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-y-auto overflow-x-hidden h-screen sticky top-0 transition-[width] duration-300 ease-in-out ${
+        renderedId && shouldAnimate ? 'w-[min(35vw,560px)] min-w-[380px]' : 'w-0'
+      }`}
+    />
   )
 }
 
@@ -141,9 +172,8 @@ function PanelContent({ children }) {
   return <div className="p-4">{children}</div>
 }
 
-// PanelProvider is now a no-op wrapper for backward compat
 function PanelProvider({ children }) {
   return children
 }
 
-export { PanelProvider, Panel, PanelHeader, PanelContent, usePanelOpen }
+export { PanelProvider, Panel, PanelSlot, PanelHeader, PanelContent, usePanelOpen }
