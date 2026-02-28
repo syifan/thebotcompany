@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, SkipForward, RotateCcw, Square, Save, MessageSquare, X, GitPullRequest, CircleDot, Clock, User, UserCheck, Folder, Plus, Trash2, ArrowLeft, Github, DollarSign, Sun, Moon, Monitor, Filter, Info, ChevronDown, Lock, Unlock, Bell, BellOff } from 'lucide-react'
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
+import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
 import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
@@ -1097,9 +1098,9 @@ function App() {
   const notifPermission = notifSupported ? Notification.permission : 'default'
 
   const settingsModal = (
-    <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-      <ModalHeader>Settings</ModalHeader>
-      <ModalContent>
+    <Panel open={settingsOpen} onClose={() => setSettingsOpen(false)}>
+      <PanelHeader onClose={() => setSettingsOpen(false)}>Settings</PanelHeader>
+      <PanelContent>
         <div className="pb-5">
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Display</h3>
           <div className="flex items-center justify-between py-2">
@@ -1255,8 +1256,8 @@ function App() {
             </div>
           </div>
         </div>
-      </ModalContent>
-    </Modal>
+      </PanelContent>
+    </Panel>
   )
 
   // Project settings: per-project overrides stored in localStorage
@@ -1281,9 +1282,9 @@ function App() {
   const notifUseGlobal = projNotifSettings.useGlobal !== false
 
   const projectSettingsModal = selectedProject && (
-    <Modal open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)}>
-      <ModalHeader>Project Settings</ModalHeader>
-      <ModalContent>
+    <Panel open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)}>
+      <PanelHeader onClose={() => setProjectSettingsOpen(false)}>Project Settings</PanelHeader>
+      <PanelContent>
         {/* Notifications section */}
         <div className="pb-5">
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
@@ -1473,8 +1474,8 @@ function App() {
             </div>
           </div>
         )}
-      </ModalContent>
-    </Modal>
+      </PanelContent>
+    </Panel>
   )
 
   if (!selectedProject) {
@@ -1959,8 +1960,8 @@ function App() {
 
         {settingsModal}
         {/* Notification Center (project list) */}
-        <Modal open={notifCenter} onClose={() => setNotifCenter(false)}>
-          <ModalHeader>
+        <Panel open={notifCenter} onClose={() => setNotifCenter(false)}>
+          <PanelHeader onClose={() => setNotifCenter(false)}>
             <div className="flex items-center justify-between w-full">
               <span>Notifications</span>
               {unreadCount > 0 && (
@@ -1969,8 +1970,8 @@ function App() {
                 </button>
               )}
             </div>
-          </ModalHeader>
-          <ModalContent>
+          </PanelHeader>
+          <PanelContent>
             <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
               {notifList.length === 0 ? (
                 <div className="p-8 text-center text-neutral-400 dark:text-neutral-500">
@@ -1979,8 +1980,8 @@ function App() {
                 </div>
               ) : notifList.map(n => <NotifItem key={n.id} n={n} />)}
             </div>
-          </ModalContent>
-        </Modal>
+          </PanelContent>
+        </Panel>
       </div>
     )
   }
@@ -2543,12 +2544,12 @@ function App() {
       </div>
 
       {/* Agent Details Modal */}
-      <Modal open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
-        <ModalHeader onClose={() => setAgentModal({ ...agentModal, open: false })}>
+      <Panel open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
+        <PanelHeader onClose={() => setAgentModal({ ...agentModal, open: false })}>
           <span className="capitalize">{agentModal.agent}</span>
           {agentModal.data?.isManager && <Badge variant="secondary" className="ml-2">Manager</Badge>}
-        </ModalHeader>
-        <ModalContent>
+        </PanelHeader>
+        <PanelContent>
           {agentModal.loading ? (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
@@ -2623,8 +2624,8 @@ function App() {
           ) : (
             <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load agent details</p>
           )}
-        </ModalContent>
-      </Modal>
+        </PanelContent>
+      </Panel>
 
       {/* Agent Settings Modal */}
       <Modal open={agentSettingsModal.open} onClose={() => setAgentSettingsModal({ ...agentSettingsModal, open: false })}>
@@ -2883,11 +2884,11 @@ function App() {
       </Modal>
 
       {/* Issue Detail Modal */}
-      <Modal open={issueModal.open} onClose={() => setIssueModal({ ...issueModal, open: false })}>
-        <ModalHeader onClose={() => setIssueModal({ ...issueModal, open: false })}>
+      <Panel open={issueModal.open} onClose={() => setIssueModal({ ...issueModal, open: false })}>
+        <PanelHeader onClose={() => setIssueModal({ ...issueModal, open: false })}>
           {issueModal.issue ? `#${issueModal.issue.id} ${issueModal.issue.title}` : 'Issue'}
-        </ModalHeader>
-        <ModalContent>
+        </PanelHeader>
+        <PanelContent>
           {issueModal.loading ? (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
@@ -3022,8 +3023,8 @@ function App() {
           ) : (
             <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load issue</p>
           )}
-        </ModalContent>
-      </Modal>
+        </PanelContent>
+      </Panel>
 
       {/* Login Modal */}
       <Modal open={loginModal} onClose={() => { setLoginModal(false); setLoginInput('') }}>
