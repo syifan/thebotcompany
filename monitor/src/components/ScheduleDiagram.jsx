@@ -207,9 +207,17 @@ export function stripScheduleBlock(text) {
   return text.replace(/<!--\s*SCHEDULE\s*-->\s*[\[{][\s\S]*?[\]}]\s*<!--\s*\/SCHEDULE\s*-->/, '').trim()
 }
 
+export function parseTimingBlock(text) {
+  if (!text) return null
+  const match = text.match(/^>\s*⏱\s*Started:\s*(.+?)\s*\|\s*Ended:\s*(.+?)\s*\|\s*Duration:\s*(.+)$/m)
+  if (!match) return null
+  return { started: match[1].trim(), ended: match[2].trim(), duration: match[3].trim() }
+}
+
 export function stripAllMetaBlocks(text) {
   if (!text) return text
   return text
+    .replace(/^>\s*⏱\s*Started:.*$/m, '')
     .replace(/<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/g, '')
     .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
     .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')

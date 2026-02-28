@@ -6,7 +6,7 @@ import { Activity, Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play
 import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
 import { PanelProvider, Panel, PanelSlot, PanelHeader, PanelContent, usePanelOpen } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
-import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
+import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, parseTimingBlock, MetaBlockBadges, getAgentTask } from '@/components/ScheduleDiagram'
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -2430,7 +2430,15 @@ function App() {
                             </AvatarFallback>
                           </Avatar>
                           <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
-                          <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
+                          {(() => { const t = parseTimingBlock(comment.body); return t ? (
+                            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap flex items-center gap-1">
+                              <span>{t.ended}</span>
+                              <span className="text-neutral-300 dark:text-neutral-600">·</span>
+                              <span>{t.duration}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
+                          ); })()}
                         </div>
                         <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2 break-words leading-relaxed pl-7">
                           {stripAllMetaBlocks(comment.body).slice(0, 150)}
@@ -3030,14 +3038,22 @@ function App() {
               <div key={comment.id}>
                 {idx > 0 && <Separator className="my-4" />}
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <Avatar className="w-6 h-6 sm:w-8 sm:h-8">
                       <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
                         {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
-                    <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
+                    {(() => { const t = parseTimingBlock(comment.body); return t ? (
+                      <span className="text-xs text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5">
+                        <span>{t.ended}</span>
+                        <span className="text-neutral-300 dark:text-neutral-600">·</span>
+                        <span>{t.duration}</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
+                    ); })()}
                   </div>
                   <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
