@@ -2477,7 +2477,7 @@ function App() {
                             <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
                           ); })()}
                         </div>
-                        <div className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-1 break-words leading-relaxed pl-7">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400 break-words leading-relaxed pl-7">
                           <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} />
                         </div>
                       </div>
