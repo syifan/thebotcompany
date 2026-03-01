@@ -168,8 +168,8 @@ function PanelHeader({ children, onClose }) {
   )
 }
 
-function PanelContent({ children }) {
-  return <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden">{children}</div>
+function PanelContent({ children, onScroll }) {
+  return <div className="p-4 flex-1 overflow-y-auto overflow-x-hidden" onScroll={onScroll}>{children}</div>
 }
 
 function PanelProvider({ children }) {

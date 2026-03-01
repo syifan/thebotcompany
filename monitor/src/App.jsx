@@ -2452,9 +2452,12 @@ function App() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0 overflow-hidden">
-                  <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto overflow-x-hidden h-full">
+                  <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto overflow-x-hidden h-full" onScroll={(e) => {
+                    const { scrollTop, scrollHeight, clientHeight } = e.target
+                    if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
+                  }}>
                     {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">No reports</p>}
-                    {comments.slice(0, 8).map((comment) => (
+                    {comments.map((comment) => (
                       <div
                         key={comment.id}
                         className="py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors -mx-1 px-1 rounded"
@@ -2482,10 +2485,10 @@ function App() {
                         </div>
                       </div>
                     ))}
-                    {comments.length > 8 && (
-                      <button onClick={() => setReportsPanelOpen(true)} className="w-full text-center text-xs text-blue-500 hover:text-blue-700 py-2">
-                        View all {comments.length} reports →
-                      </button>
+                    {commentsLoading && (
+                      <div className="flex items-center justify-center py-3 text-neutral-400">
+                        <span className="text-xs">Loading...</span>
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -3065,11 +3068,11 @@ function App() {
             <span className="text-sm font-normal text-neutral-400 ml-auto">{comments.length} loaded</span>
           </span>
         </PanelHeader>
-        <PanelContent>
-          <div ref={reportsScrollRef} className="overflow-x-hidden" onScroll={(e) => {
+        <PanelContent onScroll={(e) => {
             const { scrollTop, scrollHeight, clientHeight } = e.target
             if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
           }}>
+          <div ref={reportsScrollRef}>
             {comments.length === 0 && !commentsLoading && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-8">No reports found</p>}
             {comments.map((comment, idx) => (
               <div key={comment.id}>
