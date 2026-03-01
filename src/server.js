@@ -36,6 +36,8 @@ function detectTokenProvider(token) {
   if (token.startsWith('sk-ant-')) return 'anthropic';
   if (token.startsWith('sk-proj-') || token.startsWith('sk-')) return 'openai';
   if (token.startsWith('AIzaSy')) return 'google';
+  // MiniMax keys cannot be reliably auto-detected by prefix.
+  // Use explicit provider field in project token settings.
   return 'unknown';
 }
 
@@ -55,6 +57,11 @@ const MODEL_TIERS = {
     high:  { model: 'gemini-3.1-pro-preview', reasoningEffort: 'high' },
     mid:   { model: 'gemini-3.1-pro-preview', reasoningEffort: 'medium' },
     low:   { model: 'gemini-3-flash-preview' },
+  },
+  minimax: {
+    high:  { model: 'minimax/MiniMax-M2.5' },
+    mid:   { model: 'minimax/MiniMax-M2.5' },
+    low:   { model: 'minimax/MiniMax-M2.5' },
   },
 };
 
@@ -1631,9 +1638,11 @@ class ProjectRunner {
 
     // Resolve token: project-specific > global tokens by provider
     const projectToken = config.setupToken;
-    // Detect provider: project token first, then prefer Anthropic if available
+    // Detect provider: explicit config > token auto-detect > env fallback
     let provider;
-    if (projectToken) {
+    if (projectToken && config.setupTokenProvider) {
+      provider = config.setupTokenProvider;
+    } else if (projectToken) {
       provider = detectProviderFromToken(projectToken);
     } else if (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) {
       provider = 'anthropic';
@@ -1641,6 +1650,8 @@ class ProjectRunner {
       provider = 'openai';
     } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
       provider = 'google';
+    } else if (process.env.MINIMAX_API_KEY) {
+      provider = 'minimax';
     } else {
       provider = 'anthropic';
     }
@@ -1652,6 +1663,7 @@ class ProjectRunner {
 
     const isOpenAIModel = agentModel.startsWith('openai/') || agentModel.startsWith('gpt-') || agentModel.startsWith('o3') || agentModel.startsWith('o4-');
     const isGoogleModel = agentModel.startsWith('google/') || agentModel.startsWith('gemini-');
+    const isMiniMaxModel = agentModel.startsWith('minimax/') || agentModel.startsWith('MiniMax-');
 
     let resolvedToken;
     if (projectToken) {
@@ -1660,6 +1672,8 @@ class ProjectRunner {
       resolvedToken = process.env.OPENAI_API_KEY || null;
     } else if (isGoogleModel) {
       resolvedToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+    } else if (isMiniMaxModel) {
+      resolvedToken = process.env.MINIMAX_API_KEY || null;
     } else {
       resolvedToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
     }
@@ -2440,7 +2454,7 @@ const server = http.createServer(async (req, res) => {
       const safeConfig = { ...config };
       delete safeConfig.setupToken;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      const detectedProvider = projectToken ? detectProviderFromToken(projectToken) : (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'anthropic';
+      const detectedProvider = config.setupTokenProvider || (projectToken ? detectProviderFromToken(projectToken) : null) || (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : 'anthropic');
       res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken, projectTokenPreview: projectToken ? maskToken(projectToken) : null, provider: detectedProvider, tiers: MODEL_TIERS[detectedProvider] || {} }));
       return;
     }
@@ -2452,12 +2466,17 @@ const server = http.createServer(async (req, res) => {
       req.on('data', c => body += c);
       req.on('end', () => {
         try {
-          const { token } = JSON.parse(body);
+          const { token, provider: explicitProvider } = JSON.parse(body);
           const config = runner.loadConfig();
           if (token) {
             config.setupToken = token;
           } else {
             delete config.setupToken;
+          }
+          if (explicitProvider) {
+            config.setupTokenProvider = explicitProvider;
+          } else if (!token) {
+            delete config.setupTokenProvider;
           }
           // Write back preserving existing config structure
           const configPath = runner.configPath;
@@ -2466,6 +2485,11 @@ const server = http.createServer(async (req, res) => {
             existing.setupToken = token;
           } else {
             delete existing.setupToken;
+          }
+          if (explicitProvider) {
+            existing.setupTokenProvider = explicitProvider;
+          } else if (!token) {
+            delete existing.setupTokenProvider;
           }
           fs.writeFileSync(configPath, yaml.dump(existing));
           res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -73,7 +73,9 @@ function App() {
   const [config, setConfig] = useState({ config: null, raw: '' })
   const [hasProjectToken, setHasProjectToken] = useState(false)
   const [projectTokenPreview, setProjectTokenPreview] = useState(null)
+  const [projectTokenProviderLabel, setProjectTokenProviderLabel] = useState(null)
   const [projectTokenInput, setProjectTokenInput] = useState('')
+  const [projectTokenProvider, setProjectTokenProvider] = useState('')
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
@@ -399,6 +401,7 @@ function App() {
       setConfig(configData)
       setHasProjectToken(!!configData.hasProjectToken)
       setProjectTokenPreview(configData.projectTokenPreview || null)
+      setProjectTokenProviderLabel(configData.provider || null)
       if (!configDirtyRef.current && configData.config) {
         setConfigForm({
           cycleIntervalMs: configData.config.cycleIntervalMs ?? 1800000,
@@ -1164,13 +1167,13 @@ function App() {
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">API Keys</h3>
           <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-3">Paste any API key — provider is auto-detected from the key prefix.</p>
           <div className="py-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="password"
                 placeholder="Paste API key (Anthropic, OpenAI, or Google)..."
                 value={globalTokenInput}
                 onChange={e => setGlobalTokenInput(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
               />
               {globalTokenInput && detectProvider(globalTokenInput) && (
                 <span className="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">✓ {detectProvider(globalTokenInput)}</span>
@@ -1327,12 +1330,12 @@ function App() {
           <div className="py-2 space-y-3">
             {/* Current key status */}
             {hasProjectToken ? (
-              <div className="flex items-center justify-between p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                    {detectProvider(projectTokenPreview) || 'API Key'}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shrink-0">
+                    {projectTokenProviderLabel ? projectTokenProviderLabel.charAt(0).toUpperCase() + projectTokenProviderLabel.slice(1) : detectProvider(projectTokenPreview) || 'API Key'}
                   </span>
-                  <code className="text-xs text-neutral-500 dark:text-neutral-400">{projectTokenPreview}</code>
+                  <code className="text-xs text-neutral-500 dark:text-neutral-400 truncate">{projectTokenPreview}</code>
                 </div>
                 <button
                   onClick={async () => {
@@ -1346,6 +1349,7 @@ function App() {
                       if (res.ok) {
                         setHasProjectToken(false)
                         setProjectTokenPreview(null)
+                        setProjectTokenProviderLabel(null)
                         setToast('Project token removed')
                       }
                     } catch {}
@@ -1363,44 +1367,55 @@ function App() {
             )}
             {/* Input for new key */}
             <div className="space-y-2">
-              <input
-                type="password"
-                placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key (auto-detects provider)...'}
-                value={projectTokenInput}
-                onChange={e => setProjectTokenInput(e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-              />
-              {projectTokenInput && (
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs ${detectProvider(projectTokenInput) ? 'text-green-600 dark:text-green-400' : 'text-amber-500'}`}>
-                    {detectProvider(projectTokenInput) ? `✓ Detected: ${detectProvider(projectTokenInput)}` : '? Unknown provider'}
-                  </span>
-                  <button
-                    onClick={async () => {
-                      setProjectTokenSaving(true)
-                      try {
-                        const res = await authFetch(projectApi('/token'), {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ token: projectTokenInput })
-                        })
-                        if (res.ok) {
-                          const d = await res.json()
-                          setHasProjectToken(d.hasProjectToken)
-                          setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
-                          setProjectTokenInput('')
-                          setToast(`${detectProvider(projectTokenInput) || 'API'} key saved`)
-                        }
-                      } catch {}
-                      setProjectTokenSaving(false)
-                    }}
-                    disabled={projectTokenSaving}
-                    className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-                  >
-                    {projectTokenSaving ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={projectTokenProvider}
+                  onChange={e => setProjectTokenProvider(e.target.value)}
+                  className="w-full sm:w-40 shrink-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                >
+                  <option value="">Provider...</option>
+                  <option value="anthropic">Anthropic (API Key)</option>
+                  <option value="anthropic-oauth">Anthropic (OAuth)</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="google">Google (Gemini)</option>
+                  <option value="minimax">MiniMax</option>
+                </select>
+                <input
+                  type="password"
+                  placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key...'}
+                  value={projectTokenInput}
+                  onChange={e => setProjectTokenInput(e.target.value)}
+                  className="flex-1 min-w-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+                />
+                <button
+                  onClick={async () => {
+                    if (!projectTokenProvider || !projectTokenInput) return
+                    setProjectTokenSaving(true)
+                    try {
+                      const providerValue = projectTokenProvider === 'anthropic-oauth' ? 'anthropic' : projectTokenProvider
+                      const res = await authFetch(projectApi('/token'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: projectTokenInput, provider: providerValue })
+                      })
+                      if (res.ok) {
+                        const d = await res.json()
+                        setHasProjectToken(d.hasProjectToken)
+                        setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
+                        setProjectTokenProviderLabel(providerValue)
+                        setProjectTokenInput('')
+                        setProjectTokenProvider('')
+                        setToast(`${providerValue.charAt(0).toUpperCase() + providerValue.slice(1)} key saved`)
+                      }
+                    } catch {}
+                    setProjectTokenSaving(false)
+                  }}
+                  disabled={projectTokenSaving || !projectTokenProvider || !projectTokenInput}
+                  className="px-3 py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 shrink-0"
+                >
+                  {projectTokenSaving ? '...' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
