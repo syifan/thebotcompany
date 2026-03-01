@@ -2754,42 +2754,51 @@ function App() {
               </div>
 
               {/* Remove roadmap.md option */}
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={bootstrapModal.removeRoadmap}
-                    onChange={e => setBootstrapModal(prev => ({ ...prev, removeRoadmap: e.target.checked }))}
-                    className="rounded border-neutral-300 dark:border-neutral-600"
-                  />
-                  <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Remove roadmap.md</span>
-                </label>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 ml-6">
-                  {bootstrapModal.preview.hasRoadmap ? 'Delete roadmap.md from the project repo and push the change' : 'No roadmap.md found — will be skipped'}
-                </p>
+              {/* Remove roadmap.md — toggle switch */}
+              <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
+                <div>
+                  <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Remove roadmap.md</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                    {bootstrapModal.preview.hasRoadmap ? 'Delete from repo and push' : 'No roadmap.md found — will be skipped'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={bootstrapModal.removeRoadmap}
+                  onClick={() => setBootstrapModal(prev => ({ ...prev, removeRoadmap: !prev.removeRoadmap }))}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${bootstrapModal.removeRoadmap ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${bootstrapModal.removeRoadmap ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
               </div>
 
-              {/* Spec.md options */}
+              {/* Spec.md — segmented control */}
               <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded space-y-3">
                 <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">spec.md</p>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="specMode" value="keep" checked={bootstrapModal.specMode === 'keep'} onChange={() => setBootstrapModal(prev => ({ ...prev, specMode: 'keep' }))} />
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Keep existing spec</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="specMode" value="edit" checked={bootstrapModal.specMode === 'edit'} onChange={() => setBootstrapModal(prev => ({ ...prev, specMode: 'edit', specContent: prev.specContent || prev.preview?.specContent || '' }))} />
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Edit spec</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="specMode" value="new" checked={bootstrapModal.specMode === 'new'} onChange={() => setBootstrapModal(prev => ({ ...prev, specMode: 'new' }))} />
-                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Write new spec from scratch</span>
-                  </label>
+                <div className="flex rounded-lg bg-neutral-200 dark:bg-neutral-700 p-0.5">
+                  {[{ value: 'keep', label: 'Keep' }, { value: 'edit', label: 'Edit' }, { value: 'new', label: 'Rewrite' }].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setBootstrapModal(prev => ({
+                        ...prev,
+                        specMode: opt.value,
+                        ...(opt.value === 'edit' ? { specContent: prev.specContent || prev.preview?.specContent || '' } : {})
+                      }))}
+                      className={`flex-1 text-sm font-medium py-1.5 px-3 rounded-md transition-all duration-150 ${
+                        bootstrapModal.specMode === opt.value
+                          ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 shadow-sm'
+                          : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
 
                 {bootstrapModal.specMode === 'edit' && (
                   <textarea
-                    className="w-full h-48 p-2 text-sm font-mono border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y"
+                    className="w-full h-48 p-2 text-sm font-mono border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
                     value={bootstrapModal.specContent}
                     onChange={e => setBootstrapModal(prev => ({ ...prev, specContent: e.target.value }))}
                     placeholder="Edit your spec.md content..."
@@ -2801,7 +2810,7 @@ function App() {
                     <div>
                       <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">What to build</label>
                       <textarea
-                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y"
+                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
                         value={bootstrapModal.whatToBuild}
                         onChange={e => setBootstrapModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
                         placeholder="Describe what this project should build..."
@@ -2810,7 +2819,7 @@ function App() {
                     <div>
                       <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">Success criteria</label>
                       <textarea
-                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y"
+                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
                         value={bootstrapModal.successCriteria}
                         onChange={e => setBootstrapModal(prev => ({ ...prev, successCriteria: e.target.value }))}
                         placeholder="How will we know the project is done?"
