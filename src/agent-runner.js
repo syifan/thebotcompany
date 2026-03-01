@@ -264,6 +264,20 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       runtime?.unregisterProcess?.(proc);
       resolve(`Error executing command: ${err.message}`);
     });
+
+    // Guard against grandchild processes keeping pipe FDs open after the main
+    // bash process exits. Node.js won't emit 'close' until every inherited copy
+    // of the pipe write-end is closed, so if any grandchild lingers the Promise
+    // would hang forever — even after SIGKILL on the bash process itself.
+    // Destroying the streams after a short drain period forces 'close' to fire.
+    proc.on('exit', () => {
+      setTimeout(() => {
+        if (!settled) {
+          try { proc.stdout.destroy(); } catch {}
+          try { proc.stderr.destroy(); } catch {}
+        }
+      }, 500);
+    });
   });
 }
 
