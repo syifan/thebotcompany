@@ -150,7 +150,7 @@ function App() {
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
-  const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false })
+  const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
   const [authPassword, setAuthPassword] = useState(() => localStorage.getItem('tbc_password') || '')
   const [isWriteMode, setIsWriteMode] = useState(false)
   const [loginModal, setLoginModal] = useState(false)
@@ -589,13 +589,13 @@ function App() {
 
   const openBootstrapModal = async () => {
     if (!selectedProject) return
-    setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false })
+    setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
     try {
       const res = await authFetch(projectApi('/bootstrap'))
       const data = await res.json()
-      setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false })
+      setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false, removeRoadmap: !!data.hasRoadmap, specMode: 'keep', specContent: data.specContent || '', whatToBuild: '', successCriteria: '' })
     } catch (err) {
-      setBootstrapModal({ open: true, loading: false, preview: null, error: err.message, executing: false })
+      setBootstrapModal({ open: true, loading: false, preview: null, error: err.message, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
     }
   }
 
@@ -603,10 +603,23 @@ function App() {
     if (!selectedProject) return
     setBootstrapModal(prev => ({ ...prev, executing: true, error: null }))
     try {
-      const res = await authFetch(projectApi('/bootstrap'), { method: 'POST' })
+      const body = {
+        removeRoadmap: bootstrapModal.removeRoadmap,
+        spec: {
+          mode: bootstrapModal.specMode,
+          content: bootstrapModal.specContent,
+          whatToBuild: bootstrapModal.whatToBuild,
+          successCriteria: bootstrapModal.successCriteria,
+        }
+      }
+      const res = await authFetch(projectApi('/bootstrap'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false })
+      setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
       await fetchGlobalStatus()
       await fetchProjectData()
       fetchComments(1, selectedAgent, false)
@@ -2690,12 +2703,12 @@ function App() {
         </ModalContent>
       </Modal>
 
-      {/* Bootstrap Modal */}
-      <Modal open={bootstrapModal.open} onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
-        <ModalHeader onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
+      {/* Bootstrap Panel */}
+      <Panel id="bootstrap" open={bootstrapModal.open} onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
+        <PanelHeader onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
           Bootstrap Workspace
-        </ModalHeader>
-        <ModalContent>
+        </PanelHeader>
+        <PanelContent>
           {bootstrapModal.loading ? (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
@@ -2742,6 +2755,73 @@ function App() {
                 </ul>
               </div>
 
+              {/* Remove roadmap.md option */}
+              {bootstrapModal.preview.hasRoadmap && (
+                <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bootstrapModal.removeRoadmap}
+                      onChange={e => setBootstrapModal(prev => ({ ...prev, removeRoadmap: e.target.checked }))}
+                      className="rounded border-neutral-300 dark:border-neutral-600"
+                    />
+                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Remove roadmap.md</span>
+                  </label>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 ml-6">Delete roadmap.md from the project repo and push the change</p>
+                </div>
+              )}
+
+              {/* Spec.md options */}
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded space-y-3">
+                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">spec.md</p>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="specMode" value="keep" checked={bootstrapModal.specMode === 'keep'} onChange={() => setBootstrapModal(prev => ({ ...prev, specMode: 'keep' }))} />
+                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Keep existing spec</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="specMode" value="edit" checked={bootstrapModal.specMode === 'edit'} onChange={() => setBootstrapModal(prev => ({ ...prev, specMode: 'edit', specContent: prev.specContent || prev.preview?.specContent || '' }))} />
+                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Edit spec</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="specMode" value="new" checked={bootstrapModal.specMode === 'new'} onChange={() => setBootstrapModal(prev => ({ ...prev, specMode: 'new' }))} />
+                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Write new spec from scratch</span>
+                  </label>
+                </div>
+
+                {bootstrapModal.specMode === 'edit' && (
+                  <textarea
+                    className="w-full h-48 p-2 text-sm font-mono border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y"
+                    value={bootstrapModal.specContent}
+                    onChange={e => setBootstrapModal(prev => ({ ...prev, specContent: e.target.value }))}
+                    placeholder="Edit your spec.md content..."
+                  />
+                )}
+
+                {bootstrapModal.specMode === 'new' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">What to build</label>
+                      <textarea
+                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y"
+                        value={bootstrapModal.whatToBuild}
+                        onChange={e => setBootstrapModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
+                        placeholder="Describe what this project should build..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">Success criteria</label>
+                      <textarea
+                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y"
+                        value={bootstrapModal.successCriteria}
+                        onChange={e => setBootstrapModal(prev => ({ ...prev, successCriteria: e.target.value }))}
+                        placeholder="How will we know the project is done?"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {bootstrapModal.error && (
                 <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm">
                   {bootstrapModal.error}
@@ -2775,8 +2855,8 @@ function App() {
               </div>
             </div>
           )}
-        </ModalContent>
-      </Modal>
+        </PanelContent>
+      </Panel>
 
       {/* Budget Info Modal */}
       <Modal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)}>

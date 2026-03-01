@@ -857,10 +857,15 @@ class ProjectRunner {
     if (workspaceExists) {
       workspaceContents = fs.readdirSync(this.agentDir);
     }
-    return { available: true, workspaceEmpty: workspaceContents.length === 0, repo: this.repo };
+    // Read spec.md and check roadmap.md from project repo
+    let specContent = null;
+    const specPath = path.join(this.path, 'spec.md');
+    try { specContent = fs.readFileSync(specPath, 'utf-8'); } catch {}
+    const hasRoadmap = fs.existsSync(path.join(this.path, 'roadmap.md'));
+    return { available: true, workspaceEmpty: workspaceContents.length === 0, repo: this.repo, specContent, hasRoadmap };
   }
 
-  bootstrap() {
+  bootstrap(options = {}) {
     // 0. Kill any running agent and pause the project
     if (this.currentAgentProcess) {
       try { this.currentAgentProcess.kill('SIGKILL'); } catch {}
@@ -899,6 +904,42 @@ class ProjectRunner {
       pauseReason: 'Bootstrapped — resume when ready',
     });
     log(`Reset cycle count, project paused`, this.id);
+
+    // 3. Remove roadmap.md if requested
+    if (options.removeRoadmap) {
+      const roadmapPath = path.join(this.path, 'roadmap.md');
+      if (fs.existsSync(roadmapPath)) {
+        try {
+          fs.unlinkSync(roadmapPath);
+          execSync('git add roadmap.md && git commit -m "chore: remove roadmap.md (bootstrap)" && git push', { cwd: this.path, stdio: 'pipe' });
+          log(`Removed roadmap.md and pushed`, this.id);
+        } catch (e) {
+          log(`Warning: failed to remove roadmap.md: ${e.message}`, this.id);
+        }
+      }
+    }
+
+    // 4. Update spec.md if requested
+    if (options.spec && options.spec.mode !== 'keep') {
+      const specPath = path.join(this.path, 'spec.md');
+      let newContent = '';
+      if (options.spec.mode === 'edit') {
+        newContent = options.spec.content || '';
+      } else if (options.spec.mode === 'new') {
+        const what = (options.spec.whatToBuild || '').trim();
+        const criteria = (options.spec.successCriteria || '').trim();
+        newContent = `# Project Spec\n\n## What to Build\n\n${what}\n\n## Success Criteria\n\n${criteria}\n`;
+      }
+      if (newContent) {
+        try {
+          fs.writeFileSync(specPath, newContent);
+          execSync('git add spec.md && git commit -m "chore: update spec.md (bootstrap)" && git push', { cwd: this.path, stdio: 'pipe' });
+          log(`Updated spec.md and pushed`, this.id);
+        } catch (e) {
+          log(`Warning: failed to update spec.md: ${e.message}`, this.id);
+        }
+      }
+    }
 
     return { bootstrapped: true };
   }
@@ -2839,15 +2880,20 @@ const server = http.createServer(async (req, res) => {
     // POST /api/projects/:id/bootstrap - execute bootstrap
     if (req.method === 'POST' && subPath === 'bootstrap') {
       if (!requireWrite(req, res)) return;
-      try {
-        fs.mkdirSync(runner.agentDir, { recursive: true });
-        const result = runner.bootstrap();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, ...result }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const options = body ? JSON.parse(body) : {};
+          fs.mkdirSync(runner.agentDir, { recursive: true });
+          const result = runner.bootstrap(options);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, ...result }));
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
       return;
     }
 
