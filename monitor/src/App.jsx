@@ -1233,7 +1233,7 @@ function App() {
         </div>
         <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">API Keys</h3>
+            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Models</h3>
             <button
               onClick={() => setShowApiKeyHelp(true)}
               className="text-neutral-400 hover:text-blue-500 dark:text-neutral-500 dark:hover:text-blue-400 transition-colors"
@@ -1401,9 +1401,18 @@ function App() {
           </div>
         </div>
 
-        {/* Authentication section */}
+        {/* Models section */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
-          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Authentication</h3>
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Models</h3>
+            <button
+              onClick={() => setShowApiKeyHelp(true)}
+              className="text-neutral-400 hover:text-blue-500 dark:text-neutral-500 dark:hover:text-blue-400 transition-colors"
+              title="How to get API keys"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          </div>
           <div className="py-2 space-y-3">
             {/* Current key status */}
             {hasProjectToken ? (
@@ -3049,7 +3058,7 @@ function App() {
       {/* API Key Help Modal */}
       <Modal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)}>
         <ModalHeader onClose={() => setShowApiKeyHelp(false)}>
-          How to Get API Keys
+          How to Get Model API Keys
         </ModalHeader>
         <ModalContent>
           <div className="space-y-5 text-sm text-neutral-700 dark:text-neutral-300">
