@@ -3241,10 +3241,9 @@ function App() {
                 <li>Go to the <strong>Models</strong> section in global or project settings</li>
                 <li>Click <strong>Login</strong> next to "OpenAI Codex (ChatGPT)"</li>
                 <li>A browser tab opens — sign in with your ChatGPT account</li>
-                <li>The callback redirects to <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">localhost:1455</code> to complete auth</li>
                 <li>Once connected, select <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">openai-codex</code> models in your project</li>
               </ol>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Requires browser access to the TBC host machine (localhost callback).</p>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">You must open the dashboard from the machine running TBC. Remote access requires SSH port forwarding (<code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">ssh -L 1455:localhost:1455 host</code>).</p>
             </div>
 
             <div>
