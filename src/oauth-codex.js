@@ -35,6 +35,8 @@ function post(hostname, urlPath, body) {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Content-Length': Buffer.byteLength(data),
+        'User-Agent': 'TheBotCompany/1.4.0',
+        'Accept': 'application/json',
       },
     }, (res) => {
       let buf = '';
