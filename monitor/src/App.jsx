@@ -3058,27 +3058,50 @@ function App() {
       {/* API Key Help Modal */}
       <Modal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)}>
         <ModalHeader onClose={() => setShowApiKeyHelp(false)}>
-          How to Get Model API Keys
+          Supported Model Providers
         </ModalHeader>
         <ModalContent>
           <div className="space-y-5 text-sm text-neutral-700 dark:text-neutral-300">
             <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Anthropic (Claude)</h3>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Anthropic — API Key</h3>
               <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
                 <li>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">console.anthropic.com</a></li>
                 <li>Create an account or sign in</li>
                 <li>Navigate to the API Keys section</li>
                 <li>Create a new API key (starts with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">sk-ant-</code>)</li>
               </ol>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>Anthropic (API Key)</strong> as the provider when saving.</p>
             </div>
 
             <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">OpenAI</h3>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Anthropic — Claude OAuth</h3>
+              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
+                <li>Obtain an OAuth token from a Claude Pro/Max subscription</li>
+                <li>The token starts with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">sk-ant-oat-</code></li>
+              </ol>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>Anthropic (OAuth)</strong> as the provider when saving.</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">OpenAI — API Key</h3>
               <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
                 <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">platform.openai.com/api-keys</a></li>
                 <li>Create an account or sign in</li>
                 <li>Create a new API key (starts with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">sk-</code>)</li>
               </ol>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>OpenAI</strong> as the provider when saving.</p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">OpenAI Codex — ChatGPT Subscription</h3>
+              <p className="text-neutral-600 dark:text-neutral-400 mb-1">Use your ChatGPT Plus or Pro subscription instead of paying per-token API costs.</p>
+              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
+                <li>Select <strong>OpenAI Codex (OAuth)</strong> as the provider in project settings</li>
+                <li>Call <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">POST /api/openai-codex/login</code> to start the OAuth device flow</li>
+                <li>Open the verification URL in your browser and sign in with your ChatGPT account</li>
+                <li>TBC automatically stores and refreshes the token — no API key needed</li>
+              </ol>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">No key to paste — authentication is handled via browser OAuth flow.</p>
             </div>
 
             <div>
@@ -3086,43 +3109,27 @@ function App() {
               <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
                 <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">aistudio.google.com/apikey</a></li>
                 <li>Sign in with your Google account</li>
-                <li>Create an API key (starts with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">AIzaSy</code>)</li>
+                <li>Create an API key</li>
               </ol>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>Google (Gemini)</strong> as the provider when saving.</p>
             </div>
 
             <div>
               <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">MiniMax</h3>
               <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Go to <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">platform.minimaxi.com</a></li>
-                <li>Create an account and navigate to API Keys</li>
-                <li>Generate a new key</li>
+                <li>Global platform: <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">platform.minimaxi.com</a></li>
+                <li>China platform: <a href="https://platform.minimaxi.io/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">platform.minimaxi.io</a></li>
+                <li>Create an account, navigate to API Keys, and generate a new key</li>
               </ol>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">OpenAI Codex (ChatGPT Subscription)</h3>
-              <ul className="list-disc list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>No API key needed — uses your ChatGPT Plus/Pro subscription via OAuth</li>
-                <li>Use the login endpoint or set provider to <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">openai-codex</code> in project settings</li>
-                <li>Authenticate via browser when prompted</li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">OpenRouter</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Go to <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">openrouter.ai/keys</a></li>
-                <li>Create an account</li>
-                <li>Generate an API key</li>
-              </ol>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>MiniMax</strong> as the provider when saving.</p>
             </div>
 
             <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
               <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Tips</h3>
               <ul className="list-disc list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Keys are stored locally on the server in <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">~/.thebotcompany/.env</code></li>
-                <li>Each key is auto-detected by its prefix</li>
                 <li>You can configure different providers per project</li>
+                <li>Projects without a key will fall back to the global key</li>
+                <li>Select the correct provider from the dropdown — keys are not auto-detected</li>
               </ul>
             </div>
           </div>
