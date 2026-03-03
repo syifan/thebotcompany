@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -212,6 +212,12 @@ function App() {
   }, [reportsPanelOpen, focusedReportId])
 
   // Auto-scroll live log to bottom when new entries arrive
+  const liveLogScrollCb = useCallback((node) => {
+    if (node) {
+      const container = node.parentElement
+      if (container) container.scrollTop = container.scrollHeight
+    }
+  }, [])
   useEffect(() => {
     if (liveLogEndRef.current) {
       const container = liveLogEndRef.current.parentElement
@@ -3606,7 +3612,7 @@ function App() {
                         {entry.msg}
                       </div>
                     ))}
-                    <div ref={liveLogEndRef} />
+                    <div ref={(node) => { liveLogEndRef.current = node; liveLogScrollCb(node); }} />
                   </div>
                 </div>
                 <Separator className="my-4" />
