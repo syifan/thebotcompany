@@ -1920,7 +1920,7 @@ function App() {
                       <div className="text-left sm:text-right">
                         <Badge variant={project.isComplete ? (project.completionSuccess ? 'success' : 'destructive') : project.paused ? 'warning' : project.sleeping ? 'secondary' : project.currentAgent ? 'success' : project.running ? 'success' : 'destructive'}>
                           {project.isComplete ? (project.completionSuccess ? '✅ Complete' : '🛑 Ended')
-                            : project.paused ? (project.pauseReason ? 'Paused' : 'Paused') 
+                            : project.paused ? (project.currentAgent ? '⏳ Pausing...' : '⏸️ Paused')
                             : project.sleeping ? '💤 Sleeping' 
                             : project.currentAgent ? `▶ ${project.currentAgent}` 
                             : project.running ? 'Running' 
