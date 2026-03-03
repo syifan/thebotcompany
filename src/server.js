@@ -2659,8 +2659,7 @@ const server = http.createServer(async (req, res) => {
         try {
           const { models } = JSON.parse(body);
           // Read existing config, merge models, save
-          const configRaw = fs.readFileSync(runner.configPath, 'utf-8');
-          const config = yaml.load(configRaw) || {};
+          const config = runner.loadConfig();
           if (models && (models.high || models.mid || models.low)) {
             config.models = {};
             if (models.high) config.models.high = models.high;
