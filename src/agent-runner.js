@@ -11,6 +11,39 @@ import path from 'path';
 import { getProvider } from './providers/index.js';
 
 // ---------------------------------------------------------------------------
+// Git sandbox: block unauthorized git operations
+// ---------------------------------------------------------------------------
+function checkGitCommand(command) {
+  // Detect git invocations
+  if (!/(?:^|[;&|`\s])git\s/.test(command) && !command.trimStart().startsWith('git ')) {
+    return null; // not a git command
+  }
+
+  // Block: git clone
+  if (/(?:^|[;&|`\s])git\s+clone\b/.test(command)) {
+    return 'Blocked: git clone is not allowed. Agents may only operate within the current project repo.';
+  }
+
+  // Block: git remote add / set-url
+  if (/(?:^|[;&|`\s])git\s+remote\s+(add|set-url)\b/.test(command)) {
+    return 'Blocked: modifying git remotes is not allowed.';
+  }
+
+  // Block: git push to a remote other than origin (e.g. "git push evil main")
+  // Allow: "git push", "git push origin", "git push origin <branch>", "git push --force" etc.
+  const pushMatch = command.match(/(?:^|[;&|`\s])git\s+push\s+(.*)/);
+  if (pushMatch) {
+    const args = pushMatch[1].trim().split(/\s+/).filter(a => !a.startsWith('-'));
+    // First non-flag arg is the remote name (if present)
+    if (args.length > 0 && args[0] !== 'origin') {
+      return `Blocked: git push to remote "${args[0]}" is not allowed. Only "origin" is permitted.`;
+    }
+  }
+
+  return null; // allowed
+}
+
+// ---------------------------------------------------------------------------
 // Glob implementation using Node.js fs
 // ---------------------------------------------------------------------------
 function globFiles(pattern, cwd) {
@@ -210,6 +243,12 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
   return new Promise((resolve) => {
     if (runtime?.signal?.aborted) {
       resolve('Command cancelled: agent was terminated.');
+      return;
+    }
+
+    const gitBlock = checkGitCommand(command);
+    if (gitBlock) {
+      resolve(gitBlock);
       return;
     }
 
