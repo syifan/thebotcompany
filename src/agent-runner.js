@@ -216,9 +216,11 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     const proc = spawn('bash', ['-c', command], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,  // new process group so grandchildren can be killed too
       timeout,
       ...(bashEnv ? { env: bashEnv } : {}),
     });
+    proc.unref();  // don't keep the event loop alive
     runtime?.registerProcess?.(proc);
 
     let stdout = '';
@@ -227,15 +229,19 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     proc.stdout.on('data', (d) => { stdout += d; });
     proc.stderr.on('data', (d) => { stderr += d; });
 
+    const killProc = (signal) => {
+      // Kill the entire process group (negative pid) to catch grandchildren
+      try { process.kill(-proc.pid, signal); } catch {}
+    };
     const onAbort = () => {
-      try { proc.kill('SIGTERM'); } catch {}
-      setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} }, 5000);
+      killProc('SIGTERM');
+      setTimeout(() => killProc('SIGKILL'), 5000);
     };
     runtime?.signal?.addEventListener('abort', onAbort, { once: true });
 
     const timer = setTimeout(() => {
-      proc.kill('SIGTERM');
-      setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} }, 5000);
+      killProc('SIGTERM');
+      setTimeout(() => killProc('SIGKILL'), 5000);
     }, timeout);
 
     proc.on('close', (code) => {
@@ -441,7 +447,8 @@ export async function runAgentWithAPI(opts) {
 
   const killRunningProcesses = (signal) => {
     for (const proc of runningProcesses) {
-      try { proc.kill(signal); } catch {}
+      // Kill entire process group to prevent orphaned grandchildren
+      try { process.kill(-proc.pid, signal); } catch {}
     }
   };
 
