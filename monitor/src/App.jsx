@@ -2317,7 +2317,6 @@ function App() {
           </ModalContent>
         </Modal>
 
-        {settingsModal}
         {/* Notification Center (project list) */}
         <Panel id="notifications" open={notifCenter} onClose={() => setNotifCenter(false)}>
           <PanelHeader onClose={() => setNotifCenter(false)}>
@@ -3037,8 +3036,8 @@ function App() {
       </Modal>
 
       {/* Bootstrap Panel */}
-      <Panel id="bootstrap" open={bootstrapModal.open} onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
-        <PanelHeader onClose={() => setBootstrapModal({ ...bootstrapModal, open: false })}>
+      <Panel id="bootstrap" open={bootstrapModal.open} onClose={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>
+        <PanelHeader onClose={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>
           Bootstrap Workspace
         </PanelHeader>
         <PanelContent>
@@ -3052,7 +3051,7 @@ function App() {
                 {bootstrapModal.preview.reason || 'Bootstrap is not available for this project.'}
               </div>
               <div className="flex justify-end">
-                <Button variant="outline" onClick={() => setBootstrapModal({ ...bootstrapModal, open: false })}>Close</Button>
+                <Button variant="outline" onClick={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>Close</Button>
               </div>
             </div>
           ) : bootstrapModal.preview ? (
@@ -3169,7 +3168,7 @@ function App() {
               )}
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setBootstrapModal({ ...bootstrapModal, open: false })}>Cancel</Button>
+                <Button variant="outline" onClick={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
                 <Button
                   onClick={executeBootstrap}
                   disabled={bootstrapModal.executing}
@@ -3191,7 +3190,7 @@ function App() {
                 </div>
               )}
               <div className="flex justify-end">
-                <Button variant="outline" onClick={() => setBootstrapModal({ ...bootstrapModal, open: false })}>Close</Button>
+                <Button variant="outline" onClick={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>Close</Button>
               </div>
             </div>
           )}
