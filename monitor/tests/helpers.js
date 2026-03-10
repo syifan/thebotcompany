@@ -3,7 +3,7 @@
  * Mocks all required API endpoints so tests run without a real backend.
  */
 
-const PROJECT_ID = 'test-project'
+export const PROJECT_ID = 'test-project'
 
 export const MOCK_PROJECT = {
   id: PROJECT_ID,
