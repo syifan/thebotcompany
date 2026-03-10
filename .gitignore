@@ -6,3 +6,5 @@ dist/
 .env.*
 .historybin/tbc
 .history
+monitor/test-results/
+monitor/playwright-report/
