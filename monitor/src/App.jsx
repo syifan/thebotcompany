@@ -219,14 +219,7 @@ function App() {
     liveLogAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
   }, [])
 
-  // After a new log entry renders, scroll to bottom only if we were already there
-  useEffect(() => {
-    const el = liveLogRef.current
-    if (!el) return
-    if (liveLogAtBottomRef.current) {
-      el.scrollTop = el.scrollHeight
-    }
-  })
+
 
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
@@ -3615,6 +3608,7 @@ function App() {
                         {entry.msg}
                       </div>
                     ))}
+                    <div ref={(el) => { if (el && liveLogAtBottomRef.current) el.scrollIntoView({ block: 'nearest' }) }} />
                   </div>
                 </div>
                 <Separator className="my-4" />
