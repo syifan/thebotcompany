@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -211,12 +211,20 @@ function App() {
     }
   }, [reportsPanelOpen, focusedReportId])
 
-  // Auto-scroll live log only when already at the bottom
-  useEffect(() => {
+    const liveLogAtBottomRef = useRef(true)
+
+  // Snapshot whether the log box is at the bottom before each render
+  useLayoutEffect(() => {
     const el = liveLogRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-    if (atBottom) el.scrollTop = el.scrollHeight
+    liveLogAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+  })
+
+  // After render: scroll to bottom only if we were already there
+  useEffect(() => {
+    if (liveLogAtBottomRef.current && liveLogRef.current) {
+      liveLogRef.current.scrollTop = liveLogRef.current.scrollHeight
+    }
   }, [liveAgentLog?.log?.length])
 
   const [notifCenter, setNotifCenter] = useState(false)
