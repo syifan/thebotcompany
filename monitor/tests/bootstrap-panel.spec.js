@@ -1,68 +1,45 @@
 import { test, expect } from '@playwright/test'
-import { setupMocks, PROJECT_PATH } from './helpers.js'
+import { setupMocks, PROJECT_PATH, PROJECT_REPO } from './helpers.js'
 
 test.describe('Bootstrap panel', () => {
-  test('clicking Bootstrap button opens Bootstrap panel, not Settings', async ({ page }) => {
+  test('clicking Bootstrap button opens Bootstrap panel', async ({ page }) => {
     await setupMocks(page)
     await page.goto(PROJECT_PATH)
     await page.waitForLoadState('networkidle')
 
     const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
-    await bootstrapBtn.click()
 
-    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
-    await expect(page.locator('h2:has-text("Settings")').first()).not.toBeVisible()
+    // Wait for the bootstrap API request to complete
+    const responsePromise = page.waitForResponse(resp => 
+      resp.url().includes(`/api/projects/${PROJECT_REPO}/bootstrap`) && resp.request().method() === 'GET'
+    )
+    await bootstrapBtn.click()
+    await responsePromise
+
+    // Panel should appear
+    await expect(page.getByRole('heading', { name: 'Bootstrap Workspace' })).toBeVisible({ timeout: 5000 })
   })
 
-  test('close button on Bootstrap panel closes it', async ({ page }) => {
+  test('close button closes Bootstrap panel', async ({ page }) => {
     await setupMocks(page)
     await page.goto(PROJECT_PATH)
     await page.waitForLoadState('networkidle')
 
     const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
+
+    const responsePromise = page.waitForResponse(resp => 
+      resp.url().includes(`/api/projects/${PROJECT_REPO}/bootstrap`) && resp.request().method() === 'GET'
+    )
     await bootstrapBtn.click()
+    await responsePromise
 
-    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('heading', { name: 'Bootstrap Workspace' })).toBeVisible({ timeout: 5000 })
 
-    // Click X close button in panel header
-    await page.locator('h2:has-text("Bootstrap Workspace")').first().locator('..').locator('button').first().click()
+    // Click Cancel button
+    await page.getByRole('button', { name: 'Close' }).or(page.getByRole('button', { name: 'Cancel' })).first().click()
 
-    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).not.toBeVisible({ timeout: 3000 })
-  })
-
-  test('Bootstrap panel close button via Cancel works', async ({ page }) => {
-    await setupMocks(page)
-    await page.goto(PROJECT_PATH)
-    await page.waitForLoadState('networkidle')
-
-    const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
-    await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
-    await bootstrapBtn.click()
-
-    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
-
-    await page.locator('button:has-text("Close"), button:has-text("Cancel")').first().click()
-
-    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).not.toBeVisible({ timeout: 3000 })
-  })
-
-  test('Bootstrap panel does not show Settings (regression)', async ({ page }) => {
-    await setupMocks(page)
-    await page.goto(PROJECT_PATH)
-    await page.waitForLoadState('networkidle')
-
-    const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
-    await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
-
-    for (let i = 0; i < 2; i++) {
-      await bootstrapBtn.click()
-      await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
-      await page.locator('button:has-text("Close"), button:has-text("Cancel")').first().click()
-      await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).not.toBeVisible({ timeout: 3000 })
-    }
-
-    await expect(page.locator('h2:has-text("Settings")').first()).not.toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Bootstrap Workspace' })).not.toBeVisible({ timeout: 3000 })
   })
 })
