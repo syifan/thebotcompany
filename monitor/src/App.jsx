@@ -211,8 +211,13 @@ function App() {
     }
   }, [reportsPanelOpen, focusedReportId])
 
-  // Auto-scroll live log to bottom when new entries arrive
-
+  // Auto-scroll live log only when already at the bottom
+  useEffect(() => {
+    const el = liveLogRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+    if (atBottom) el.scrollTop = el.scrollHeight
+  }, [liveAgentLog?.log?.length])
 
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
@@ -361,6 +366,7 @@ function App() {
   const [projectLoading, setProjectLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const logsRef = useRef(null)
+  const liveLogRef = useRef(null)
   const reportsScrollRef = useRef(null)
 
   const prevAgentRef = useRef(null)
@@ -3592,7 +3598,7 @@ function App() {
                     </span>
                     {liveAgentLog.model && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{liveAgentLog.model}</Badge>}
                   </div>
-                  <div ref={(el) => { if (el) el.scrollTop = el.scrollHeight }} className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1">
+                  <div ref={liveLogRef} className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1">
                     {liveAgentLog.log.length === 0 && <p className="text-neutral-400 italic">Waiting for output...</p>}
                     {liveAgentLog.log.map((entry, i) => (
                       <div key={i} className={`leading-relaxed break-words whitespace-pre-wrap ${entry.msg.startsWith('Tool:') ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-600 dark:text-neutral-300'}`}>
