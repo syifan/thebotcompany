@@ -7,16 +7,12 @@ test.describe('Bootstrap panel', () => {
     await page.goto(PROJECT_PATH)
     await page.waitForLoadState('networkidle')
 
-    // Bootstrap button is only visible in write mode (authenticated: true in mock)
     const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
     await bootstrapBtn.click()
 
-    // Bootstrap panel header should appear
-    await expect(page.locator('text=Bootstrap Workspace')).toBeVisible({ timeout: 5000 })
-
-    // Settings panel should NOT be visible
-    await expect(page.locator('h2:has-text("Settings")')).not.toBeVisible()
+    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('h2:has-text("Settings")').first()).not.toBeVisible()
   })
 
   test('close button on Bootstrap panel closes it', async ({ page }) => {
@@ -28,15 +24,15 @@ test.describe('Bootstrap panel', () => {
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
     await bootstrapBtn.click()
 
-    await expect(page.locator('text=Bootstrap Workspace')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
 
-    // Click the X close button in the panel header (SVG close icon button)
-    await page.locator('button svg path[d*="M6 18"]').locator('..').locator('..').first().click()
+    // Click X close button in panel header
+    await page.locator('h2:has-text("Bootstrap Workspace")').first().locator('..').locator('button').first().click()
 
-    await expect(page.locator('text=Bootstrap Workspace')).not.toBeVisible({ timeout: 3000 })
+    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).not.toBeVisible({ timeout: 3000 })
   })
 
-  test('Bootstrap panel close button via Cancel button works', async ({ page }) => {
+  test('Bootstrap panel close button via Cancel works', async ({ page }) => {
     await setupMocks(page)
     await page.goto(PROJECT_PATH)
     await page.waitForLoadState('networkidle')
@@ -45,15 +41,14 @@ test.describe('Bootstrap panel', () => {
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
     await bootstrapBtn.click()
 
-    await expect(page.locator('text=Bootstrap Workspace')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
 
-    // Click Cancel inside the panel
     await page.locator('button:has-text("Close"), button:has-text("Cancel")').first().click()
 
-    await expect(page.locator('text=Bootstrap Workspace')).not.toBeVisible({ timeout: 3000 })
+    await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).not.toBeVisible({ timeout: 3000 })
   })
 
-  test('Bootstrap panel does not show Settings content (regression)', async ({ page }) => {
+  test('Bootstrap panel does not show Settings (regression)', async ({ page }) => {
     await setupMocks(page)
     await page.goto(PROJECT_PATH)
     await page.waitForLoadState('networkidle')
@@ -61,15 +56,13 @@ test.describe('Bootstrap panel', () => {
     const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
 
-    // Open and close twice — regression for duplicate settingsModal bug
     for (let i = 0; i < 2; i++) {
       await bootstrapBtn.click()
-      await expect(page.locator('text=Bootstrap Workspace')).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).toBeVisible({ timeout: 5000 })
       await page.locator('button:has-text("Close"), button:has-text("Cancel")').first().click()
-      await expect(page.locator('text=Bootstrap Workspace')).not.toBeVisible({ timeout: 3000 })
+      await expect(page.locator('h2:has-text("Bootstrap Workspace")').first()).not.toBeVisible({ timeout: 3000 })
     }
 
-    // Settings panel should never have appeared
-    await expect(page.locator('h2:has-text("Settings")')).not.toBeVisible()
+    await expect(page.locator('h2:has-text("Settings")').first()).not.toBeVisible()
   })
 })
