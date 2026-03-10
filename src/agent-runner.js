@@ -11,32 +11,48 @@ import path from 'path';
 import { getProvider } from './providers/index.js';
 
 // ---------------------------------------------------------------------------
-// Git sandbox: block unauthorized git operations
+// Git/gh sandbox: block unauthorized repo operations
 // ---------------------------------------------------------------------------
-function checkGitCommand(command) {
-  // Detect git invocations
-  if (!/(?:^|[;&|`\s])git\s/.test(command) && !command.trimStart().startsWith('git ')) {
-    return null; // not a git command
+function checkGitCommand(command, allowedRepo) {
+  // --- git checks ---
+  const hasGit = /(?:^|[;&|`\s])git\s/.test(command) || command.trimStart().startsWith('git ');
+  if (hasGit) {
+    // Block: git clone
+    if (/(?:^|[;&|`\s])git\s+clone\b/.test(command)) {
+      return 'Blocked: git clone is not allowed. Agents may only operate within the current project repo.';
+    }
+
+    // Block: git remote add / set-url
+    if (/(?:^|[;&|`\s])git\s+remote\s+(add|set-url)\b/.test(command)) {
+      return 'Blocked: modifying git remotes is not allowed.';
+    }
+
+    // Block: git push to a remote other than origin
+    const pushMatch = command.match(/(?:^|[;&|`\s])git\s+push\s+(.*)/);
+    if (pushMatch) {
+      const args = pushMatch[1].trim().split(/\s+/).filter(a => !a.startsWith('-'));
+      if (args.length > 0 && args[0] !== 'origin') {
+        return `Blocked: git push to remote "${args[0]}" is not allowed. Only "origin" is permitted.`;
+      }
+    }
   }
 
-  // Block: git clone
-  if (/(?:^|[;&|`\s])git\s+clone\b/.test(command)) {
-    return 'Blocked: git clone is not allowed. Agents may only operate within the current project repo.';
-  }
+  // --- gh CLI checks ---
+  const hasGh = /(?:^|[;&|`\s])gh\s/.test(command) || command.trimStart().startsWith('gh ');
+  if (hasGh) {
+    // Block: gh pr create / gh pr merge targeting a different repo
+    // gh pr create [--repo owner/repo] or gh pr create (uses cwd repo — allowed)
+    const ghRepoMatch = command.match(/(?:^|[;&|`\s])gh\s+.*--repo\s+([^\s]+)/);
+    if (ghRepoMatch) {
+      const targetRepo = ghRepoMatch[1].replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+      if (allowedRepo && targetRepo !== allowedRepo) {
+        return `Blocked: gh operation targeting "${targetRepo}" is not allowed. Only "${allowedRepo}" is permitted.`;
+      }
+    }
 
-  // Block: git remote add / set-url
-  if (/(?:^|[;&|`\s])git\s+remote\s+(add|set-url)\b/.test(command)) {
-    return 'Blocked: modifying git remotes is not allowed.';
-  }
-
-  // Block: git push to a remote other than origin (e.g. "git push evil main")
-  // Allow: "git push", "git push origin", "git push origin <branch>", "git push --force" etc.
-  const pushMatch = command.match(/(?:^|[;&|`\s])git\s+push\s+(.*)/);
-  if (pushMatch) {
-    const args = pushMatch[1].trim().split(/\s+/).filter(a => !a.startsWith('-'));
-    // First non-flag arg is the remote name (if present)
-    if (args.length > 0 && args[0] !== 'origin') {
-      return `Blocked: git push to remote "${args[0]}" is not allowed. Only "origin" is permitted.`;
+    // Block: gh repo clone / gh repo create / gh repo fork
+    if (/(?:^|[;&|`\s])gh\s+repo\s+(clone|create|fork)\b/.test(command)) {
+      return 'Blocked: gh repo clone/create/fork is not allowed.';
     }
   }
 
@@ -231,7 +247,7 @@ function getToolDefinitions() {
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
-function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null) {
+function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null) {
   let timeout = Math.min(input.timeout || 120000, 600000);
   if (remainingMs > 0) {
     timeout = Math.min(timeout, remainingMs);
@@ -246,7 +262,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       return;
     }
 
-    const gitBlock = checkGitCommand(command);
+    const gitBlock = checkGitCommand(command, allowedRepo);
     if (gitBlock) {
       resolve(gitBlock);
       return;
@@ -413,9 +429,9 @@ function executeGrep(input, cwd) {
   }
 }
 
-async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null) {
+async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null) {
   switch (toolName) {
-    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime);
+    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo);
     case 'Read':  return executeRead(toolInput, cwd);
     case 'Write': return executeWrite(toolInput, cwd);
     case 'Edit':  return executeEdit(toolInput, cwd);
@@ -454,6 +470,7 @@ export async function runAgentWithAPI(opts) {
     env = {},
     abortSignal = null,
     log = () => {},
+    allowedRepo = null,
   } = opts;
 
   const startTime = Date.now();
@@ -698,7 +715,7 @@ export async function runAgentWithAPI(opts) {
           log(`Tool: ${tc.name}${tc.name === 'Bash' ? ` → ${(tc.input.command || '').slice(0, 300)}` : ''}`);
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
-          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime);
+          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo);
           toolResults.push({ toolCallId: tc.id, content: result });
         }
 

@@ -1769,6 +1769,7 @@ class ProjectRunner {
       cwd: this.path,
       timeoutMs: config.agentTimeoutMs || 0,
       env: agentEnv,
+      allowedRepo: this.repo || null,
       abortSignal: runAbortController.signal,
       log: (msg) => {
         log(`  [${agent.name}] ${msg}`, this.id);
