@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -214,17 +214,19 @@ function App() {
   const liveLogAtBottomRef = useRef(true)
 
   // Keep liveLogAtBottomRef in sync as the user scrolls
-  const onLiveLogScroll = (e) => {
+  const onLiveLogScroll = useCallback((e) => {
     const el = e.currentTarget
     liveLogAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-  }
+  }, [])
 
   // After a new log entry renders, scroll to bottom only if we were already there
   useEffect(() => {
-    if (liveLogAtBottomRef.current && liveLogRef.current) {
-      liveLogRef.current.scrollTop = liveLogRef.current.scrollHeight
+    const el = liveLogRef.current
+    if (!el) return
+    if (liveLogAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight
     }
-  }, [liveAgentLog?.log?.length])
+  })
 
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
