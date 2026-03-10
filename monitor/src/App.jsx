@@ -211,7 +211,7 @@ function App() {
     }
   }, [reportsPanelOpen, focusedReportId])
 
-    const liveLogAtBottomRef = useRef(true)
+  const liveLogAtBottomRef = useRef(true)
 
   // Keep liveLogAtBottomRef in sync as the user scrolls
   const onLiveLogScroll = (e) => {
