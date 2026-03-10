@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -213,14 +213,13 @@ function App() {
 
     const liveLogAtBottomRef = useRef(true)
 
-  // Snapshot whether the log box is at the bottom before each render
-  useLayoutEffect(() => {
-    const el = liveLogRef.current
-    if (!el) return
+  // Keep liveLogAtBottomRef in sync as the user scrolls
+  const onLiveLogScroll = (e) => {
+    const el = e.currentTarget
     liveLogAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
-  })
+  }
 
-  // After render: scroll to bottom only if we were already there
+  // After a new log entry renders, scroll to bottom only if we were already there
   useEffect(() => {
     if (liveLogAtBottomRef.current && liveLogRef.current) {
       liveLogRef.current.scrollTop = liveLogRef.current.scrollHeight
@@ -3606,7 +3605,7 @@ function App() {
                     </span>
                     {liveAgentLog.model && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{liveAgentLog.model}</Badge>}
                   </div>
-                  <div ref={liveLogRef} className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1">
+                  <div ref={liveLogRef} onScroll={onLiveLogScroll} className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1">
                     {liveAgentLog.log.length === 0 && <p className="text-neutral-400 italic">Waiting for output...</p>}
                     {liveAgentLog.log.map((entry, i) => (
                       <div key={i} className={`leading-relaxed break-words whitespace-pre-wrap ${entry.msg.startsWith('Tool:') ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-600 dark:text-neutral-300'}`}>
