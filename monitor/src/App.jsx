@@ -797,6 +797,9 @@ function App() {
       step: null, githubUrl: '', projectId: null, projectPath: null,
       hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
       updateSpec: false, error: null, repoMode: 'existing',
+      orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: false, reposLoading: false,
+      inputMode: 'dropdown', newRepoName: '', newRepoPrivate: false, newRepoDescription: '', creatingRepo: false,
+      budgetPer24h: 40,
     })
   }
 
