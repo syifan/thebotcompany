@@ -12,17 +12,17 @@ test.describe('Live agent log auto-scroll', () => {
     const runningText = page.getByText('Running... (20 log entries)')
     await expect(runningText).toBeVisible({ timeout: 10000 })
 
-    // Click to open the Reports Panel (sets reportsPanelOpen=true)
+    // Click to open the Reports Panel
     await runningText.click()
-    await page.waitForTimeout(500)
 
-    // The panel contains a scrollable log box with class max-h-[400px]
-    // There are two: one in the card, one in the panel. The panel's is last.
-    const logBoxes = page.locator('div.max-h-\\[400px\\]')
-    const logBox = logBoxes.last()
+    const logBox = page.locator('div.max-h-\\[400px\\]').last()
     await expect(logBox).toBeVisible({ timeout: 3000 })
 
-    // Verify we're initially at bottom (auto-scroll behavior)
+    // Wait for an agent-log poll to trigger auto-scroll via useEffect
+    // (the poll runs every 3s and updates liveAgentLog state)
+    await page.waitForTimeout(4000)
+
+    // Verify we're at bottom (auto-scroll behavior)
     const atBottom = await logBox.evaluate(el =>
       el.scrollHeight - el.scrollTop - el.clientHeight < 60
     )
@@ -38,10 +38,12 @@ test.describe('Live agent log auto-scroll', () => {
     const runningText = page.getByText('Running... (20 log entries)')
     await expect(runningText).toBeVisible({ timeout: 10000 })
     await runningText.click()
-    await page.waitForTimeout(500)
 
     const logBox = page.locator('div.max-h-\\[400px\\]').last()
     await expect(logBox).toBeVisible({ timeout: 3000 })
+
+    // Wait for initial auto-scroll
+    await page.waitForTimeout(4000)
 
     // Scroll up manually
     await logBox.evaluate(el => { el.scrollTop = 0 })

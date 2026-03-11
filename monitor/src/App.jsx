@@ -219,6 +219,15 @@ function App() {
     liveLogAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
   }, [])
 
+  // Auto-scroll live log to bottom when new entries arrive (only if user is at bottom).
+  // Uses scrollTop on the container directly instead of scrollIntoView() to avoid
+  // hijacking scroll position of ancestor containers (e.g. the Reports panel).
+  useEffect(() => {
+    if (liveLogRef.current && liveLogAtBottomRef.current) {
+      liveLogRef.current.scrollTop = liveLogRef.current.scrollHeight
+    }
+  }, [liveAgentLog])
+
 
 
   const [notifCenter, setNotifCenter] = useState(false)
@@ -3611,7 +3620,6 @@ function App() {
                         {entry.msg}
                       </div>
                     ))}
-                    <div ref={(el) => { if (el && liveLogAtBottomRef.current) el.scrollIntoView({ block: 'nearest' }) }} />
                   </div>
                 </div>
                 <Separator className="my-4" />
