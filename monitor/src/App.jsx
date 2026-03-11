@@ -219,7 +219,7 @@ function App() {
     liveLogAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
   }, [])
 
-  // Auto-scroll live log to bottom when new entries arrive (only if user is at bottom).
+  // Auto-scroll live log to bottom when new entries arrive.
   // Uses scrollTop on the container directly instead of scrollIntoView() to avoid
   // hijacking scroll position of ancestor containers (e.g. the Reports panel).
   useEffect(() => {
@@ -3612,7 +3612,7 @@ function App() {
                     </span>
                     {liveAgentLog.model && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{liveAgentLog.model}</Badge>}
                   </div>
-                  <div ref={liveLogRef} onScroll={onLiveLogScroll} className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1">
+                  <div ref={(el) => { liveLogRef.current = el; if (el && liveLogAtBottomRef.current) el.scrollTop = el.scrollHeight }} onScroll={onLiveLogScroll} className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1">
                     {liveAgentLog.log.length === 0 && <p className="text-neutral-400 italic">Waiting for output...</p>}
                     {liveAgentLog.log.map((entry, i) => (
                       <div key={i} className={`leading-relaxed break-words whitespace-pre-wrap ${entry.msg.startsWith('Tool:') ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-600 dark:text-neutral-300'}`}>
