@@ -9,6 +9,7 @@
     "tbc-db": "./bin/tbc-db.js"
   },
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "monitor": "cd monitor && npm run dev"
