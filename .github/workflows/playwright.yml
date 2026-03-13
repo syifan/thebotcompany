@@ -19,11 +19,14 @@ jobs:
           cache: npm
           cache-dependency-path: monitor/package-lock.json
 
-      - name: Install dependencies
+      - name: Install monitor dependencies
         run: cd monitor && npm ci
 
       - name: Install Playwright browsers
         run: cd monitor && npx playwright install chromium --with-deps
+
+      - name: Run unit tests
+        run: node --test tests/*.test.js
 
       - name: Run Playwright tests
         run: cd monitor && npx playwright test
