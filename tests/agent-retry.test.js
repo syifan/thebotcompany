@@ -42,7 +42,7 @@ async function runWorkerWithRetries(runAgentFn, { maxRetries = 2 } = {}) {
       succeeded = true;
     } else {
       const wasTimeout = result && result.killedByTimeout;
-      if (!wasTimeout) break; // Only retry on timeout, not other failures
+      if (wasTimeout) break; // Don't retry on timeout (agent can't finish in time)
       attempt++;
     }
   }
