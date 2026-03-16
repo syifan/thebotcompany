@@ -14,8 +14,13 @@ import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
 import { runAgentWithAPI } from './agent-runner.js';
-import { getProvider } from './providers/index.js';
+import { resolveModel, callModel, buildUserMessage } from './providers/index.js';
 import { loadTokens as loadCodexTokens, clearTokens as clearCodexTokens, startAuthorizationFlow, getAccessToken as getCodexAccessToken } from './oauth-codex.js';
+import {
+  loadKeyPool, addKey, addOAuthKey, removeKey, updateKey, reorderKeys,
+  getKeyPoolSafe, resolveKeyForProject, markRateLimited, migrateFromEnv,
+  detectTokenProvider as detectTokenProviderFromPool,
+} from './key-pool.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -1252,8 +1257,19 @@ class ProjectRunner {
         continue;
       }
 
+      // Check if any API key is available before starting a cycle
+      const preConfig = this.loadConfig();
+      const poolCheck = getKeyPoolSafe();
+      if (poolCheck.keys.filter(k => k.enabled).length === 0 && !preConfig.setupToken) {
+        log(`No API keys configured. Pausing project. Add a key in Settings > Credentials.`, this.id);
+        this.setState({ isPaused: true, pauseReason: 'No API keys configured. Add one in Settings > Credentials.' });
+        await this._autoPauseWait(30_000, () => getKeyPoolSafe().keys.some(k => k.enabled));
+        if (!this.running) break;
+        continue;
+      }
+
       const { managers, workers } = this.loadAgents();
-      
+
       // Start new cycle
       this.cycleCount++;
       this.completedAgents = [];
@@ -1699,55 +1715,50 @@ class ProjectRunner {
 
     const agentTierOrModel = agent.rawModel || config.model || 'mid';
 
-    // Resolve token: project-specific > global tokens by provider
-    const projectToken = config.setupToken;
-    // Detect provider: explicit config > token auto-detect > env fallback
-    let provider;
-    if (projectToken && config.setupTokenProvider) {
-      provider = config.setupTokenProvider;
-    } else if (projectToken) {
-      provider = detectProviderFromToken(projectToken);
-    } else if (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) {
-      provider = 'anthropic';
-    } else if (process.env.OPENAI_API_KEY) {
-      provider = 'openai';
-    } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
-      provider = 'google';
-    } else if (process.env.MINIMAX_API_KEY) {
-      provider = 'minimax';
-    } else if (loadCodexTokens(this.id)?.access_token || loadCodexTokens()?.access_token) {
-      provider = 'openai-codex';
+    // Detect provider hint for tier resolution
+    // Legacy support: check setupToken/setupTokenProvider, then key pool, then env fallback
+    let providerHint;
+    if (config.setupTokenProvider) {
+      providerHint = config.setupTokenProvider;
+    } else if (config.setupToken) {
+      providerHint = detectProviderFromToken(config.setupToken);
     } else {
-      provider = 'anthropic';
+      // Determine provider from key pool (first enabled key) or env vars
+      const poolSafe = getKeyPoolSafe();
+      const firstKey = poolSafe.keys.find(k => k.enabled);
+      if (firstKey) {
+        providerHint = firstKey.provider;
+      } else if (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) {
+        providerHint = 'anthropic';
+      } else if (process.env.OPENAI_API_KEY) {
+        providerHint = 'openai';
+      } else {
+        providerHint = 'anthropic';
+      }
     }
 
     // Resolve tier to concrete model + optional reasoning effort
-    const resolved = resolveModelTier(agentTierOrModel, provider, config.models);
+    const resolved = resolveModelTier(agentTierOrModel, providerHint, config.models);
     const agentModel = resolved.model;
     const reasoningEffort = resolved.reasoningEffort || null;
 
-    const isOpenAICodexModel = agentModel.startsWith('openai-codex/');
-    const isOpenAIModel = !isOpenAICodexModel && (agentModel.startsWith('openai/') || agentModel.startsWith('gpt-') || agentModel.startsWith('o3') || agentModel.startsWith('o4-'));
-    const isGoogleModel = agentModel.startsWith('google/') || agentModel.startsWith('gemini-');
-    const isMiniMaxModel = agentModel.startsWith('minimax/') || agentModel.startsWith('MiniMax-');
+    // Resolve token from key pool (with rate-limit-aware rotation)
+    const oauthTokenGetter = async (authFile, provider) => {
+      if (provider === 'openai-codex') return getCodexAccessToken(this.id);
+      return null;
+    };
+    const keyResult = await resolveKeyForProject(config, providerHint, oauthTokenGetter);
+    let resolvedToken = keyResult?.token || null;
+    let resolvedKeyId = keyResult?.keyId || null;
 
-    let resolvedToken;
-    if (projectToken) {
-      resolvedToken = projectToken;
-    } else if (isOpenAICodexModel) {
-      resolvedToken = await getCodexAccessToken(this.id);
-    } else if (isOpenAIModel) {
-      resolvedToken = process.env.OPENAI_API_KEY || null;
-    } else if (isGoogleModel) {
-      resolvedToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
-    } else if (isMiniMaxModel) {
-      resolvedToken = process.env.MINIMAX_API_KEY || null;
-    } else {
-      resolvedToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
+    // Fallback: legacy setupToken (for un-migrated configs)
+    if (!resolvedToken && config.setupToken) {
+      resolvedToken = config.setupToken;
     }
 
     if (!resolvedToken) {
-      log(`No API token configured for ${agent.name} (model: ${agentModel})`, this.id);
+      log(`No API token configured for ${agent.name} (model: ${agentModel}). Skipping agent run. Add a key in Settings.`, this.id);
+      return { error: 'no_token', message: 'No API key configured. Add one in Settings > Credentials.' };
     }
 
     const agentEnv = {
@@ -1761,6 +1772,7 @@ class ProjectRunner {
     log(`Using API runner for ${agent.name} (model: ${tierLabel})`, this.id);
     this.currentAgentModel = tierLabel;
 
+    const projectId = this.id;
     const result = await runAgentWithAPI({
       prompt: skillContent,
       model: agentModel,
@@ -1771,8 +1783,14 @@ class ProjectRunner {
       env: agentEnv,
       allowedRepo: this.repo || null,
       abortSignal: runAbortController.signal,
+      keyId: resolvedKeyId,
+      onRateLimited: (kid) => markRateLimited(kid, 60_000),
+      resolveNewToken: async () => {
+        const newKey = await resolveKeyForProject(config, providerHint, oauthTokenGetter);
+        return newKey;
+      },
       log: (msg) => {
-        log(`  [${agent.name}] ${msg}`, this.id);
+        log(`  [${agent.name}] ${msg}`, projectId);
         this.currentAgentLog.push({ time: Date.now(), msg });
         if (this.currentAgentLog.length > 500) this.currentAgentLog.shift();
       },
@@ -1993,9 +2011,9 @@ const server = http.createServer(async (req, res) => {
     const openaiToken = process.env.OPENAI_API_KEY || null;
     const googleToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
     const codexTokens = loadCodexTokens();
-    // Backward compat: hasGlobalToken and globalTokenPreview refer to Anthropic
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
+      // Backward compat fields
       hasGlobalToken: !!anthropicToken,
       globalTokenPreview: anthropicToken ? maskToken(anthropicToken) : null,
       tokenType: anthropicToken ? (anthropicToken.startsWith('sk-ant-oat') ? 'oauth' : 'api_key') : null,
@@ -2005,6 +2023,8 @@ const server = http.createServer(async (req, res) => {
         google: { hasToken: !!googleToken, preview: googleToken ? maskToken(googleToken) : null },
         'openai-codex': { hasToken: !!codexTokens?.access_token, type: 'oauth' },
       },
+      // New: key pool
+      keyPool: getKeyPoolSafe(),
     }));
     return;
   }
@@ -2051,6 +2071,14 @@ const server = http.createServer(async (req, res) => {
           }
           envContent = envContent.trimEnd() + `\n${envVar}=${token}\n`;
           process.env[envVar] = token;
+
+          // Also add to key pool (backward compat)
+          addKey({ label: `${provider.charAt(0).toUpperCase() + provider.slice(1)}`, token, provider });
+        } else {
+          // Token removal — remove matching pool entries for this provider
+          const pool = loadKeyPool();
+          const toRemove = pool.keys.filter(k => k.provider === provider && k.type === 'api_key');
+          for (const k of toRemove) removeKey(k.id);
         }
 
         fs.writeFileSync(envPath, envContent);
@@ -2073,6 +2101,90 @@ const server = http.createServer(async (req, res) => {
             'openai-codex': { hasToken: !!codexTokens?.access_token, type: 'oauth' },
           },
         }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // --- Key Pool CRUD endpoints ---
+
+  if (req.method === 'GET' && url.pathname === '/api/keys') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getKeyPoolSafe()));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/keys') {
+    if (!requireWrite(req, res)) return;
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { label, token, provider } = JSON.parse(body);
+        if (!token) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Token is required' }));
+          return;
+        }
+        addKey({ label, token, provider });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(getKeyPoolSafe()));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // PUT /api/keys/:id
+  const keysPutMatch = url.pathname.match(/^\/api\/keys\/([^/]+)$/);
+  if (req.method === 'PUT' && keysPutMatch) {
+    if (!requireWrite(req, res)) return;
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const patch = JSON.parse(body);
+        const updated = updateKey(keysPutMatch[1], patch);
+        if (!updated) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Key not found' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(getKeyPoolSafe()));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // DELETE /api/keys/:id
+  const keysDeleteMatch = url.pathname.match(/^\/api\/keys\/([^/]+)$/);
+  if (req.method === 'DELETE' && keysDeleteMatch) {
+    if (!requireWrite(req, res)) return;
+    removeKey(keysDeleteMatch[1]);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getKeyPoolSafe()));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/keys/reorder') {
+    if (!requireWrite(req, res)) return;
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      try {
+        const { orderedIds } = JSON.parse(body);
+        reorderKeys(orderedIds);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(getKeyPoolSafe()));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
@@ -2583,47 +2695,66 @@ const server = http.createServer(async (req, res) => {
       const hasProjectToken = !!projectToken;
       const safeConfig = { ...config };
       delete safeConfig.setupToken;
-      res.writeHead(200, { 'Content-Type': 'application/json' });
       const detectedProvider = config.setupTokenProvider || (projectToken ? detectProviderFromToken(projectToken) : null) || (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY ? 'anthropic' : process.env.OPENAI_API_KEY ? 'openai' : loadCodexTokens()?.access_token ? 'openai-codex' : 'anthropic');
-      res.end(JSON.stringify({ config: safeConfig, raw, hasProjectToken, projectTokenPreview: projectToken ? maskToken(projectToken) : null, provider: detectedProvider, tiers: MODEL_TIERS[detectedProvider] || {}, allTiers: MODEL_TIERS }));
+      // Include key pool and selection info
+      const keyPool = getKeyPoolSafe();
+      const keySelection = config.keySelection || null;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        config: safeConfig, raw, hasProjectToken,
+        projectTokenPreview: projectToken ? maskToken(projectToken) : null,
+        provider: detectedProvider,
+        tiers: MODEL_TIERS[detectedProvider] || {},
+        allTiers: MODEL_TIERS,
+        keyPool,
+        keySelection,
+      }));
       return;
     }
 
-    // POST /api/projects/:id/token — set per-project setup token
+    // POST /api/projects/:id/token — set per-project key selection or legacy token
     if (req.method === 'POST' && subPath === 'token') {
       if (!requireWrite(req, res)) return;
       let body = '';
       req.on('data', c => body += c);
       req.on('end', () => {
         try {
-          const { token, provider: explicitProvider } = JSON.parse(body);
-          const config = runner.loadConfig();
-          if (token) {
-            config.setupToken = token;
-          } else {
-            delete config.setupToken;
-          }
-          if (explicitProvider) {
-            config.setupTokenProvider = explicitProvider;
-          } else if (!token) {
-            delete config.setupTokenProvider;
-          }
-          // Write back preserving existing config structure
+          const { keyId, fallback, token, provider: explicitProvider } = JSON.parse(body);
           const configPath = runner.configPath;
           const existing = fs.existsSync(configPath) ? yaml.load(fs.readFileSync(configPath, 'utf-8')) || {} : {};
-          if (token) {
-            existing.setupToken = token;
-          } else {
+
+          if (keyId !== undefined) {
+            // New key pool selection mode
             delete existing.setupToken;
-          }
-          if (explicitProvider) {
-            existing.setupTokenProvider = explicitProvider;
-          } else if (!token) {
             delete existing.setupTokenProvider;
+            if (keyId) {
+              existing.keySelection = { keyId, fallback: fallback !== false };
+            } else {
+              // Clear selection (use global default)
+              delete existing.keySelection;
+            }
+          } else {
+            // Legacy mode: raw token
+            if (token) {
+              existing.setupToken = token;
+              if (explicitProvider) existing.setupTokenProvider = explicitProvider;
+              // Also add to global pool
+              const entry = addKey({ label: `${explicitProvider || 'API'} (from ${projectId})`, token, provider: explicitProvider });
+              existing.keySelection = { keyId: entry.id, fallback: true };
+            } else {
+              delete existing.setupToken;
+              delete existing.setupTokenProvider;
+              delete existing.keySelection;
+            }
           }
+
           fs.writeFileSync(configPath, yaml.dump(existing));
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, hasProjectToken: !!token }));
+          res.end(JSON.stringify({
+            success: true,
+            hasProjectToken: !!(existing.setupToken || existing.keySelection?.keyId),
+            keySelection: existing.keySelection || null,
+          }));
         } catch (e) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));
@@ -2744,28 +2875,21 @@ const server = http.createServer(async (req, res) => {
         if (!report) { db.close(); res.writeHead(404); res.end('Not found'); return; }
         if (report.summary) { db.close(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ summary: report.summary })); return; }
 
-        // Use same token/provider resolution as agent calls
+        // Use key pool for token resolution
         const config = runner.loadConfig() || {};
-        const projectToken = config.setupToken;
-        let providerName;
-        if (projectToken && config.setupTokenProvider) providerName = config.setupTokenProvider;
-        else if (projectToken) providerName = detectProviderFromToken(projectToken);
-        else if (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY) providerName = 'anthropic';
-        else if (process.env.OPENAI_API_KEY) providerName = 'openai';
-        else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) providerName = 'google';
-        else if (loadCodexTokens()?.access_token) providerName = 'openai-codex';
-        else providerName = 'anthropic';
+        const oauthGetter = async (authFile, provider) => {
+          if (provider === 'openai-codex') return getCodexAccessToken();
+          return null;
+        };
+        const poolSafe = getKeyPoolSafe();
+        const firstKey = poolSafe.keys.find(k => k.enabled);
+        const providerName = config.setupTokenProvider || firstKey?.provider || 'anthropic';
 
         const resolved = resolveModelTier('low', providerName);
         const model = resolved.model;
 
-        // Resolve token same as runAgent
-        let token;
-        if (projectToken) { token = projectToken; }
-        else if (model.startsWith('openai-codex/')) { token = await getCodexAccessToken(); }
-        else if (model.startsWith('openai/') || model.startsWith('gpt-')) { token = process.env.OPENAI_API_KEY; }
-        else if (model.startsWith('gemini-') || model.startsWith('google/')) { token = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY; }
-        else { token = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY; }
+        const keyResult = await resolveKeyForProject(config, providerName, oauthGetter);
+        const token = keyResult?.token || config.setupToken || null;
 
         if (!token) { db.close(); res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No API token configured' })); return; }
 
@@ -2781,36 +2905,16 @@ const server = http.createServer(async (req, res) => {
 
         const prompt = `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}`;
 
-        // Use the provider system (handles OAuth, SDK auth, etc.)
-        const { provider: providerInstance } = getProvider(model);
-        const client = providerInstance.createClient({ token });
-
-        let summary;
-        if (providerName === 'anthropic') {
-          const response = await client.messages.create({
-            model, max_tokens: 60,
-            messages: [{ role: 'user', content: prompt }],
-          });
-          summary = response.content?.filter(b => b.type === 'text').map(b => b.text).join('').trim() || null;
-        } else if (providerName === 'openai' || providerName === 'minimax') {
-          // Both OpenAI and MiniMax use OpenAI-compatible chat completions
-          const response = await client.chat.completions.create({
-            model: model.replace(/^(openai|minimax)\//, ''), max_tokens: 60,
-            messages: [{ role: 'user', content: prompt }],
-          });
-          summary = response.choices?.[0]?.message?.content?.trim() || null;
-        } else if (providerName === 'google') {
-          const modelName = model.replace(/^google\//, '');
-          const response = await client.models.generateContent({
-            model: modelName,
-            contents: prompt,
-            config: { maxOutputTokens: 60 },
-          });
-          summary = response.text?.trim() || null;
-        } else {
-          log(`Summarize: unsupported provider ${providerName}`, runner.id);
-          summary = null;
-        }
+        // Use pi-ai adapter for summarization (provider-agnostic)
+        const { piModel } = resolveModel(model);
+        const summaryResponse = await callModel(
+          piModel,
+          'You are a helpful assistant. Return ONLY the summary, nothing else.',
+          [buildUserMessage(prompt)],
+          [], // no tools
+          { token },
+        );
+        const summary = summaryResponse.content?.trim() || null;
 
         if (summary) {
           db.prepare('UPDATE reports SET summary = ? WHERE id = ?').run(summary, reportId);
@@ -3099,6 +3203,8 @@ function checkPrerequisites() {
 log('TheBotCompany starting...');
 checkPrerequisites();
 syncProjects();
+// Migrate existing keys from .env and project configs into key-pool.json
+migrateFromEnv(projects);
 server.listen(PORT, () => {
   log(`Server listening on http://localhost:${PORT}`);
   if (SERVE_STATIC && fs.existsSync(MONITOR_DIST)) {

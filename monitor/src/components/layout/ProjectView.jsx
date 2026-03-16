@@ -104,17 +104,7 @@ export default function ProjectView({
   const [showApiKeyHelp, setShowApiKeyHelp] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
 
-  // Project settings
-  const [hasProjectToken, setHasProjectToken] = useState(false)
-  const [projectTokenPreview, setProjectTokenPreview] = useState(null)
-  const [projectTokenProviderLabel, setProjectTokenProviderLabel] = useState(null)
-  const [projectTokenInput, setProjectTokenInput] = useState('')
-  const [projectTokenProvider, setProjectTokenProvider] = useState('')
-  const [projectTokenSaving, setProjectTokenSaving] = useState(false)
-  const [projectCodexLoginState, setProjectCodexLoginState] = useState(null)
-  const [codexLoginState, setCodexLoginState] = useState(null)
-  const [hasGlobalToken, setHasGlobalToken] = useState(false)
-  const [globalTokenPreview, setGlobalTokenPreview] = useState(null)
+  // Project settings (token state now managed inside ProjectSettingsPanel)
 
   // Agent settings modal
   const [agentSettingsModal, setAgentSettingsModal] = useState({ open: false, agent: null, model: '', saving: false, error: null })
@@ -154,9 +144,6 @@ export default function ProjectView({
       
       const configData = await configRes.json()
       setConfig(configData)
-      setHasProjectToken(!!configData.hasProjectToken)
-      setProjectTokenPreview(configData.projectTokenPreview || null)
-      setProjectTokenProviderLabel(configData.provider || null)
       if (!configDirtyRef.current && configData.config) {
         setConfigForm({
           cycleIntervalMs: configData.config.cycleIntervalMs ?? 1800000,
@@ -247,30 +234,13 @@ export default function ProjectView({
     }
   }, [selectedProject?.id])
 
-  // Fetch settings & models on mount
+  // Fetch models on mount
   useEffect(() => {
-    fetch('/api/settings').then(r => r.json()).then(d => {
-      setHasGlobalToken(!!d.hasGlobalToken)
-      setGlobalTokenPreview(d.globalTokenPreview || null)
-    }).catch(() => {})
     fetch('/api/models').then(r => r.json()).then(data => {
       if (data.data) setAvailableModels(data.data)
     }).catch(() => {})
-    fetch('/api/openai-codex/status').then(r => r.json()).then(d => {
-      if (d.authenticated) setCodexLoginState('success')
-    }).catch(() => {})
   }, [])
 
-  // Check project-level codex auth when project changes
-  useEffect(() => {
-    if (selectedProject?.id) {
-      fetch(`/api/openai-codex/status?project=${encodeURIComponent(selectedProject.id)}`).then(r => r.json()).then(d => {
-        setProjectCodexLoginState(d.authenticated ? 'success' : null)
-      }).catch(() => setProjectCodexLoginState(null))
-    } else {
-      setProjectCodexLoginState(null)
-    }
-  }, [selectedProject?.id])
 
   // Poll for live agent log
   useEffect(() => {
@@ -896,32 +866,15 @@ export default function ProjectView({
         notifUseGlobal={notifUseGlobal}
         projNotifSettings={projNotifSettings}
         setShowApiKeyHelp={setShowApiKeyHelp}
-        hasProjectToken={hasProjectToken}
-        projectTokenPreview={projectTokenPreview}
-        projectTokenProviderLabel={projectTokenProviderLabel}
-        projectTokenSaving={projectTokenSaving}
-        setProjectTokenSaving={setProjectTokenSaving}
         authFetch={authFetch}
         projectApi={projectApi}
-        setHasProjectToken={setHasProjectToken}
-        setProjectTokenPreview={setProjectTokenPreview}
-        setProjectTokenProviderLabel={setProjectTokenProviderLabel}
         setToast={showToast}
-        projectTokenInput={projectTokenInput}
-        setProjectTokenInput={setProjectTokenInput}
-        projectTokenProvider={projectTokenProvider}
-        setProjectTokenProvider={setProjectTokenProvider}
-        projectCodexLoginState={projectCodexLoginState}
-        setProjectCodexLoginState={setProjectCodexLoginState}
-        codexLoginState={codexLoginState}
         isWriteMode={isWriteMode}
         config={config}
         setSelectedProject={setSelectedProject}
         fetchProjectData={fetchProjectData}
         fetchGlobalStatus={fetchGlobalStatus}
         removeProject={removeProject}
-        hasGlobalToken={hasGlobalToken}
-        globalTokenPreview={globalTokenPreview}
       />
       <NotificationPanel
         open={notifCenter}
