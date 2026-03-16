@@ -4,6 +4,7 @@ import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { timeAgo } from '@/utils'
+import { useNotifications } from '@/contexts/NotificationContext'
 
 function NotifItem({ n, expandedNotifs, toggleNotifExpand, markRead }) {
   const expanded = expandedNotifs.has(n.id)
@@ -48,13 +49,9 @@ function NotifItem({ n, expandedNotifs, toggleNotifExpand, markRead }) {
 export default function NotificationPanel({
   open,
   onClose,
-  notifList,
-  unreadCount,
-  markAllRead,
-  markRead,
-  expandedNotifs,
-  toggleNotifExpand,
 }) {
+  const { notifList, unreadCount, markAllRead, markRead, expandedNotifs, toggleNotifExpand } = useNotifications()
+
   return (
     <Panel id="notifications" open={open} onClose={onClose}>
       <PanelHeader onClose={onClose}>

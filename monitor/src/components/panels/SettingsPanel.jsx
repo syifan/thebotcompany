@@ -1,32 +1,44 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Sun, Moon, Monitor, Info } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import { detectProvider } from '@/utils'
+import { useAuth } from '@/hooks/useAuth'
+import { useNotifications } from '@/contexts/NotificationContext'
+import { useToast } from '@/contexts/ToastContext'
 
 export default function SettingsPanel({
   settingsOpen,
   onClose,
   theme,
   setTheme,
-  notificationsEnabled,
-  toggleNotifications,
-  detailedNotifs,
-  setDetailedNotifs,
   setShowApiKeyHelp,
-  globalTokenInput,
-  setGlobalTokenInput,
-  tokenSaving,
-  setTokenSaving,
-  setHasGlobalToken,
-  setGlobalTokenType,
-  setProviderTokens,
-  setGlobalTokenPreview,
-  setToast,
-  providerTokens,
-  codexLoginState,
-  setCodexLoginState,
-  authFetch,
 }) {
+  const { authFetch } = useAuth()
+  const { notificationsEnabled, toggleNotifications, detailedNotifs, setDetailedNotifs } = useNotifications()
+  const { showToast } = useToast()
+
+  // Own state: token management
+  const [hasGlobalToken, setHasGlobalToken] = useState(false)
+  const [globalTokenPreview, setGlobalTokenPreview] = useState(null)
+  const [globalTokenType, setGlobalTokenType] = useState(null)
+  const [globalTokenInput, setGlobalTokenInput] = useState('')
+  const [providerTokens, setProviderTokens] = useState({})
+  const [tokenSaving, setTokenSaving] = useState(false)
+  const [codexLoginState, setCodexLoginState] = useState(null)
+
+  // Fetch settings on mount
+  useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then(d => {
+      setHasGlobalToken(!!d.hasGlobalToken)
+      setGlobalTokenPreview(d.globalTokenPreview || null)
+      setGlobalTokenType(d.tokenType || null)
+      setProviderTokens(d.providers || {})
+    }).catch(() => {})
+    fetch('/api/openai-codex/status').then(r => r.json()).then(d => {
+      if (d.authenticated) setCodexLoginState('success')
+    }).catch(() => {})
+  }, [])
+
   const notifSupported = typeof window !== 'undefined' && 'Notification' in window
   const notifPermission = notifSupported ? Notification.permission : 'default'
 
@@ -49,7 +61,7 @@ export default function SettingsPanel({
           setProviderTokens(s.providers || {})
         }).catch(() => {})
         setGlobalTokenInput('')
-        setToast(`${detectProvider(globalTokenInput) || 'API'} key saved`)
+        showToast(`${detectProvider(globalTokenInput) || 'API'} key saved`)
       }
     } catch {}
     setTokenSaving(false)
@@ -157,7 +169,6 @@ export default function SettingsPanel({
                 {tokenSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
-            {/* Show configured providers */}
             <div className="mt-3 space-y-1.5">
               {[
                 { key: 'anthropic', label: 'Anthropic', color: 'text-orange-600 dark:text-orange-400' },
@@ -184,7 +195,7 @@ export default function SettingsPanel({
                               const d = await res.json()
                               setProviderTokens(d.providers || {})
                               setHasGlobalToken(d.hasGlobalToken)
-                              setToast(`${label} key removed`)
+                              showToast(`${label} key removed`)
                             }
                           } catch {}
                           setTokenSaving(false)
@@ -207,7 +218,7 @@ export default function SettingsPanel({
                     onClick={async () => {
                       await authFetch('/api/openai-codex/logout', { method: 'POST' })
                       setCodexLoginState(null)
-                      setToast('ChatGPT account disconnected')
+                      showToast('ChatGPT account disconnected')
                     }}
                     className="text-red-500 hover:text-red-700 text-xs"
                   >
@@ -232,7 +243,7 @@ export default function SettingsPanel({
                             if (status.authenticated) {
                               clearInterval(pollInterval)
                               setCodexLoginState('success')
-                              setToast('ChatGPT account connected')
+                              showToast('ChatGPT account connected')
                             }
                           } catch {}
                         }, 3000)
