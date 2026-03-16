@@ -344,6 +344,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
 
 function executeRead(input, cwd) {
   let filePath = input.file_path;
+  if (!filePath || typeof filePath !== 'string') return 'Error: file_path is required and must be a string';
   if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -359,6 +360,7 @@ function executeRead(input, cwd) {
 
 function executeWrite(input, cwd) {
   let filePath = input.file_path;
+  if (!filePath || typeof filePath !== 'string') return 'Error: file_path is required and must be a string';
   if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
   try {
     const dir = path.dirname(filePath);
@@ -372,6 +374,7 @@ function executeWrite(input, cwd) {
 
 function executeEdit(input, cwd) {
   let filePath = input.file_path;
+  if (!filePath || typeof filePath !== 'string') return 'Error: file_path is required and must be a string';
   if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -740,3 +743,6 @@ export async function runAgentWithAPI(opts) {
     }
   }
 }
+
+// Exported for testing
+export { executeRead, executeWrite, executeEdit, executeGlob, executeGrep, executeTool };
