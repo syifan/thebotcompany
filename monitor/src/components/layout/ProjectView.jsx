@@ -2,14 +2,8 @@ import React from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, Clock, User, UserCheck, ArrowLeft, Github, Bell, BellOff, ChevronDown, Lock, Unlock } from 'lucide-react'
-import { Modal, ModalHeader, ModalContent } from '@/components/ui/modal'
-import { Panel, PanelSlot, PanelHeader, PanelContent } from '@/components/ui/panel'
-import ReactMarkdown from 'react-markdown'
-import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges } from '@/components/ScheduleDiagram'
-import remarkGfm from 'remark-gfm'
-import { Separator } from '@/components/ui/separator'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
+import { PanelSlot } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
 import { OrchestratorStateCard, CostBudgetCard, ConfigCard } from '@/components/project/OrchestratorState'
@@ -20,8 +14,16 @@ import SettingsPanel from '@/components/panels/SettingsPanel'
 import NotificationPanel from '@/components/panels/NotificationPanel'
 import BootstrapPanel from '@/components/panels/BootstrapPanel'
 import ReportsPanel from '@/components/panels/ReportsPanel'
+import AgentDetailPanel from '@/components/panels/AgentDetailPanel'
+import IssueDetailPanel from '@/components/panels/IssueDetailPanel'
+import ProjectSettingsPanel from '@/components/panels/ProjectSettingsPanel'
 import LoginModal from '@/components/modals/LoginModal'
 import ApiKeyHelpModal from '@/components/modals/ApiKeyHelpModal'
+import AgentSettingsModal from '@/components/modals/AgentSettingsModal'
+import BudgetInfoModal from '@/components/modals/BudgetInfoModal'
+import IntervalInfoModal from '@/components/modals/IntervalInfoModal'
+import TimeoutInfoModal from '@/components/modals/TimeoutInfoModal'
+import CreateIssueModal from '@/components/modals/CreateIssueModal'
 
 export default function ProjectView({
   selectedProject,
@@ -126,7 +128,30 @@ export default function ProjectView({
   codexLoginState,
   setCodexLoginState,
   authFetch,
-  projectSettingsModal,
+  setProjSetting,
+  notifUseGlobal,
+  projNotifSettings,
+  hasProjectToken,
+  projectTokenPreview,
+  projectTokenProviderLabel,
+  projectTokenSaving,
+  setProjectTokenSaving,
+  setHasProjectToken,
+  setProjectTokenPreview,
+  setProjectTokenProviderLabel,
+  projectTokenInput,
+  setProjectTokenInput,
+  projectTokenProvider,
+  setProjectTokenProvider,
+  projectCodexLoginState,
+  setProjectCodexLoginState,
+  config,
+  setSelectedProject,
+  fetchProjectData,
+  fetchGlobalStatus,
+  removeProject,
+  hasGlobalToken,
+  globalTokenPreview,
   showApiKeyHelp,
   toast,
 }) {
@@ -424,124 +449,11 @@ export default function ProjectView({
         )}
       </div>
 
-      {/* Agent Details Modal */}
-      <Panel id="agent-detail" open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
-        <PanelHeader onClose={() => setAgentModal({ ...agentModal, open: false })}>
-          <span className="capitalize">{agentModal.agent}</span>
-          {agentModal.data?.isManager && <Badge variant="secondary" className="ml-2">Manager</Badge>}
-        </PanelHeader>
-        <PanelContent>
-          {agentModal.loading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
-            </div>
-          ) : agentModal.data ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm text-neutral-600 dark:text-neutral-300">Model</h3>
-                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-sm rounded">{agentModal.data.model || 'inherited'}</span>
-              </div>
-              {/* Tabs: Skill | Workspace */}
-              <div className="flex border-b border-neutral-200 dark:border-neutral-700">
-                <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'skill' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                  onClick={() => setAgentModal(prev => ({ ...prev, tab: 'skill' }))}
-                >Skill</button>
-                <button
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'workspace' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                  onClick={() => setAgentModal(prev => ({ ...prev, tab: 'workspace' }))}
-                >Workspace</button>
-              </div>
-              {agentModal.tab === 'skill' ? (
-              <div className="space-y-3">
-                {/* Agent Skill - shown first and open by default */}
-                <details open>
-                  <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">Agent Skill — {agentModal.agent}.md</summary>
-                  <div className="text-sm prose prose-sm dark:prose-invert max-w-none mt-1 border-t border-neutral-200 dark:border-neutral-700 pt-3">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.skill}</ReactMarkdown>
-                  </div>
-                </details>
-                {/* Role Rules - collapsed by default */}
-                {agentModal.data.roleRules && (
-                <details>
-                  <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">{agentModal.data.isManager ? 'Manager' : 'Worker'} Rules — {agentModal.data.isManager ? 'manager' : 'worker'}.md</summary>
-                  <div className="text-sm prose prose-sm dark:prose-invert max-w-none mt-1 border-t border-neutral-200 dark:border-neutral-700 pt-3">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.roleRules}</ReactMarkdown>
-                  </div>
-                </details>
-                )}
-                {/* Shared Rules - collapsed by default */}
-                {agentModal.data.everyone && (
-                <details>
-                  <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300">Shared Rules — everyone.md</summary>
-                  <div className="text-sm prose prose-sm dark:prose-invert max-w-none mt-1 border-t border-neutral-200 dark:border-neutral-700 pt-3">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{agentModal.data.everyone}</ReactMarkdown>
-                  </div>
-                </details>
-                )}
-              </div>
-              ) : (
-              <div className="space-y-3">
-                {agentModal.data.workspaceFiles?.length > 0 ? (
-                  agentModal.data.workspaceFiles.map((file, i) => (
-                    <details key={file.name} open={i === 0}>
-                      <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300 flex items-center justify-between">
-                        <span>{file.name}</span>
-                        <span className="text-[10px] font-normal normal-case">{new Date(file.modified).toLocaleString()}</span>
-                      </summary>
-                      {file.content && (
-                        <div className="text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none mt-1 border-t border-neutral-200 dark:border-neutral-700 pt-3 [&_pre]:bg-transparent [&_pre]:p-0 [&_pre]:border-0">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{file.content}</ReactMarkdown>
-                        </div>
-                      )}
-                    </details>
-                  ))
-                ) : (
-                  <p className="text-neutral-400 dark:text-neutral-500 italic py-4 text-center">No workspace files</p>
-                )}
-              </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load agent details</p>
-          )}
-        </PanelContent>
-      </Panel>
+      {/* Agent Details Panel */}
+      <AgentDetailPanel agentModal={agentModal} setAgentModal={setAgentModal} />
 
       {/* Agent Settings Modal */}
-      <Modal open={agentSettingsModal.open} onClose={() => setAgentSettingsModal({ ...agentSettingsModal, open: false })}>
-        <ModalHeader onClose={() => setAgentSettingsModal({ ...agentSettingsModal, open: false })}>
-          <Settings className="w-4 h-4 inline mr-2" />
-          <span className="capitalize">{agentSettingsModal.agent?.name}</span> Settings
-        </ModalHeader>
-        <ModalContent>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">Model</label>
-              <select
-                className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={agentSettingsModal.model}
-                onChange={(e) => setAgentSettingsModal(prev => ({ ...prev, model: e.target.value }))}
-              >
-                <option value="">Inherited from global</option>
-                <option value="high">⚡ High (deep reasoning)</option>
-                <option value="mid">● Mid (default)</option>
-                <option value="low">○ Low (fast/cheap)</option>
-              </select>
-              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Leave empty to use the project's default model.</p>
-            </div>
-            {agentSettingsModal.error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{agentSettingsModal.error}</p>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setAgentSettingsModal({ ...agentSettingsModal, open: false })}>Cancel</Button>
-              <Button onClick={saveAgentSettings} disabled={agentSettingsModal.saving}>
-                {agentSettingsModal.saving ? 'Saving...' : 'Save'}
-              </Button>
-            </div>
-          </div>
-        </ModalContent>
-      </Modal>
+      <AgentSettingsModal agentSettingsModal={agentSettingsModal} setAgentSettingsModal={setAgentSettingsModal} saveAgentSettings={saveAgentSettings} />
 
       {/* Bootstrap Panel */}
       <BootstrapPanel
@@ -551,282 +463,30 @@ export default function ProjectView({
       />
 
       {/* Budget Info Modal */}
-      <Modal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)}>
-        <ModalHeader onClose={() => setBudgetInfoModal(false)}>
-          How Budget Works
-        </ModalHeader>
-        <ModalContent>
-          <div className="space-y-4 text-sm text-neutral-700 dark:text-neutral-300">
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Overview</h3>
-              <p>The budget system dynamically adjusts cycle intervals to keep your 24-hour spending under the configured limit.</p>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">How it calculates sleep time</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Tracks cost of each cycle using EMA (exponential moving average)</li>
-                <li>Calculates remaining budget: <code className="bg-neutral-100 dark:bg-neutral-800 px-1 rounded">budget - spent_24h</code></li>
-                <li>Estimates how many cycles you can afford</li>
-                <li>Spreads those cycles evenly across 24 hours</li>
-                <li>Adds a conservatism factor that decreases as more data is collected</li>
-              </ol>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Interval as minimum</h3>
-              <p>If you set both budget and interval, the <strong>interval acts as a floor</strong>. Budget can make sleep longer, but never shorter than the configured interval.</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Budget exhaustion</h3>
-              <p>When spending hits the limit, the orchestrator sleeps until the oldest cost entry rolls off the 24-hour window (max 2 hours at a time).</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Cold start</h3>
-              <p>With no historical data, it estimates based on agent count and model type, using a higher conservatism factor.</p>
-            </div>
-          </div>
-        </ModalContent>
-      </Modal>
+      <BudgetInfoModal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)} />
 
       {/* Interval Info Modal */}
-      <Modal open={intervalInfoModal} onClose={() => setIntervalInfoModal(false)}>
-        <ModalHeader onClose={() => setIntervalInfoModal(false)}>
-          Interval
-        </ModalHeader>
-        <ModalContent>
-          <div className="space-y-3 text-sm text-neutral-700 dark:text-neutral-300">
-            <p>The <strong>minimum time</strong> between cycles. After all agents complete a cycle, the orchestrator waits at least this long before starting the next cycle.</p>
-            <p>If a budget is configured, the actual interval may be longer to stay within the budget limit. The interval acts as a floor — never shorter, but can be longer.</p>
-            <p><strong>No delay</strong> means cycles run back-to-back (only useful with budget control).</p>
-          </div>
-        </ModalContent>
-      </Modal>
+      <IntervalInfoModal open={intervalInfoModal} onClose={() => setIntervalInfoModal(false)} />
 
       {/* Timeout Info Modal */}
-      <Modal open={timeoutInfoModal} onClose={() => setTimeoutInfoModal(false)}>
-        <ModalHeader onClose={() => setTimeoutInfoModal(false)}>
-          Agent Timeout
-        </ModalHeader>
-        <ModalContent>
-          <div className="space-y-3 text-sm text-neutral-700 dark:text-neutral-300">
-            <p>The <strong>maximum time</strong> an individual agent is allowed to run before being killed.</p>
-            <p>If an agent exceeds this limit, it will be forcefully terminated and the orchestrator moves to the next agent.</p>
-            <p><strong>Never</strong> means no timeout — agents run until they complete naturally. Use with caution as stuck agents can block the entire cycle.</p>
-          </div>
-        </ModalContent>
-      </Modal>
+      <TimeoutInfoModal open={timeoutInfoModal} onClose={() => setTimeoutInfoModal(false)} />
 
       {/* API Key Help Modal */}
       <ApiKeyHelpModal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)} />
 
       {/* Create Issue Modal */}
-      <Modal open={createIssueModal.open} onClose={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>
-        <ModalHeader onClose={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>
-          Create Issue
-        </ModalHeader>
-        <ModalContent>
-          <div className="space-y-4">
-            {createIssueModal.error && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm">
-                {createIssueModal.error}
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Title</label>
-              <input
-                type="text"
-                placeholder="Short description of the issue"
-                className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                value={createIssueModal.title}
-                onChange={(e) => setCreateIssueModal(prev => ({ ...prev, title: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('create-issue-body')?.focus() } }}
-                onFocus={() => setCreateIssueModal(prev => ({ ...prev, focusedField: 'title' }))}
-                disabled={createIssueModal.creating}
-                autoFocus
-              />
-              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">Created as a human issue in the project database</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">{createIssueModal.focusedField === 'title' ? `(optional, Enter to move here)` : '(optional)'}</span></label>
-              <textarea
-                id="create-issue-body"
-                placeholder="Additional details, context, acceptance criteria..."
-                className="w-full px-3 py-2 border rounded-md min-h-[100px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                value={createIssueModal.body}
-                onChange={(e) => setCreateIssueModal(prev => ({ ...prev, body: e.target.value }))}
-                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') createIssue() }}
-                onFocus={() => setCreateIssueModal(prev => ({ ...prev, focusedField: 'body' }))}
-                disabled={createIssueModal.creating}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Receiver <span className="text-neutral-400 font-normal">(optional)</span></label>
-              <select
-                className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                value={createIssueModal.receiver}
-                onChange={(e) => setCreateIssueModal(prev => ({ ...prev, receiver: e.target.value }))}
-                disabled={createIssueModal.creating}
-              >
-                <option value="">None (visible to all)</option>
-                {[...agents.managers, ...agents.workers].map(a => (
-                  <option key={a.name} value={a.name}>{a.name}{a.role ? ` (${a.role})` : ''}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
-              <Button onClick={createIssue} disabled={!createIssueModal.title.trim() || createIssueModal.creating}>
-                {createIssueModal.creating ? 'Creating...' : createIssueModal.focusedField === 'body' ? `Create (${modKey}+Enter)` : 'Create'}
-              </Button>
-            </div>
-          </div>
-        </ModalContent>
-      </Modal>
+      <CreateIssueModal createIssueModal={createIssueModal} setCreateIssueModal={setCreateIssueModal} createIssue={createIssue} agents={agents} modKey={modKey} />
 
-      {/* Issue Detail Modal */}
-      <Panel id="issue-detail" open={issueModal.open} onClose={() => setIssueModal({ ...issueModal, open: false })}>
-        <PanelHeader onClose={() => setIssueModal({ ...issueModal, open: false })}>
-          {issueModal.issue ? `#${issueModal.issue.id} ${issueModal.issue.title}` : 'Issue'}
-        </PanelHeader>
-        <PanelContent>
-          {issueModal.loading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
-            </div>
-          ) : issueModal.issue ? (
-            <div className="space-y-5">
-              {/* Header meta row */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2 min-w-0">
-                  <Badge variant={issueModal.issue.status === 'open' ? 'success' : 'secondary'} className="text-xs">{issueModal.issue.status || 'open'}</Badge>
-                  {issueModal.issue.labels && issueModal.issue.labels.split(',').map(l => l.trim()).filter(Boolean).map(label => (
-                    <Badge key={label} variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-700">{label}</Badge>
-                  ))}
-                </div>
-                {isWriteMode && (
-                  <Button
-                    variant={issueModal.issue.status === 'open' ? 'outline' : 'default'}
-                    size="sm"
-                    className={`text-xs shrink-0 ${issueModal.issue.status === 'open' ? 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950' : 'text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950'}`}
-                    onClick={async () => {
-                      const newStatus = issueModal.issue.status === 'open' ? 'closed' : 'open'
-                      try {
-                        await authFetch(projectApi(`/issues/${issueModal.issue.id}`), {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ status: newStatus })
-                        })
-                        setIssueModal(prev => ({ ...prev, issue: { ...prev.issue, status: newStatus } }))
-                      } catch {}
-                    }}
-                  >{issueModal.issue.status === 'open' ? '✕ Close Issue' : '↻ Reopen Issue'}</Button>
-                )}
-              </div>
-
-              {/* Info grid */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                {issueModal.issue.creator && (
-                  <>
-                    <span className="text-neutral-400 dark:text-neutral-500">Created by</span>
-                    <span className="flex items-center gap-1 text-neutral-700 dark:text-neutral-200"><User className="w-3 h-3" />{issueModal.issue.creator}</span>
-                  </>
-                )}
-                {issueModal.issue.assignee && (
-                  <>
-                    <span className="text-neutral-400 dark:text-neutral-500">Assigned to</span>
-                    <span className="flex items-center gap-1 text-green-600 dark:text-green-400"><UserCheck className="w-3 h-3" />{issueModal.issue.assignee}</span>
-                  </>
-                )}
-                <span className="text-neutral-400 dark:text-neutral-500">Created</span>
-                <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(issueModal.issue.created_at).toLocaleString()}</span>
-                {issueModal.issue.closed_at && (
-                  <>
-                    <span className="text-neutral-400 dark:text-neutral-500">Closed</span>
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(issueModal.issue.closed_at).toLocaleString()}</span>
-                  </>
-                )}
-              </div>
-
-              {/* Body */}
-              {issueModal.issue.body && (
-                <>
-                  <Separator />
-                  <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{issueModal.issue.body}</ReactMarkdown>
-                  </div>
-                </>
-              )}
-
-              {/* Comments */}
-              {issueModal.comments.length > 0 && (
-                <>
-                  <Separator />
-                  <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-2">
-                    <span>Comments</span>
-                    <Badge variant="outline" className="text-[10px] font-normal">{issueModal.comments.length}</Badge>
-                  </h3>
-                  <div className="space-y-3">
-                    {issueModal.comments.map((comment) => (
-                      <div key={comment.id} className="border-b border-neutral-200 dark:border-neutral-700 pb-3 last:border-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Avatar className="w-6 h-6">
-                            <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
-                              {(comment.author || '??').slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.author}</span>
-                          <span className="text-xs text-neutral-400 dark:text-neutral-500 ml-auto">{new Date(comment.created_at).toLocaleString()}</span>
-                        </div>
-                        <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
-                          {parseScheduleBlock(comment.body) && (
-                            <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
-                          )}
-                          <MetaBlockBadges text={comment.body} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Add Comment */}
-              {isWriteMode && <>
-              <Separator />
-              <div className="space-y-2">
-                <textarea
-                  className="w-full text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 text-neutral-800 dark:text-neutral-100 placeholder:text-neutral-400"
-                  rows={3}
-                  placeholder="Add a comment..."
-                  value={issueModal.newComment || ''}
-                  onChange={(e) => setIssueModal(prev => ({ ...prev, newComment: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault()
-                      submitIssueComment()
-                    }
-                  }}
-                />
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    disabled={!issueModal.newComment?.trim() || issueModal.commenting}
-                    onClick={submitIssueComment}
-                  >
-                    {issueModal.commenting ? 'Posting...' : `Post (${modKey}+↵)`}
-                  </Button>
-                </div>
-              </div>
-              </>}
-            </div>
-          ) : (
-            <p className="text-neutral-400 dark:text-neutral-500 text-center py-8">Failed to load issue</p>
-          )}
-        </PanelContent>
-      </Panel>
+      {/* Issue Detail Panel */}
+      <IssueDetailPanel
+        issueModal={issueModal}
+        setIssueModal={setIssueModal}
+        isWriteMode={isWriteMode}
+        authFetch={authFetch}
+        projectApi={projectApi}
+        submitIssueComment={submitIssueComment}
+        modKey={modKey}
+      />
 
       {/* Agent Reports Panel */}
       <ReportsPanel
@@ -876,7 +536,42 @@ export default function ProjectView({
         setCodexLoginState={setCodexLoginState}
         authFetch={authFetch}
       />
-      {projectSettingsModal}
+      {/* Project Settings Panel */}
+      <ProjectSettingsPanel
+        selectedProject={selectedProject}
+        projectSettingsOpen={projectSettingsOpen}
+        setProjectSettingsOpen={setProjectSettingsOpen}
+        setProjSetting={setProjSetting}
+        notifUseGlobal={notifUseGlobal}
+        projNotifSettings={projNotifSettings}
+        setShowApiKeyHelp={setShowApiKeyHelp}
+        hasProjectToken={hasProjectToken}
+        projectTokenPreview={projectTokenPreview}
+        projectTokenProviderLabel={projectTokenProviderLabel}
+        projectTokenSaving={projectTokenSaving}
+        setProjectTokenSaving={setProjectTokenSaving}
+        authFetch={authFetch}
+        projectApi={projectApi}
+        setHasProjectToken={setHasProjectToken}
+        setProjectTokenPreview={setProjectTokenPreview}
+        setProjectTokenProviderLabel={setProjectTokenProviderLabel}
+        setToast={setToast}
+        projectTokenInput={projectTokenInput}
+        setProjectTokenInput={setProjectTokenInput}
+        projectTokenProvider={projectTokenProvider}
+        setProjectTokenProvider={setProjectTokenProvider}
+        projectCodexLoginState={projectCodexLoginState}
+        setProjectCodexLoginState={setProjectCodexLoginState}
+        codexLoginState={codexLoginState}
+        isWriteMode={isWriteMode}
+        config={config}
+        setSelectedProject={setSelectedProject}
+        fetchProjectData={fetchProjectData}
+        fetchGlobalStatus={fetchGlobalStatus}
+        removeProject={removeProject}
+        hasGlobalToken={hasGlobalToken}
+        globalTokenPreview={globalTokenPreview}
+      />
       {/* Notification Center */}
       <NotificationPanel
         open={notifCenter}
