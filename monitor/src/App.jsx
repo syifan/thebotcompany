@@ -10,48 +10,29 @@ import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, parseTimingBlo
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { detectProvider } from '@/utils'
 
-function Footer() {
-  return (
-    <footer className="mt-12 py-6 border-t border-neutral-200 dark:border-neutral-700">
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-neutral-400 dark:text-neutral-500">
-        <span>TheBotCompany</span>
-        <span className="hidden sm:inline">·</span>
-        <a 
-          href="https://github.com/syifan/thebotcompany" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-        >
-          <Github className="w-4 h-4" />
-          GitHub
-        </a>
-      </div>
-    </footer>
-  )
-}
+// Layout components
+import Footer from '@/components/layout/Footer'
+import SleepCountdown from '@/components/layout/SleepCountdown'
+import LiveDuration from '@/components/layout/LiveDuration'
 
-function SleepCountdown({ sleepUntil }) {
-  const [remaining, setRemaining] = useState('')
-  
-  useEffect(() => {
-    const update = () => {
-      const diff = sleepUntil - Date.now()
-      if (diff <= 0) {
-        setRemaining('Starting...')
-        return
-      }
-      const mins = Math.floor(diff / 60000)
-      const secs = Math.floor((diff % 60000) / 1000)
-      setRemaining(`${mins}m ${secs}s`)
-    }
-    update()
-    const interval = setInterval(update, 1000)
-    return () => clearInterval(interval)
-  }, [sleepUntil])
-  
-  return <span className="text-sm font-mono text-blue-600">{remaining}</span>
-}
+// Panel components
+import SettingsPanel from '@/components/panels/SettingsPanel'
+import NotificationPanel from '@/components/panels/NotificationPanel'
+import BootstrapPanel from '@/components/panels/BootstrapPanel'
+import ReportsPanel from '@/components/panels/ReportsPanel'
+
+// Modal components
+import LoginModal from '@/components/modals/LoginModal'
+import AddProjectModal from '@/components/modals/AddProjectModal'
+import ApiKeyHelpModal from '@/components/modals/ApiKeyHelpModal'
+
+// Project components
+import { OrchestratorStateCard, CostBudgetCard, ConfigCard } from '@/components/project/OrchestratorState'
+import WorkerCard from '@/components/project/WorkerCard'
+import IssuesSidebar from '@/components/project/IssuesSidebar'
+import AgentReportsCard from '@/components/project/AgentReportsCard'
 
 // Lazy report summary component — triggers summarization on first render if missing
 const summaryCache = new Map() // reportId -> summary string | 'loading' | 'error'
@@ -90,21 +71,6 @@ function ReportSummary({ reportId, projectId, summary: initialSummary, className
   )
 }
 
-function LiveDuration({ startTime }) {
-  const [display, setDisplay] = useState('')
-  useEffect(() => {
-    const update = () => {
-      const elapsed = Math.floor((Date.now() - startTime) / 1000)
-      if (elapsed < 60) setDisplay(`${elapsed}s`)
-      else setDisplay(`${Math.floor(elapsed / 60)}m ${elapsed % 60}s`)
-    }
-    update()
-    const interval = setInterval(update, 1000)
-    return () => clearInterval(interval)
-  }, [startTime])
-  return <span>{display}</span>
-}
-
 function App() {
   // Multi-project state
   const [projects, setProjects] = useState([])
@@ -132,13 +98,6 @@ function App() {
   const [projectTokenSaving, setProjectTokenSaving] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  const detectProvider = (token) => {
-    if (!token) return null
-    if (token.startsWith('sk-ant-')) return 'Anthropic'
-    if (token.startsWith('sk-proj-') || token.startsWith('sk-')) return 'OpenAI'
-    if (token.startsWith('AIzaSy')) return 'Google'
-    return null
-  }
   const [projectNotifs, setProjectNotifs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('tbc_project_notifs') || '{}') } catch { return {} }
   })
@@ -219,16 +178,7 @@ function App() {
     liveLogAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
   }, [])
 
-  // Auto-scroll live log to bottom when new entries arrive.
-  // Uses scrollTop on the container directly instead of scrollIntoView() to avoid
-  // hijacking scroll position of ancestor containers (e.g. the Reports panel).
-  useEffect(() => {
-    if (liveLogRef.current && liveLogAtBottomRef.current) {
-      liveLogRef.current.scrollTop = liveLogRef.current.scrollHeight
-    }
-  }, [liveAgentLog])
-
-
+  const liveLogRef = useRef(null)
 
   const [notifCenter, setNotifCenter] = useState(false)
   const [notifList, setNotifList] = useState([])
@@ -377,7 +327,6 @@ function App() {
   const [projectLoading, setProjectLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const logsRef = useRef(null)
-  const liveLogRef = useRef(null)
   const reportsScrollRef = useRef(null)
 
   const prevAgentRef = useRef(null)
@@ -1112,70 +1061,6 @@ function App() {
     }
   }
 
-  const AgentItem = ({ agent, isManager = false }) => {
-    const isActive = selectedProject?.currentAgent === agent.name
-    const isSelected = selectedAgent === agent.name
-    const runtime = isActive ? selectedProject?.currentAgentRuntime : null
-    // Get mode from schedule
-    const schedule = selectedProject?.schedule
-    const task = getAgentTask(schedule, agent.name)
-    
-    return (
-      <div className="p-2 rounded bg-neutral-50 dark:bg-neutral-900">
-        {/* Row 1: Name + action buttons */}
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-neutral-800 dark:text-neutral-100 capitalize">{agent.name}{agent.role && <span className="text-xs font-normal text-neutral-500 dark:text-neutral-400 ml-1.5">({agent.role})</span>}{agent.reportsTo && <span className="text-xs font-normal text-neutral-400 dark:text-neutral-500 ml-1.5">→ {agent.reportsTo}</span>}</span>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => openAgentModal(agent.name)}
-              className="p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
-              title="View agent details"
-            >
-              <Info className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => openAgentSettings(agent)}
-              className="p-1 rounded transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300"
-              title="Agent settings"
-            >
-              <Settings className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => {
-                if (isSelected) clearAgentFilter()
-                else selectAgent(agent.name)
-              }}
-              className={`p-1 rounded transition-colors ${
-                isSelected
-                  ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
-                  : 'hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300'
-              }`}
-              title="Filter comments by agent"
-            >
-              <Filter className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-        {task && <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5 italic">{task}</p>}
-        {/* Row 3: Pills */}
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
-          {isActive && (
-            <Badge variant="success" className="flex items-center gap-1">
-              Active{runtime !== null && <span className="font-mono">{formatRuntime(runtime)}</span>}
-            </Badge>
-          )}
-        </div>
-        {/* Row 3: Cost metrics */}
-        {(agent.totalCost > 0 || agent.lastCallCost > 0) && (
-          <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
-            Last: ${(agent.lastCallCost || 0).toFixed(2)} · Avg: ${(agent.avgCallCost || 0).toFixed(2)} · 24h: ${(agent.last24hCost || 0).toFixed(2)} · Total: ${(agent.totalCost || 0).toFixed(2)}
-          </p>
-        )}
-      </div>
-    )
-  }
-
   // Loading state: URL has a project path but we haven't resolved it yet
   const hasProjectInUrl = window.location.pathname !== '/' && window.location.pathname.length > 1
   if (!selectedProject && hasProjectInUrl && projects.length === 0) {
@@ -1186,8 +1071,7 @@ function App() {
     )
   }
 
-  // Project listing page (when no project is selected)
-  // Notification item component
+  // Notification helper
   const toggleNotifExpand = (id) => {
     setExpandedNotifs(prev => {
       const next = new Set(prev)
@@ -1196,291 +1080,10 @@ function App() {
     })
   }
 
-  const NotifItem = ({ n }) => {
-    const expanded = expandedNotifs.has(n.id)
-    const typeIcons = { milestone: '📌', verified: '✅', 'verify-fail': '❌', phase: '🔄', error: '⚠️', 'agent-done': n.message?.startsWith('✗') ? '✗' : '✓', 'project-complete': '🏁' }
-    const icon = typeIcons[n.type] || '📋'
-    const isLong = n.message && n.message.length > 120
-    const displayMsg = isLong && !expanded ? n.message.slice(0, 120) + '…' : n.message
-
-    // Parse agent name from message (format: "✓ agentname: response" or "📌 title")
-    const agentMatch = n.type === 'agent-done' && n.message?.match(/^[✓✗]\s+(\S+?):\s(.+)$/s)
-    const agentName = agentMatch ? agentMatch[1] : null
-    const agentMsg = agentMatch ? agentMatch[2] : displayMsg
-
-    const timeAgo = (ts) => {
-      const diff = Date.now() - new Date(ts).getTime()
-      if (diff < 60000) return 'just now'
-      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-      return new Date(ts).toLocaleDateString()
-    }
-
-    return (
-      <div
-        className={`p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
-        onClick={() => { markRead(n.id); if (isLong) toggleNotifExpand(n.id) }}
-      >
-        <div className="flex items-start gap-2.5">
-          <span className="mt-0.5 text-base shrink-0 w-5 text-center">{!n.read ? <span className="inline-block w-2 h-2 rounded-full bg-blue-500" /> : <span className="opacity-60">{icon}</span>}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2 flex-wrap">
-              {agentName && <span className={`text-sm font-semibold ${!n.read ? 'text-neutral-800 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-300'}`}>{agentName}</span>}
-              <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{n.project}</span>
-              <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto shrink-0">{timeAgo(n.timestamp)}</span>
-            </div>
-            <div className={`text-sm mt-0.5 leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 ${!n.read ? 'text-neutral-700 dark:text-neutral-200' : 'text-neutral-500 dark:text-neutral-400'}`}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {agentName ? (isLong && !expanded ? agentMsg.slice(0, 120) + '…' : agentMsg) : displayMsg}
-              </ReactMarkdown>
-            </div>
-            {isLong && (
-              <button className="text-xs text-blue-500 mt-1" onClick={(e) => { e.stopPropagation(); toggleNotifExpand(n.id) }}>
-                {expanded ? 'Show less' : 'Show more'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const notifSupported = typeof window !== 'undefined' && 'Notification' in window
   const notifPermission = notifSupported ? Notification.permission : 'default'
 
-  const settingsModal = (
-    <Panel id="settings" open={settingsOpen} onClose={() => setSettingsOpen(false)}>
-      <PanelHeader onClose={() => setSettingsOpen(false)}>Settings</PanelHeader>
-      <PanelContent>
-        <div className="pb-5">
-          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Display</h3>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-neutral-700 dark:text-neutral-300">Theme</span>
-            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-700 rounded-lg p-0.5">
-              <button
-                onClick={() => setTheme('light')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'light' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
-              >
-                <Sun className="w-3.5 h-3.5 inline mr-1" />Light
-              </button>
-              <button
-                onClick={() => setTheme('dark')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'dark' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
-              >
-                <Moon className="w-3.5 h-3.5 inline mr-1" />Dark
-              </button>
-              <button
-                onClick={() => setTheme('system')}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${theme === 'system' ? 'bg-white dark:bg-neutral-600 shadow text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400'}`}
-              >
-                <Monitor className="w-3.5 h-3.5 inline mr-1" />System
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5 pb-5">
-          <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <span className="text-sm text-neutral-700 dark:text-neutral-300">Push Notifications</span>
-              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-                {!notifSupported ? 'Not supported in this browser' :
-                 notifPermission === 'denied' ? 'Blocked by browser — enable in settings' :
-                 'Get notified about milestones, verifications, and errors'}
-              </p>
-            </div>
-            <button
-              onClick={toggleNotifications}
-              className={`relative w-11 h-6 rounded-full transition-colors ${notificationsEnabled ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${notificationsEnabled ? 'translate-x-5' : ''}`} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between py-2 mt-1">
-            <div>
-              <span className="text-sm text-neutral-700 dark:text-neutral-300">Detailed Notifications</span>
-              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
-                Push notification for every agent response
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                const next = !detailedNotifs
-                setDetailedNotifs(next)
-                localStorage.setItem('tbc_detailed_notifs', String(next))
-              }}
-              className={`relative w-11 h-6 rounded-full transition-colors ${detailedNotifs ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${detailedNotifs ? 'translate-x-5' : ''}`} />
-            </button>
-          </div>
-        </div>
-        <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
-          <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Models</h3>
-            <button
-              onClick={() => setShowApiKeyHelp(true)}
-              className="text-neutral-400 hover:text-blue-500 dark:text-neutral-500 dark:hover:text-blue-400 transition-colors"
-              title="How to get API keys"
-            >
-              <Info className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-3">Paste any API key — provider is auto-detected from the key prefix.</p>
-          <div className="py-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="password"
-                placeholder="Paste API key (Anthropic, OpenAI, or Google)..."
-                value={globalTokenInput}
-                onChange={e => setGlobalTokenInput(e.target.value)}
-                className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-              />
-              {globalTokenInput && detectProvider(globalTokenInput) && (
-                <span className="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">✓ {detectProvider(globalTokenInput)}</span>
-              )}
-              {globalTokenInput && !detectProvider(globalTokenInput) && (
-                <span className="text-xs text-amber-500 whitespace-nowrap">? Unknown</span>
-              )}
-              <button
-                onClick={async () => {
-                  setTokenSaving(true)
-                  try {
-                    const res = await authFetch('/api/settings/token', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ token: globalTokenInput })
-                    })
-                    if (res.ok) {
-                      const d = await res.json()
-                      setHasGlobalToken(d.hasGlobalToken)
-                      setGlobalTokenType(d.tokenType || null)
-                      setProviderTokens(d.providers || {})
-                      fetch('/api/settings').then(r => r.json()).then(s => {
-                        setGlobalTokenPreview(s.globalTokenPreview || null)
-                        setGlobalTokenType(s.tokenType || null)
-                        setProviderTokens(s.providers || {})
-                      }).catch(() => {})
-                      setGlobalTokenInput('')
-                      setToast(`${detectProvider(globalTokenInput) || 'API'} key saved`)
-                    }
-                  } catch {}
-                  setTokenSaving(false)
-                }}
-                disabled={tokenSaving || !globalTokenInput}
-                className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-              >
-                {tokenSaving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-            {/* Show configured providers */}
-            <div className="mt-3 space-y-1.5">
-              {[
-                { key: 'anthropic', label: 'Anthropic', color: 'text-orange-600 dark:text-orange-400' },
-                { key: 'openai', label: 'OpenAI', color: 'text-green-600 dark:text-green-400' },
-                { key: 'google', label: 'Google', color: 'text-blue-600 dark:text-blue-400' },
-              ].map(({ key, label, color }) => {
-                const info = providerTokens[key]
-                return (
-                  <div key={key} className="flex items-center justify-between text-xs py-1">
-                    <span className={info?.hasToken ? color : 'text-neutral-400 dark:text-neutral-500'}>
-                      {info?.hasToken ? '✓' : '○'} {label} {info?.preview ? `(${info.preview})` : ''}
-                    </span>
-                    {info?.hasToken && (
-                      <button
-                        onClick={async () => {
-                          setTokenSaving(true)
-                          try {
-                            const res = await authFetch('/api/settings/token', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ token: '', provider: key })
-                            })
-                            if (res.ok) {
-                              const d = await res.json()
-                              setProviderTokens(d.providers || {})
-                              setHasGlobalToken(d.hasGlobalToken)
-                              setToast(`${label} key removed`)
-                            }
-                          } catch {}
-                          setTokenSaving(false)
-                        }}
-                        className="text-red-500 hover:text-red-700 text-xs"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-              {/* OpenAI Codex (ChatGPT OAuth) */}
-              <div className="flex items-center justify-between text-xs py-1">
-                <span className={codexLoginState === 'success' ? 'text-green-600 dark:text-green-400' : 'text-neutral-400 dark:text-neutral-500'}>
-                  {codexLoginState === 'success' ? '✓' : '○'} OpenAI Codex (ChatGPT)
-                </span>
-                {codexLoginState === 'success' ? (
-                  <button
-                    onClick={async () => {
-                      await authFetch('/api/openai-codex/logout', { method: 'POST' })
-                      setCodexLoginState(null)
-                      setToast('ChatGPT account disconnected')
-                    }}
-                    className="text-red-500 hover:text-red-700 text-xs"
-                  >
-                    Disconnect
-                  </button>
-                ) : codexLoginState === 'waiting' ? (
-                  <span className="text-xs text-blue-500 animate-pulse">Waiting for sign-in...</span>
-                ) : (
-                  <button
-                    onClick={async () => {
-                      try {
-                        setCodexLoginState('polling')
-                        const res = await authFetch('/api/openai-codex/login', { method: 'POST' })
-                        if (!res.ok) throw new Error('Failed')
-                        const data = await res.json()
-                        setCodexLoginState('waiting')
-                        window.open(data.authorization_url, '_blank')
-                        const pollInterval = setInterval(async () => {
-                          try {
-                            const statusRes = await fetch('/api/openai-codex/status')
-                            const status = await statusRes.json()
-                            if (status.authenticated) {
-                              clearInterval(pollInterval)
-                              setCodexLoginState('success')
-                              setToast('ChatGPT account connected')
-                            }
-                          } catch {}
-                        }, 3000)
-                        setTimeout(() => {
-                          clearInterval(pollInterval)
-                          setCodexLoginState(prev => prev === 'success' ? prev : 'error')
-                        }, 300000)
-                      } catch {
-                        setCodexLoginState('error')
-                      }
-                    }}
-                    disabled={codexLoginState === 'polling'}
-                    className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-xs"
-                  >
-                    {codexLoginState === 'polling' ? 'Starting...' : codexLoginState === 'error' ? 'Retry Login' : 'Login'}
-                  </button>
-                )}
-              </div>
-              {codexLoginState === 'waiting' && (
-                <div className="mt-2 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs">
-                  <p className="text-blue-700 dark:text-blue-300">Complete sign-in in the browser tab that just opened.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </PanelContent>
-    </Panel>
-  )
-
   // Project settings: per-project overrides stored in localStorage
-  // Format: { "project/id": { notifs: { useGlobal: true, push: true, detailed: false }, token: { useGlobal: true } } }
   const getProjSetting = (section) => {
     if (!selectedProject) return { useGlobal: true }
     const all = projectNotifs[selectedProject.id] || {}
@@ -1718,9 +1321,7 @@ function App() {
           const hasOverrides = !!(currentModels.high || currentModels.mid || currentModels.low);
           const provider = config?.provider || 'anthropic';
           const providerTiers = config?.tiers || {};
-          // Build dropdown options from the current provider's tier models
           const providerModels = [...new Set(Object.values(providerTiers).map(t => t.model).filter(Boolean))];
-          // Also include all models from all providers for the "other" option
           const allTiers = config?.allTiers || {};
           const allModels = [...new Set(Object.values(allTiers).flatMap(p => Object.values(p).map(t => t.model)).filter(Boolean))];
 
@@ -1991,378 +1592,66 @@ function App() {
         </div>
 
         {/* Add Project Modal */}
-        <Modal open={addProjectModal.step !== null} onClose={resetAddProjectModal}>
-          <ModalHeader onClose={resetAddProjectModal}>
-            Add Project
-          </ModalHeader>
-          <ModalContent>
-            {addProjectModal.error && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm mb-4">
-                {addProjectModal.error}
-              </div>
-            )}
-
-            {/* Step: URL Input */}
-            {(addProjectModal.step === 'url' || addProjectModal.step === 'cloning') && (
-              <div className="space-y-4">
-                {/* Toggle: Existing vs New */}
-                <div className="flex rounded-md overflow-hidden border border-neutral-300 dark:border-neutral-600">
-                  <button
-                    className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${addProjectModal.repoMode === 'existing' ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-white text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-700'}`}
-                    onMouseDown={(e) => { e.preventDefault(); setAddProjectModal(prev => ({ ...prev, repoMode: 'existing', selectedRepo: '' })); }}
-                  >Import Existing</button>
-                  <button
-                    className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${addProjectModal.repoMode === 'new' ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-white text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-700'}`}
-                    onMouseDown={(e) => { e.preventDefault(); setAddProjectModal(prev => ({ ...prev, repoMode: 'new', selectedRepo: '' })); }}
-                  >Create New</button>
-                </div>
-
-                {addProjectModal.repoMode === 'new' ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Owner</label>
-                      {addProjectModal.orgsLoading ? (
-                        <div className="flex items-center gap-2 py-2 text-sm text-neutral-500"><RefreshCw className="w-4 h-4 animate-spin" /> Loading...</div>
-                      ) : (
-                        <select
-                          className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                          value={addProjectModal.selectedOrg}
-                          onChange={(e) => setAddProjectModal(prev => ({ ...prev, selectedOrg: e.target.value }))}
-                        >
-                          {addProjectModal.orgs.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Repository Name</label>
-                      <input
-                        type="text"
-                        placeholder="my-project"
-                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                        value={addProjectModal.newRepoName}
-                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, newRepoName: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
-                      <input
-                        type="text"
-                        placeholder="A brief description"
-                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                        value={addProjectModal.newRepoDescription}
-                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, newRepoDescription: e.target.value }))}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="newRepoPrivate"
-                        checked={addProjectModal.newRepoPrivate}
-                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, newRepoPrivate: e.target.checked }))}
-                      />
-                      <label htmlFor="newRepoPrivate" className="text-sm text-neutral-700 dark:text-neutral-300">Private repository</label>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={resetAddProjectModal}>Cancel</Button>
-                      <Button onClick={createNewRepo} disabled={!addProjectModal.newRepoName.trim() || addProjectModal.creatingRepo}>
-                        {addProjectModal.creatingRepo ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Creating...</> : 'Next'}
-                      </Button>
-                    </div>
-                  </>
-                ) : addProjectModal.inputMode === 'dropdown' ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Organization / User</label>
-                      {addProjectModal.orgsLoading ? (
-                        <div className="flex items-center gap-2 py-2 text-sm text-neutral-500"><RefreshCw className="w-4 h-4 animate-spin" /> Loading...</div>
-                      ) : (
-                        <select
-                          className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                          value={addProjectModal.selectedOrg}
-                          onChange={(e) => {
-                            const org = e.target.value
-                            setAddProjectModal(prev => ({ ...prev, selectedOrg: org }))
-                            if (org) fetchReposForOrg(org)
-                          }}
-                          disabled={addProjectModal.step === 'cloning'}
-                        >
-                          <option value="">Select...</option>
-                          {addProjectModal.orgs.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      )}
-                    </div>
-                    {addProjectModal.selectedOrg && (
-                      <div>
-                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Repository</label>
-                        {addProjectModal.reposLoading ? (
-                          <div className="flex items-center gap-2 py-2 text-sm text-neutral-500"><RefreshCw className="w-4 h-4 animate-spin" /> Loading repos...</div>
-                        ) : (
-                          <select
-                            className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                            value={addProjectModal.selectedRepo}
-                            onChange={(e) => setAddProjectModal(prev => ({ ...prev, selectedRepo: e.target.value }))}
-                            disabled={addProjectModal.step === 'cloning'}
-                          >
-                            <option value="">Select a repository...</option>
-                            {addProjectModal.repos.map(r => (
-                              <option key={r.name} value={r.name}>{r.name}{r.description ? ` — ${r.description}` : ''}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                      Or <button className="underline hover:text-neutral-700 dark:hover:text-neutral-300" onClick={() => setAddProjectModal(prev => ({ ...prev, inputMode: 'url' }))}>enter a URL manually</button>
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">GitHub Repository URL</label>
-                      <input
-                        type="text"
-                        placeholder="https://github.com/username/reponame"
-                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                        value={addProjectModal.githubUrl}
-                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, githubUrl: e.target.value, error: null }))}
-                        disabled={addProjectModal.step === 'cloning'}
-                        onKeyDown={(e) => { if (e.key === 'Enter') cloneProject() }}
-                      />
-                    </div>
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                      Or <button className="underline hover:text-neutral-700 dark:hover:text-neutral-300" onClick={() => setAddProjectModal(prev => ({ ...prev, inputMode: 'dropdown' }))}>select from your repos</button>
-                    </p>
-                  </>
-                )}
-                {addProjectModal.repoMode === 'existing' && (
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={resetAddProjectModal}>Cancel</Button>
-                    <Button
-                      onClick={addProjectModal.inputMode === 'dropdown' ? cloneSelectedRepo : cloneProject}
-                      disabled={addProjectModal.step === 'cloning' || (addProjectModal.inputMode === 'dropdown' ? !addProjectModal.selectedRepo : !addProjectModal.githubUrl.trim())}
-                    >
-                      {addProjectModal.step === 'cloning' ? (
-                        <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Cloning...</>
-                      ) : (
-                        'Next'
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step: Spec */}
-            {addProjectModal.step === 'spec' && (
-              <div className="space-y-4">
-                <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded text-green-700 dark:text-green-300 text-sm">
-                  Repository cloned: <span className="font-mono font-bold">{addProjectModal.projectId}</span>
-                </div>
-
-                {addProjectModal.hasSpec ? (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded">
-                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">spec.md already exists</p>
-                      <p className="text-xs text-blue-600 dark:text-blue-400">This project already has a specification file.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="updateSpec"
-                        checked={addProjectModal.updateSpec}
-                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, updateSpec: e.target.checked }))}
-                      />
-                      <label htmlFor="updateSpec" className="text-sm text-neutral-700 dark:text-neutral-300">Update the spec</label>
-                    </div>
-                    {addProjectModal.updateSpec && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">What do you want to build?</label>
-                          <textarea
-                            className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                            placeholder="Describe what you want to build..."
-                            value={addProjectModal.whatToBuild}
-                            onChange={(e) => setAddProjectModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">How do you consider the project is success?</label>
-                          <textarea
-                            className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                            placeholder="Define the success criteria..."
-                            value={addProjectModal.successCriteria}
-                            onChange={(e) => setAddProjectModal(prev => ({ ...prev, successCriteria: e.target.value }))}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                      No spec.md found. Describe your project so the AI agents know what to work on.
-                    </p>
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">What do you want to build?</label>
-                      <textarea
-                        className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                        placeholder="Describe what you want to build..."
-                        value={addProjectModal.whatToBuild}
-                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">How do you consider the project is success?</label>
-                      <textarea
-                        className="w-full px-3 py-2 border rounded-md min-h-[80px] bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-900 dark:text-neutral-100"
-                        placeholder="Define the success criteria..."
-                        value={addProjectModal.successCriteria}
-                        onChange={(e) => setAddProjectModal(prev => ({ ...prev, successCriteria: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between gap-2">
-                  <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'url', error: null }))}>
-                    <ArrowLeft className="w-4 h-4 mr-1" /> Back
-                  </Button>
-                  <Button onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'budget', error: null }))}>
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Step: Budget */}
-            {addProjectModal.step === 'budget' && (
-              <div className="space-y-4">
-                <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                  Set a daily budget to control API spending. The orchestrator will pace cycles to stay within budget.
-                </p>
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Daily Budget (USD)</label>
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-mono text-neutral-800 dark:text-neutral-200">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="20"
-                      className="w-32 px-3 py-2 border rounded-md text-lg font-mono dark:bg-neutral-800 dark:border-neutral-600 dark:text-neutral-200"
-                      value={addProjectModal.budgetPer24h}
-                      onChange={(e) => setAddProjectModal(prev => ({ ...prev, budgetPer24h: e.target.value }))}
-                    />
-                    <span className="text-sm text-neutral-500 dark:text-neutral-400">per 24 hours</span>
-                  </div>
-                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-2">
-                    Set to 0 for unlimited. Recommended: $20-100/day depending on agent count and model.
-                  </p>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'spec', error: null }))}>
-                    <ArrowLeft className="w-4 h-4 mr-1" /> Back
-                  </Button>
-                  <Button onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'confirm', error: null }))}>
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Step: Confirm */}
-            {addProjectModal.step === 'confirm' && (
-              <div className="space-y-4">
-                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Review before creating:</p>
-                <div className="space-y-2 p-3 bg-neutral-50 dark:bg-neutral-900 rounded border border-neutral-200 dark:border-neutral-700">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-neutral-500 dark:text-neutral-400">Repository</span>
-                    <span className="font-mono text-neutral-800 dark:text-neutral-200">{addProjectModal.projectId}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-neutral-500 dark:text-neutral-400">Spec</span>
-                    <span className="text-neutral-800 dark:text-neutral-200">
-                      {addProjectModal.hasSpec && !addProjectModal.updateSpec ? 'Existing (unchanged)' : addProjectModal.whatToBuild ? 'Will be created' : 'None'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-neutral-500 dark:text-neutral-400">Daily Budget</span>
-                    <span className="font-mono text-neutral-800 dark:text-neutral-200">
-                      {parseFloat(addProjectModal.budgetPer24h) > 0 ? `$${addProjectModal.budgetPer24h}/day` : 'Unlimited'}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-blue-700 dark:text-blue-300 text-sm">
-                  A fresh workspace will be created and the orchestrator will start running agents.
-                </div>
-                <div className="flex justify-between gap-2">
-                  <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'budget', error: null }))}>
-                    <ArrowLeft className="w-4 h-4 mr-1" /> Back
-                  </Button>
-                  <Button onClick={finalizeAddProject}>
-                    Create Project
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Step: Adding */}
-            {addProjectModal.step === 'adding' && (
-              <div className="flex flex-col items-center justify-center py-8 gap-3">
-                <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
-                <p className="text-sm text-neutral-600 dark:text-neutral-400">Adding project...</p>
-              </div>
-            )}
-          </ModalContent>
-        </Modal>
+        <AddProjectModal
+          addProjectModal={addProjectModal}
+          setAddProjectModal={setAddProjectModal}
+          resetAddProjectModal={resetAddProjectModal}
+          cloneProject={cloneProject}
+          cloneSelectedRepo={cloneSelectedRepo}
+          createNewRepo={createNewRepo}
+          fetchReposForOrg={fetchReposForOrg}
+          finalizeAddProject={finalizeAddProject}
+        />
 
         {/* Login Modal */}
-        <Modal open={loginModal} onClose={() => { setLoginModal(false); setLoginInput('') }}>
-          <ModalHeader onClose={() => { setLoginModal(false); setLoginInput('') }}>
-            Unlock Write Mode
-          </ModalHeader>
-          <ModalContent>
-            <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-3">Enter password to enable write operations.</p>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                className="flex-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 text-neutral-800 dark:text-neutral-100"
-                placeholder="Password"
-                value={loginInput}
-                onChange={(e) => setLoginInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                autoFocus
-              />
-              <Button onClick={handleLogin} disabled={!loginInput}>Unlock</Button>
-            </div>
-          </ModalContent>
-        </Modal>
+        <LoginModal
+          open={loginModal}
+          onClose={() => { setLoginModal(false); setLoginInput('') }}
+          loginInput={loginInput}
+          setLoginInput={setLoginInput}
+          handleLogin={handleLogin}
+        />
 
         {/* Settings (project list) */}
-        {settingsModal}
+        <SettingsPanel
+          settingsOpen={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          theme={theme}
+          setTheme={setTheme}
+          notificationsEnabled={notificationsEnabled}
+          toggleNotifications={toggleNotifications}
+          detailedNotifs={detailedNotifs}
+          setDetailedNotifs={setDetailedNotifs}
+          setShowApiKeyHelp={setShowApiKeyHelp}
+          globalTokenInput={globalTokenInput}
+          setGlobalTokenInput={setGlobalTokenInput}
+          tokenSaving={tokenSaving}
+          setTokenSaving={setTokenSaving}
+          setHasGlobalToken={setHasGlobalToken}
+          setGlobalTokenType={setGlobalTokenType}
+          setProviderTokens={setProviderTokens}
+          setGlobalTokenPreview={setGlobalTokenPreview}
+          setToast={setToast}
+          providerTokens={providerTokens}
+          codexLoginState={codexLoginState}
+          setCodexLoginState={setCodexLoginState}
+          authFetch={authFetch}
+        />
 
         {/* Notification Center (project list) */}
-        <Panel id="notifications" open={notifCenter} onClose={() => setNotifCenter(false)}>
-          <PanelHeader onClose={() => setNotifCenter(false)}>
-            <div className="flex items-center justify-between w-full">
-              <span>Notifications</span>
-              {unreadCount > 0 && (
-                <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">
-                  Mark all read
-                </button>
-              )}
-            </div>
-          </PanelHeader>
-          <PanelContent>
-            <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {notifList.length === 0 ? (
-                <div className="p-8 text-center text-neutral-400 dark:text-neutral-500">
-                  <BellOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No notifications yet</p>
-                </div>
-              ) : notifList.map(n => <NotifItem key={n.id} n={n} />)}
-            </div>
-          </PanelContent>
-        </Panel>
+        <NotificationPanel
+          open={notifCenter}
+          onClose={() => setNotifCenter(false)}
+          notifList={notifList}
+          unreadCount={unreadCount}
+          markAllRead={markAllRead}
+          markRead={markRead}
+          expandedNotifs={expandedNotifs}
+          toggleNotifExpand={toggleNotifExpand}
+        />
+
+        {/* API Key Help Modal */}
+        <ApiKeyHelpModal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)} />
       </div>
       <PanelSlot />
       </div>
@@ -2517,235 +1806,52 @@ function App() {
             {/* Row 1: State, Cost & Budget, Config */}
             <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
               {/* State */}
-              <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" />Orchestrator State</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Status</span>
-                      <Badge variant={selectedProject.isComplete ? (selectedProject.completionSuccess ? 'success' : 'destructive') : selectedProject.paused ? 'warning' : selectedProject.running ? 'success' : 'destructive'}>
-                        {selectedProject.isComplete ? (selectedProject.completionSuccess ? '✅ Complete' : '🛑 Ended')
-                          : selectedProject.paused && selectedProject.currentAgent ? '⏳ Pausing...' : selectedProject.paused ? '⏸️ Paused' : selectedProject.running ? '▶️ Running' : '⏹️ Stopped'}
-                      </Badge>
-                    </div>
-                    {selectedProject.isComplete && selectedProject.completionMessage && (
-                      <div className={`p-3 rounded-lg text-sm ${selectedProject.completionSuccess ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'}`}>
-                        🏁 {selectedProject.completionMessage}
-                      </div>
-                    )}
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Cycle</span>
-                      <span className="text-2xl font-mono font-bold">{selectedProject.cycleCount}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Agent</span>
-                      {selectedProject.sleeping ? (
-                        <Badge variant="secondary" className="flex items-center gap-1">
-                          💤 Sleeping
-                          {isWriteMode && <button onClick={(e) => { e.stopPropagation(); controlAction('skip') }} className="ml-1 hover:text-red-500 cursor-pointer" title="Skip sleep">✕</button>}
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">{selectedProject.currentAgent || 'None'}</Badge>
-                      )}
-                    </div>
-                    {selectedProject.sleeping && selectedProject.sleepUntil && !selectedProject.paused && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-neutral-600 dark:text-neutral-300">Next cycle</span>
-                        <SleepCountdown sleepUntil={selectedProject.sleepUntil} />
-                      </div>
-                    )}
-                    <Separator className="my-2" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Phase</span>
-                      <Badge variant={
-                        selectedProject.phase === 'athena' ? 'default' :
-                        selectedProject.phase === 'implementation' ? 'success' :
-                        selectedProject.phase === 'verification' ? 'warning' : 'secondary'
-                      }>
-                        {selectedProject.phase === 'athena' ? '🧠 Planning (Athena)' :
-                         selectedProject.phase === 'implementation' ? (selectedProject.isFixRound ? '🔧 Fixing' : '🔨 Implementation') :
-                         selectedProject.phase === 'verification' ? '✅ Verification' :
-                         selectedProject.phase || 'Unknown'}
-                      </Badge>
-                    </div>
-                    {selectedProject.phase === 'implementation' && selectedProject.milestoneCyclesBudget > 0 && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-neutral-600 dark:text-neutral-300">Milestone Progress</span>
-                        <span className="text-sm font-mono">{selectedProject.milestoneCyclesUsed || 0} / {selectedProject.milestoneCyclesBudget} cycles</span>
-                      </div>
-                    )}
-                    <Separator className="my-2" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Last Cycle</span>
-                      <span className="text-sm font-mono">
-                        {selectedProject.cost?.lastCycleDuration 
-                          ? `${Math.floor(selectedProject.cost.lastCycleDuration / 60000)}m ${Math.floor((selectedProject.cost.lastCycleDuration % 60000) / 1000)}s`
-                          : '--'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Avg Cycle</span>
-                      <span className="text-sm font-mono">
-                        {selectedProject.cost?.avgCycleDuration 
-                          ? `${Math.floor(selectedProject.cost.avgCycleDuration / 60000)}m ${Math.floor((selectedProject.cost.avgCycleDuration % 60000) / 1000)}s`
-                          : '--'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Uptime</span>
-                      <span className="text-sm font-mono">{Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <OrchestratorStateCard
+                selectedProject={selectedProject}
+                globalUptime={globalUptime}
+                controlAction={controlAction}
+                isWriteMode={isWriteMode}
+              />
 
               {/* Cost & Budget */}
-              <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><DollarSign className="w-4 h-4" />Cost & Budget</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Last Cycle</span>
-                      <span className="text-sm font-mono">${(selectedProject.cost?.lastCycleCost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Avg Cycle</span>
-                      <span className="text-sm font-mono">${(selectedProject.cost?.avgCycleCost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Last 24h</span>
-                      <span className="text-sm font-mono">${(selectedProject.cost?.last24hCost || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-600 dark:text-neutral-300">Total</span>
-                      <span className="text-sm font-mono">${(selectedProject.cost?.totalCost || 0).toFixed(2)}</span>
-                    </div>
-                    {selectedProject.budget && (
-                      <>
-                        <div className="flex justify-between items-center">
-                          <span className="text-neutral-600 dark:text-neutral-300">Budget</span>
-                          <span className="text-sm font-mono">
-                            ${selectedProject.budget.spent24h.toFixed(2)} / ${selectedProject.budget.budgetPer24h.toFixed(2)}
-                            <span className="text-neutral-400 ml-1">({selectedProject.budget.percentUsed.toFixed(0)}%)</span>
-                          </span>
-                        </div>
-                        {selectedProject.budget.exhausted && (
-                          <div className="p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-xs font-medium">
-                            Budget exhausted — cycle paused until spend rolls off
-                          </div>
-                        )}
-                        {!selectedProject.budget.exhausted && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-neutral-600 dark:text-neutral-300">Computed interval</span>
-                            <span className="text-sm font-mono">
-                              {selectedProject.budget.computedSleepMs >= 60000
-                                ? `${Math.floor(selectedProject.budget.computedSleepMs / 60000)}m ${Math.floor((selectedProject.budget.computedSleepMs % 60000) / 1000)}s`
-                                : `${Math.floor(selectedProject.budget.computedSleepMs / 1000)}s`}
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    <div className="pt-2 border-t">
-                      <button
-                        onClick={() => setBudgetInfoModal(true)}
-                        className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
-                      >
-                        How budget works →
-                      </button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <CostBudgetCard
+                selectedProject={selectedProject}
+                setBudgetInfoModal={setBudgetInfoModal}
+              />
 
               {/* Config */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><Settings className="w-4 h-4" />Configuration</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {configError && <div className="mb-3 p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-xs">{configError}</div>}
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
-                        Interval
-                        <button onClick={() => setIntervalInfoModal(true)} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
-                          <Info className="w-3 h-3" />
-                        </button>
-                      </label>
-                      <select 
-                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        value={configForm.cycleIntervalMs} 
-                        onChange={(e) => updateConfigField('cycleIntervalMs', Number(e.target.value))}
-                      >
-                        <option value={0}>No delay</option><option value={300000}>5m</option><option value={600000}>10m</option><option value={1200000}>20m</option><option value={1800000}>30m</option><option value={3600000}>1h</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
-                        Agent Timeout
-                        <button onClick={() => setTimeoutInfoModal(true)} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
-                          <Info className="w-3 h-3" />
-                        </button>
-                      </label>
-                      <select 
-                        className="px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-md text-sm dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                        value={configForm.agentTimeoutMs} 
-                        onChange={(e) => updateConfigField('agentTimeoutMs', Number(e.target.value))}
-                      >
-                        <option value={300000}>5m</option><option value={600000}>10m</option><option value={900000}>15m</option><option value={1800000}>30m</option><option value={3600000}>1h</option><option value={7200000}>2h</option><option value={14400000}>4h</option><option value={0}>Never</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
-                        24hr Budget
-                        <button onClick={() => setBudgetInfoModal(true)} className="text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300">
-                          <Info className="w-3 h-3" />
-                        </button>
-                      </label>
-                      <div className="flex items-center">
-                        <button
-                          onClick={() => updateConfigField('budgetPer24h', Math.max(0, (configForm.budgetPer24h || 0) - 20))}
-                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-l-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
-                        >
-                          −
-                        </button>
-                        <div className="px-3 py-1.5 bg-white dark:bg-neutral-800 border-y border-neutral-300 dark:border-neutral-600 text-sm dark:text-neutral-200 text-center min-w-[60px]">
-                          {configForm.budgetPer24h ? `$${configForm.budgetPer24h}` : 'off'}
-                        </div>
-                        <button
-                          onClick={() => updateConfigField('budgetPer24h', (configForm.budgetPer24h || 0) + 20)}
-                          className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-r-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {configDirty && (
-                    <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700">
-                      <Badge variant="warning">Unsaved</Badge>
-                      <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
-                        Reset
-                      </button>
-                      {isWriteMode && <button 
-                        onClick={saveConfig} 
-                        disabled={configSaving}
-                        className="px-3 py-1.5 rounded text-xs font-medium inline-flex items-center bg-blue-500 hover:bg-blue-600 text-white"
-                      >
-                        <Save className="w-3 h-3 mr-1.5" />{configSaving ? '...' : 'Save'}
-                      </button>}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <ConfigCard
+                configForm={configForm}
+                configError={configError}
+                configDirty={configDirty}
+                configSaving={configSaving}
+                updateConfigField={updateConfigField}
+                resetConfig={resetConfig}
+                saveConfig={saveConfig}
+                isWriteMode={isWriteMode}
+                setIntervalInfoModal={setIntervalInfoModal}
+                setTimeoutInfoModal={setTimeoutInfoModal}
+                setBudgetInfoModal={setBudgetInfoModal}
+              />
 
-              {/* Managers, Workers, PRs */}
+              {/* Managers */}
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {agents.managers.map((agent) => <AgentItem key={agent.name} agent={agent} isManager />)}
+                    {agents.managers.map((agent) => (
+                      <WorkerCard
+                        key={agent.name}
+                        agent={agent}
+                        isManager
+                        selectedProject={selectedProject}
+                        selectedAgent={selectedAgent}
+                        openAgentModal={openAgentModal}
+                        openAgentSettings={openAgentSettings}
+                        selectAgent={selectAgent}
+                        clearAgentFilter={clearAgentFilter}
+                      />
+                    ))}
                     {agents.managers.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No managers</p>}
                   </div>
                 </CardContent>
@@ -2756,7 +1862,18 @@ function App() {
                 <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-4 h-4" />Workers ({agents.workers.length})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {agents.workers.map((agent) => <AgentItem key={agent.name} agent={agent} />)}
+                    {agents.workers.map((agent) => (
+                      <WorkerCard
+                        key={agent.name}
+                        agent={agent}
+                        selectedProject={selectedProject}
+                        selectedAgent={selectedAgent}
+                        openAgentModal={openAgentModal}
+                        openAgentSettings={openAgentSettings}
+                        selectAgent={selectAgent}
+                        clearAgentFilter={clearAgentFilter}
+                      />
+                    ))}
                     {agents.workers.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No workers</p>}
                   </div>
                 </CardContent>
@@ -2786,131 +1903,25 @@ function App() {
               </Card>
 
               {/* Agent Reports */}
-              <Card className="h-[500px]">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2"><MessageSquare className="w-4 h-4" />Agent Reports</span>
-                    <span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 overflow-hidden">
-                  <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto overflow-x-hidden h-full" onScroll={(e) => {
-                    const { scrollTop, scrollHeight, clientHeight } = e.target
-                    if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
-                  }}>
-                    {liveAgentLog && (
-                      <>
-                        <div
-                          className="py-2.5 bg-blue-50 dark:bg-blue-900/20 cursor-pointer transition-colors -mx-1 px-2 rounded"
-                          onClick={() => { setFocusedReportId('live'); setReportsPanelOpen(true); }}
-                        >
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <Avatar className="w-5 h-5">
-                              <AvatarFallback className="bg-gradient-to-br from-green-400 to-emerald-500 text-white text-[9px]">
-                                {liveAgentLog.agent.slice(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{liveAgentLog.agent}</span>
-                            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                              <LiveDuration startTime={liveAgentLog.startTime} />
-                              {liveAgentLog.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">{liveAgentLog.model}</Badge>}
-                            </span>
-                          </div>
-                          <div className="text-xs text-neutral-500 dark:text-neutral-400 break-words leading-relaxed pl-7 italic">
-                            Running... ({liveAgentLog.log.length} log entries)
-                          </div>
-                        </div>
-                        {comments.length > 0 && <Separator className="my-1" />}
-                      </>
-                    )}
-                    {comments.length === 0 && !commentsLoading && !liveAgentLog && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">No reports</p>}
-                    {comments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors -mx-1 px-1 rounded"
-                        onClick={() => { setFocusedReportId(comment.id); setReportsPanelOpen(true); }}
-                      >
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <Avatar className="w-5 h-5">
-                            <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-[9px]">
-                              {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
-                          {(() => { const t = parseTimingBlock(comment.body); return t ? (
-                            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap flex items-center gap-1">
-                              <span>{t.ended}</span>
-                              <span className="text-neutral-300 dark:text-neutral-600">·</span>
-                              <span>{t.duration}</span>
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap">{new Date(comment.created_at).toLocaleString()}</span>
-                          ); })()}
-                        </div>
-                        <div className="text-xs text-neutral-500 dark:text-neutral-400 break-words leading-relaxed pl-7">
-                          <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} />
-                        </div>
-                      </div>
-                    ))}
-                    {commentsLoading && (
-                      <div className="flex items-center justify-center py-3 text-neutral-400">
-                        <span className="text-xs">Loading...</span>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <AgentReportsCard
+                comments={comments}
+                commentsLoading={commentsLoading}
+                loadMoreComments={loadMoreComments}
+                liveAgentLog={liveAgentLog}
+                selectedProject={selectedProject}
+                setFocusedReportId={setFocusedReportId}
+                setReportsPanelOpen={setReportsPanelOpen}
+              />
 
               {/* Issues */}
-              <Card className="flex flex-col h-[500px]">
-                <CardHeader className="shrink-0">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Issues ({(issueFilter === 'all' ? issues : issues.filter(i => i.status === issueFilter)).length})</CardTitle>
-                    <div className="flex gap-1">
-                      {['open', 'closed', 'all'].map(f => (
-                        <button key={f} onClick={() => setIssueFilter(f)}
-                          className={`px-2 py-0.5 text-xs rounded-full transition-colors ${issueFilter === f ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}>
-                          {f.charAt(0).toUpperCase() + f.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col overflow-hidden">
-                  <div className="space-y-2 flex-1 overflow-y-auto">
-                    {(issueFilter === 'all' ? issues : issues.filter(i => i.status === issueFilter)).map((issue) => (
-                      <div key={issue.id}
-                        onClick={() => openIssueModal(issue.id)}
-                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 rounded cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-neutral-400 dark:text-neutral-500">#{issue.id}</span>
-                          <Badge variant={issue.status === 'open' ? 'success' : issue.status === 'closed' ? 'secondary' : 'default'} className="text-[10px] px-1.5 py-0">
-                            {issue.status || 'open'}
-                          </Badge>
-                          <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{issue.title}</span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                          {issue.creator && <span className="flex items-center gap-1"><User className="w-3 h-3" />{issue.creator}</span>}
-                          {issue.assignee && <span className="flex items-center gap-1 text-green-600 dark:text-green-400"><UserCheck className="w-3 h-3" />{issue.assignee}</span>}
-                          {issue.comment_count > 0 && <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{issue.comment_count}</span>}
-                          {issue.labels && <span className="text-purple-500 dark:text-purple-400">{issue.labels}</span>}
-                        </div>
-                      </div>
-                    ))}
-                    {issues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No issues</p>}
-                  </div>
-                  <Separator className="my-3 shrink-0" />
-                  {isWriteMode && <div className="shrink-0">
-                    <Button 
-                      onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}
-                      className="w-full dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100"
-                    >
-                      Human Intervention (Create Issue)
-                    </Button>
-                  </div>}
-                </CardContent>
-              </Card>
+              <IssuesSidebar
+                issues={issues}
+                issueFilter={issueFilter}
+                setIssueFilter={setIssueFilter}
+                openIssueModal={openIssueModal}
+                setCreateIssueModal={setCreateIssueModal}
+                isWriteMode={isWriteMode}
+              />
             </div>
 
             {/* Row 4: Logs */}
@@ -3059,166 +2070,11 @@ function App() {
       </Modal>
 
       {/* Bootstrap Panel */}
-      <Panel id="bootstrap" open={bootstrapModal.open} onClose={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>
-        <PanelHeader onClose={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>
-          Bootstrap Workspace
-        </PanelHeader>
-        <PanelContent>
-          {bootstrapModal.loading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
-            </div>
-          ) : bootstrapModal.preview && !bootstrapModal.preview.available ? (
-            <div className="space-y-4">
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded text-yellow-700 dark:text-yellow-300 text-sm">
-                {bootstrapModal.preview.reason || 'Bootstrap is not available for this project.'}
-              </div>
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>Close</Button>
-              </div>
-            </div>
-          ) : bootstrapModal.preview ? (
-            <div className="space-y-4">
-              <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                Bootstrap wipes the agent workspace and resets the project cycle so agents start fresh.
-              </p>
-
-              <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded">
-                <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">What will be lost</p>
-                <ul className="text-sm text-red-700 dark:text-red-300 space-y-1 list-disc list-inside">
-                  <li>The entire workspace folder will be emptied — all worker skills, agent notes, and workspace files will be deleted</li>
-                  <li>The cycle count will be reset to 1</li>
-                </ul>
-              </div>
-
-              <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded">
-                <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">What will happen</p>
-                <ul className="text-sm text-green-700 dark:text-green-300 space-y-1 list-disc list-inside">
-                  <li>Phase resets to Athena (strategy)</li>
-                  <li>Agents will start fresh — managers will re-hire workers and plan from scratch</li>
-                </ul>
-              </div>
-
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
-                <p className="text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">What will be kept</p>
-                <ul className="text-sm text-neutral-500 dark:text-neutral-400 space-y-1 list-disc list-inside">
-                  <li>Project configuration (config.yaml) is preserved</li>
-                  <li>All repository files, PRs, and issues remain untouched</li>
-                  <li>Database (issues, comments) is preserved</li>
-                </ul>
-              </div>
-
-              {/* Remove roadmap.md option */}
-              {/* Remove roadmap.md — toggle switch */}
-              <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
-                <div>
-                  <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Remove roadmap.md</p>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                    {bootstrapModal.preview.hasRoadmap ? 'Delete from repo and push' : 'No roadmap.md found — will be skipped'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={bootstrapModal.removeRoadmap}
-                  onClick={() => setBootstrapModal(prev => ({ ...prev, removeRoadmap: !prev.removeRoadmap }))}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${bootstrapModal.removeRoadmap ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
-                >
-                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${bootstrapModal.removeRoadmap ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-              </div>
-
-              {/* Spec.md — segmented control */}
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded space-y-3">
-                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">spec.md</p>
-                <div className="flex rounded-lg bg-neutral-200 dark:bg-neutral-700 p-0.5">
-                  {[{ value: 'keep', label: 'Keep' }, { value: 'edit', label: 'Edit' }, { value: 'new', label: 'Rewrite' }].map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setBootstrapModal(prev => ({
-                        ...prev,
-                        specMode: opt.value,
-                        ...(opt.value === 'edit' ? { specContent: prev.specContent || prev.preview?.specContent || '' } : {})
-                      }))}
-                      className={`flex-1 text-sm font-medium py-1.5 px-3 rounded-md transition-all duration-150 ${
-                        bootstrapModal.specMode === opt.value
-                          ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 shadow-sm'
-                          : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-
-                {bootstrapModal.specMode === 'edit' && (
-                  <textarea
-                    className="w-full h-48 p-2 text-sm font-mono border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-                    value={bootstrapModal.specContent}
-                    onChange={e => setBootstrapModal(prev => ({ ...prev, specContent: e.target.value }))}
-                    placeholder="Edit your spec.md content..."
-                  />
-                )}
-
-                {bootstrapModal.specMode === 'new' && (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">What to build</label>
-                      <textarea
-                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-                        value={bootstrapModal.whatToBuild}
-                        onChange={e => setBootstrapModal(prev => ({ ...prev, whatToBuild: e.target.value }))}
-                        placeholder="Describe what this project should build..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">Success criteria</label>
-                      <textarea
-                        className="w-full h-24 p-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-                        value={bootstrapModal.successCriteria}
-                        onChange={e => setBootstrapModal(prev => ({ ...prev, successCriteria: e.target.value }))}
-                        placeholder="How will we know the project is done?"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {bootstrapModal.error && (
-                <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm">
-                  {bootstrapModal.error}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>Cancel</Button>
-                <Button
-                  onClick={executeBootstrap}
-                  disabled={bootstrapModal.executing}
-                  variant="destructive"
-                >
-                  {bootstrapModal.executing ? (
-                    <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Bootstrapping...</>
-                  ) : (
-                    'Confirm Bootstrap'
-                  )}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {bootstrapModal.error && (
-                <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-sm">
-                  {bootstrapModal.error}
-                </div>
-              )}
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={() => setBootstrapModal(prev => ({ ...prev, open: false }))}>Close</Button>
-              </div>
-            </div>
-          )}
-        </PanelContent>
-      </Panel>
+      <BootstrapPanel
+        bootstrapModal={bootstrapModal}
+        setBootstrapModal={setBootstrapModal}
+        executeBootstrap={executeBootstrap}
+      />
 
       {/* Budget Info Modal */}
       <Modal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)}>
@@ -3290,85 +2146,7 @@ function App() {
       </Modal>
 
       {/* API Key Help Modal */}
-      <Modal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)}>
-        <ModalHeader onClose={() => setShowApiKeyHelp(false)}>
-          Supported Model Providers
-        </ModalHeader>
-        <ModalContent>
-          <div className="space-y-5 text-sm text-neutral-700 dark:text-neutral-300">
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Anthropic — API Key</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">console.anthropic.com</a></li>
-                <li>Create an account or sign in</li>
-                <li>Navigate to the API Keys section</li>
-                <li>Create a new API key (starts with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">sk-ant-</code>)</li>
-              </ol>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>Anthropic (API Key)</strong> as the provider when saving.</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Anthropic — Claude OAuth</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Obtain an OAuth token from a Claude Pro/Max subscription</li>
-                <li>The token starts with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">sk-ant-oat-</code></li>
-              </ol>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>Anthropic (OAuth)</strong> as the provider when saving.</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">OpenAI — API Key</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">platform.openai.com/api-keys</a></li>
-                <li>Create an account or sign in</li>
-                <li>Create a new API key (starts with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">sk-</code>)</li>
-              </ol>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>OpenAI</strong> as the provider when saving.</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">OpenAI Codex — ChatGPT Subscription</h3>
-              <p className="text-neutral-600 dark:text-neutral-400">Use your ChatGPT Plus or Pro subscription instead of paying per-token API costs. No API key needed.</p>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400 mt-1">
-                <li>Go to the <strong>Models</strong> section in global or project settings</li>
-                <li>Click <strong>Login</strong> next to "OpenAI Codex (ChatGPT)"</li>
-                <li>A browser tab opens — sign in with your ChatGPT account</li>
-                <li>Once connected, select <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">openai-codex</code> models in your project</li>
-              </ol>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">You must open the dashboard from the machine running TBC. Remote access requires SSH port forwarding (<code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">ssh -L 1455:localhost:1455 host</code>).</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Google (Gemini)</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">aistudio.google.com/apikey</a></li>
-                <li>Sign in with your Google account</li>
-                <li>Create an API key</li>
-              </ol>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>Google (Gemini)</strong> as the provider when saving.</p>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">MiniMax</h3>
-              <ol className="list-decimal list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>Global platform: <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">platform.minimaxi.com</a></li>
-                <li>China platform: <a href="https://platform.minimaxi.io/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline">platform.minimaxi.io</a></li>
-                <li>Create an account, navigate to API Keys, and generate a new key</li>
-              </ol>
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">Select <strong>MiniMax</strong> as the provider when saving.</p>
-            </div>
-
-            <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4">
-              <h3 className="font-semibold text-neutral-800 dark:text-neutral-100 mb-1">Tips</h3>
-              <ul className="list-disc list-inside space-y-1 text-neutral-600 dark:text-neutral-400">
-                <li>You can configure different providers per project</li>
-                <li>Projects without a key will fall back to the global key</li>
-                <li>Select the correct provider from the dropdown — keys are not auto-detected</li>
-              </ul>
-            </div>
-          </div>
-        </ModalContent>
-      </Modal>
+      <ApiKeyHelpModal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)} />
 
       {/* Create Issue Modal */}
       <Modal open={createIssueModal.open} onClose={() => setCreateIssueModal(prev => ({ ...prev, open: false }))}>
@@ -3578,121 +2356,53 @@ function App() {
       </Panel>
 
       {/* Agent Reports Panel */}
-      <Panel id="reports" open={reportsPanelOpen} onClose={() => setReportsPanelOpen(false)}>
-        <PanelHeader onClose={() => setReportsPanelOpen(false)}>
-          <span className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />Agent Reports
-            {selectedAgent && (
-              <Badge variant="secondary" className="ml-2 capitalize">
-                {selectedAgent}
-                <button onClick={clearAgentFilter} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
-              </Badge>
-            )}
-            <span className="text-sm font-normal text-neutral-400 ml-auto">{comments.length} loaded</span>
-          </span>
-        </PanelHeader>
-        <PanelContent onScroll={(e) => {
-            const { scrollTop, scrollHeight, clientHeight } = e.target
-            if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
-          }}>
-          <div ref={reportsScrollRef}>
-            {liveAgentLog && (
-              <>
-                <div data-report-id="live">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <Avatar className="w-6 h-6 sm:w-8 sm:h-8">
-                      <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
-                        {liveAgentLog.agent.slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{liveAgentLog.agent}</span>
-                    <span className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
-                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      Running
-                    </span>
-                    <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                      <LiveDuration startTime={liveAgentLog.startTime} />
-                    </span>
-                    {liveAgentLog.model && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{liveAgentLog.model}</Badge>}
-                  </div>
-                  <div ref={(el) => { liveLogRef.current = el; if (el && liveLogAtBottomRef.current) el.scrollTop = el.scrollHeight }} onScroll={onLiveLogScroll} className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1">
-                    {liveAgentLog.log.length === 0 && <p className="text-neutral-400 italic">Waiting for output...</p>}
-                    {liveAgentLog.log.map((entry, i) => (
-                      <div key={i} className={`leading-relaxed break-words whitespace-pre-wrap ${entry.msg.startsWith('Tool:') ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-600 dark:text-neutral-300'}`}>
-                        <span className="text-neutral-400 dark:text-neutral-500 mr-1.5">{new Date(entry.time).toLocaleTimeString()}</span>
-                        {entry.msg}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <Separator className="my-4" />
-              </>
-            )}
-            {comments.length === 0 && !commentsLoading && !liveAgentLog && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-8">No reports found</p>}
-            {comments.map((comment, idx) => (
-              <div key={comment.id} data-report-id={comment.id}>
-                {idx > 0 && <Separator className="my-4" />}
-                <div className={`rounded-lg transition-colors duration-700 ${focusedReportId === comment.id ? 'bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-300 dark:ring-blue-700 p-2 -m-2' : ''}`}>
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <Avatar className="w-6 h-6 sm:w-8 sm:h-8">
-                      <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
-                        {(comment.agent || comment.author).slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.agent || comment.author}</span>
-                    {(() => { const t = parseTimingBlock(comment.body); return t ? (
-                      <span className="text-xs text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5">
-                        <span>{t.ended}</span>
-                        <span className="text-neutral-300 dark:text-neutral-600">·</span>
-                        <span>{t.duration}</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-neutral-400 dark:text-neutral-500">{new Date(comment.created_at).toLocaleString()}</span>
-                    ); })()}
-                  </div>
-                  <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} className="text-xs text-neutral-500 dark:text-neutral-400 italic block mb-1" />
-                  <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all overflow-x-auto [&_table]:text-xs [&_pre]:overflow-x-auto">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
-                    {parseScheduleBlock(comment.body) && (
-                      <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
-                    )}
-                    <MetaBlockBadges text={comment.body} />
-                  </div>
-                </div>
-              </div>
-            ))}
-            {commentsLoading && (
-              <div className="flex items-center justify-center py-4 gap-2 text-neutral-400 dark:text-neutral-500">
-                <RefreshCw className="w-4 h-4 animate-spin" /><span className="text-sm">Loading...</span>
-              </div>
-            )}
-          </div>
-        </PanelContent>
-      </Panel>
+      <ReportsPanel
+        open={reportsPanelOpen}
+        onClose={() => setReportsPanelOpen(false)}
+        comments={comments}
+        commentsLoading={commentsLoading}
+        loadMoreComments={loadMoreComments}
+        liveAgentLog={liveAgentLog}
+        focusedReportId={focusedReportId}
+        setFocusedReportId={setFocusedReportId}
+        selectedAgent={selectedAgent}
+        clearAgentFilter={clearAgentFilter}
+        selectedProject={selectedProject}
+      />
 
       {/* Login Modal */}
-      <Modal open={loginModal} onClose={() => { setLoginModal(false); setLoginInput('') }}>
-        <ModalHeader onClose={() => { setLoginModal(false); setLoginInput('') }}>
-          Unlock Write Mode
-        </ModalHeader>
-        <ModalContent>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-3">Enter password to enable write operations.</p>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              className="flex-1 text-sm bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 text-neutral-800 dark:text-neutral-100"
-              placeholder="Password"
-              value={loginInput}
-              onChange={(e) => setLoginInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-              autoFocus
-            />
-            <Button onClick={handleLogin} disabled={!loginInput}>Unlock</Button>
-          </div>
-        </ModalContent>
-      </Modal>
+      <LoginModal
+        open={loginModal}
+        onClose={() => { setLoginModal(false); setLoginInput('') }}
+        loginInput={loginInput}
+        setLoginInput={setLoginInput}
+        handleLogin={handleLogin}
+      />
 
-      {settingsModal}
+      <SettingsPanel
+        settingsOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={theme}
+        setTheme={setTheme}
+        notificationsEnabled={notificationsEnabled}
+        toggleNotifications={toggleNotifications}
+        detailedNotifs={detailedNotifs}
+        setDetailedNotifs={setDetailedNotifs}
+        setShowApiKeyHelp={setShowApiKeyHelp}
+        globalTokenInput={globalTokenInput}
+        setGlobalTokenInput={setGlobalTokenInput}
+        tokenSaving={tokenSaving}
+        setTokenSaving={setTokenSaving}
+        setHasGlobalToken={setHasGlobalToken}
+        setGlobalTokenType={setGlobalTokenType}
+        setProviderTokens={setProviderTokens}
+        setGlobalTokenPreview={setGlobalTokenPreview}
+        setToast={setToast}
+        providerTokens={providerTokens}
+        codexLoginState={codexLoginState}
+        setCodexLoginState={setCodexLoginState}
+        authFetch={authFetch}
+      />
       {projectSettingsModal}
       {/* Notification Center */}
       <Modal open={notifCenter} onClose={() => setNotifCenter(false)}>
@@ -3713,7 +2423,51 @@ function App() {
                 <BellOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p>No notifications yet</p>
               </div>
-            ) : notifList.map(n => <NotifItem key={n.id} n={n} />)}
+            ) : notifList.map(n => {
+              const typeIcons = { milestone: '📌', verified: '✅', 'verify-fail': '❌', phase: '🔄', error: '⚠️', 'agent-done': n.message?.startsWith('✗') ? '✗' : '✓', 'project-complete': '🏁' }
+              const icon = typeIcons[n.type] || '📋'
+              const isLong = n.message && n.message.length > 120
+              const expanded = expandedNotifs.has(n.id)
+              const displayMsg = isLong && !expanded ? n.message.slice(0, 120) + '…' : n.message
+              const agentMatch = n.type === 'agent-done' && n.message?.match(/^[✓✗]\s+(\S+?):\s(.+)$/s)
+              const agentName = agentMatch ? agentMatch[1] : null
+              const agentMsg = agentMatch ? agentMatch[2] : displayMsg
+              const timeAgoLocal = (ts) => {
+                const diff = Date.now() - new Date(ts).getTime()
+                if (diff < 60000) return 'just now'
+                if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+                if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+                return new Date(ts).toLocaleDateString()
+              }
+              return (
+                <div
+                  key={n.id}
+                  className={`p-3 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
+                  onClick={() => { markRead(n.id); if (isLong) toggleNotifExpand(n.id) }}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-0.5 text-base shrink-0 w-5 text-center">{!n.read ? <span className="inline-block w-2 h-2 rounded-full bg-blue-500" /> : <span className="opacity-60">{icon}</span>}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        {agentName && <span className={`text-sm font-semibold ${!n.read ? 'text-neutral-800 dark:text-neutral-100' : 'text-neutral-600 dark:text-neutral-300'}`}>{agentName}</span>}
+                        <span className="text-[11px] text-neutral-400 dark:text-neutral-500">{n.project}</span>
+                        <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto shrink-0">{timeAgoLocal(n.timestamp)}</span>
+                      </div>
+                      <div className={`text-sm mt-0.5 leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 ${!n.read ? 'text-neutral-700 dark:text-neutral-200' : 'text-neutral-500 dark:text-neutral-400'}`}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {agentName ? (isLong && !expanded ? agentMsg.slice(0, 120) + '…' : agentMsg) : displayMsg}
+                        </ReactMarkdown>
+                      </div>
+                      {isLong && (
+                        <button className="text-xs text-blue-500 mt-1" onClick={(e) => { e.stopPropagation(); toggleNotifExpand(n.id) }}>
+                          {expanded ? 'Show less' : 'Show more'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </ModalContent>
       </Modal>
