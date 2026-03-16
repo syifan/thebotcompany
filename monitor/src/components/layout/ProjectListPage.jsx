@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,60 +11,162 @@ import NotificationPanel from '@/components/panels/NotificationPanel'
 import LoginModal from '@/components/modals/LoginModal'
 import AddProjectModal from '@/components/modals/AddProjectModal'
 import ApiKeyHelpModal from '@/components/modals/ApiKeyHelpModal'
+import { useAuth } from '@/hooks/useAuth'
+import { useNotifications } from '@/contexts/NotificationContext'
 
 export default function ProjectListPage({
   projects,
   selectProject,
-  showArchived,
-  setShowArchived,
-  unreadCount,
   notifCenter,
   setNotifCenter,
-  isWriteMode,
-  handleLogout,
-  setLoginModal,
-  settingsOpen,
-  setSettingsOpen,
-  openAddProjectModal,
-  addProjectModal,
-  setAddProjectModal,
-  resetAddProjectModal,
-  cloneProject,
-  cloneSelectedRepo,
-  createNewRepo,
-  fetchReposForOrg,
-  finalizeAddProject,
-  loginModal,
-  loginInput,
-  setLoginInput,
-  handleLogin,
   theme,
   setTheme,
-  notificationsEnabled,
-  toggleNotifications,
-  detailedNotifs,
-  setDetailedNotifs,
-  setShowApiKeyHelp,
-  globalTokenInput,
-  setGlobalTokenInput,
-  tokenSaving,
-  setTokenSaving,
-  setHasGlobalToken,
-  setGlobalTokenType,
-  setProviderTokens,
-  setGlobalTokenPreview,
-  setToast,
-  providerTokens,
-  codexLoginState,
-  setCodexLoginState,
-  authFetch,
-  notifList,
-  markAllRead,
-  markRead,
-  expandedNotifs,
-  toggleNotifExpand,
-  showApiKeyHelp,
 }) {
+  const { isWriteMode, handleLogout, setLoginModal, loginModal, loginInput, setLoginInput, handleLogin, authFetch } = useAuth()
+  const { unreadCount } = useNotifications()
+
+  const [showArchived, setShowArchived] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showApiKeyHelp, setShowApiKeyHelp] = useState(false)
+
+  // Add project modal state
+  const [addProjectModal, setAddProjectModal] = useState({
+    step: null, githubUrl: '', projectId: null, projectPath: null,
+    hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
+    updateSpec: false, budgetPer24h: 40, error: null,
+    orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: false, reposLoading: false,
+    inputMode: 'dropdown',
+    repoMode: 'existing',
+    newRepoName: '', newRepoPrivate: false, newRepoDescription: '', creatingRepo: false,
+  })
+
+  const resetAddProjectModal = () => {
+    setAddProjectModal({
+      step: null, githubUrl: '', projectId: null, projectPath: null,
+      hasSpec: false, specContent: null, whatToBuild: '', successCriteria: '',
+      updateSpec: false, error: null, repoMode: 'existing',
+      orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: false, reposLoading: false,
+      inputMode: 'dropdown', newRepoName: '', newRepoPrivate: false, newRepoDescription: '', creatingRepo: false,
+      budgetPer24h: 40,
+    })
+  }
+
+  const fetchReposForOrg = (org) => {
+    setAddProjectModal(prev => ({ ...prev, reposLoading: true, repos: [], selectedRepo: '' }))
+    fetch(`/api/github/repos?owner=${encodeURIComponent(org)}`)
+      .then(r => r.json())
+      .then(data => {
+        setAddProjectModal(prev => ({ ...prev, repos: data.repos || [], reposLoading: false }))
+      })
+      .catch(() => {
+        setAddProjectModal(prev => ({ ...prev, reposLoading: false }))
+      })
+  }
+
+  const openAddProjectModal = () => {
+    setAddProjectModal(prev => ({ ...prev, step: 'url', error: null, budgetPer24h: 40, orgs: [], repos: [], selectedOrg: '', selectedRepo: '', orgsLoading: true, inputMode: 'dropdown' }))
+    fetch('/api/github/orgs')
+      .then(r => r.json())
+      .then(data => {
+        setAddProjectModal(prev => ({ ...prev, orgs: data.orgs || [], orgsLoading: false, selectedOrg: data.user || '' }))
+        if (data.user) fetchReposForOrg(data.user)
+      })
+      .catch(() => {
+        setAddProjectModal(prev => ({ ...prev, orgsLoading: false, inputMode: 'url' }))
+      })
+  }
+
+  const createNewRepo = async () => {
+    const { selectedOrg, newRepoName, newRepoPrivate, newRepoDescription } = addProjectModal
+    if (!newRepoName.trim()) return
+    setAddProjectModal(prev => ({ ...prev, creatingRepo: true, error: null }))
+    try {
+      const res = await authFetch('/api/github/create-repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newRepoName.trim(), owner: selectedOrg, isPrivate: newRepoPrivate, description: newRepoDescription.trim() })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setAddProjectModal(prev => ({
+        ...prev, step: 'spec', projectId: data.id, projectPath: data.path,
+        hasSpec: false, specContent: null, creatingRepo: false, error: null,
+      }))
+    } catch (err) {
+      setAddProjectModal(prev => ({ ...prev, creatingRepo: false, error: err.message }))
+    }
+  }
+
+  const cloneSelectedRepo = () => {
+    const repo = addProjectModal.repos.find(r => r.name === addProjectModal.selectedRepo)
+    if (!repo) return
+    const url = `https://github.com/${repo.nameWithOwner}`
+    setAddProjectModal(prev => ({ ...prev, step: 'cloning', error: null, githubUrl: url }))
+    authFetch('/api/projects/clone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setAddProjectModal(prev => ({
+          ...prev, step: 'spec', projectId: data.id, projectPath: data.path,
+          hasSpec: data.hasSpec, specContent: data.specContent, error: null,
+        }))
+      })
+      .catch(err => {
+        setAddProjectModal(prev => ({ ...prev, step: 'url', error: err.message }))
+      })
+  }
+
+  const cloneProject = async () => {
+    const url = addProjectModal.githubUrl.trim()
+    if (!url) return
+    setAddProjectModal(prev => ({ ...prev, step: 'cloning', error: null }))
+    try {
+      const res = await authFetch('/api/projects/clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setAddProjectModal(prev => ({
+        ...prev, step: 'spec', projectId: data.id, projectPath: data.path,
+        hasSpec: data.hasSpec, specContent: data.specContent, error: null,
+      }))
+    } catch (err) {
+      setAddProjectModal(prev => ({ ...prev, step: 'url', error: err.message }))
+    }
+  }
+
+  const finalizeAddProject = async () => {
+    const { projectId, projectPath, hasSpec, updateSpec, whatToBuild, successCriteria, budgetPer24h } = addProjectModal
+    if (!projectId || !projectPath) return
+    setAddProjectModal(prev => ({ ...prev, step: 'adding', error: null }))
+    try {
+      const body = { id: projectId, path: projectPath, budgetPer24h: parseFloat(budgetPer24h) || 0 }
+      if (!hasSpec || updateSpec) {
+        body.spec = { whatToBuild: whatToBuild.trim(), successCriteria: successCriteria.trim() }
+      }
+      const res = await authFetch('/api/projects/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      try {
+        await authFetch(`/api/projects/${projectId}/bootstrap`, { method: 'POST' })
+      } catch {}
+      resetAddProjectModal()
+      // Projects list will auto-refresh via polling in App
+    } catch (err) {
+      setAddProjectModal(prev => ({ ...prev, step: 'confirm', error: err.message }))
+    }
+  }
+
   return (
     <div className="flex min-h-screen">
     <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6">
@@ -121,9 +223,7 @@ export default function ProjectListPage({
           {projects.filter(p => showArchived || !p.archived).map(project => (
             <Card key={project.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => selectProject(project)}>
               <CardContent className="p-4">
-                {/* Mobile: Stack vertically. Desktop: Row */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  {/* Left: Icon + Title */}
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center shrink-0">
                       <Folder className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -143,7 +243,6 @@ export default function ProjectListPage({
                     </div>
                   </div>
                   
-                  {/* Right: Status + Actions */}
                   <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
                     <div className="text-left sm:text-right">
                       <Badge variant={project.isComplete ? (project.completionSuccess ? 'success' : 'destructive') : project.paused ? 'warning' : project.sleeping ? 'secondary' : project.currentAgent ? 'success' : project.running ? 'success' : 'destructive'}>
@@ -198,7 +297,6 @@ export default function ProjectListPage({
         <Footer />
       </div>
 
-      {/* Add Project Modal */}
       <AddProjectModal
         addProjectModal={addProjectModal}
         setAddProjectModal={setAddProjectModal}
@@ -210,7 +308,6 @@ export default function ProjectListPage({
         finalizeAddProject={finalizeAddProject}
       />
 
-      {/* Login Modal */}
       <LoginModal
         open={loginModal}
         onClose={() => { setLoginModal(false); setLoginInput('') }}
@@ -219,45 +316,19 @@ export default function ProjectListPage({
         handleLogin={handleLogin}
       />
 
-      {/* Settings (project list) */}
       <SettingsPanel
         settingsOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         theme={theme}
         setTheme={setTheme}
-        notificationsEnabled={notificationsEnabled}
-        toggleNotifications={toggleNotifications}
-        detailedNotifs={detailedNotifs}
-        setDetailedNotifs={setDetailedNotifs}
         setShowApiKeyHelp={setShowApiKeyHelp}
-        globalTokenInput={globalTokenInput}
-        setGlobalTokenInput={setGlobalTokenInput}
-        tokenSaving={tokenSaving}
-        setTokenSaving={setTokenSaving}
-        setHasGlobalToken={setHasGlobalToken}
-        setGlobalTokenType={setGlobalTokenType}
-        setProviderTokens={setProviderTokens}
-        setGlobalTokenPreview={setGlobalTokenPreview}
-        setToast={setToast}
-        providerTokens={providerTokens}
-        codexLoginState={codexLoginState}
-        setCodexLoginState={setCodexLoginState}
-        authFetch={authFetch}
       />
 
-      {/* Notification Center (project list) */}
       <NotificationPanel
         open={notifCenter}
         onClose={() => setNotifCenter(false)}
-        notifList={notifList}
-        unreadCount={unreadCount}
-        markAllRead={markAllRead}
-        markRead={markRead}
-        expandedNotifs={expandedNotifs}
-        toggleNotifExpand={toggleNotifExpand}
       />
 
-      {/* API Key Help Modal */}
       <ApiKeyHelpModal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)} />
     </div>
     <PanelSlot />
