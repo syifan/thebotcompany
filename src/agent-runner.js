@@ -740,3 +740,6 @@ export async function runAgentWithAPI(opts) {
     }
   }
 }
+
+// Exported for testing
+export { executeRead, executeWrite, executeEdit, executeGlob, executeGrep, executeTool };
