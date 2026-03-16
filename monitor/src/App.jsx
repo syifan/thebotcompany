@@ -2337,6 +2337,9 @@ function App() {
           </ModalContent>
         </Modal>
 
+        {/* Settings (project list) */}
+        {settingsModal}
+
         {/* Notification Center (project list) */}
         <Panel id="notifications" open={notifCenter} onClose={() => setNotifCenter(false)}>
           <PanelHeader onClose={() => setNotifCenter(false)}>
