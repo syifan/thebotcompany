@@ -1,8 +1,7 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Info } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
-import { detectProvider } from '@/utils'
 
 export default function ProjectSettingsPanel({
   selectedProject,
@@ -12,34 +11,75 @@ export default function ProjectSettingsPanel({
   notifUseGlobal,
   projNotifSettings,
   setShowApiKeyHelp,
-  hasProjectToken,
-  projectTokenPreview,
-  projectTokenProviderLabel,
-  projectTokenSaving,
-  setProjectTokenSaving,
   authFetch,
   projectApi,
-  setHasProjectToken,
-  setProjectTokenPreview,
-  setProjectTokenProviderLabel,
   setToast,
-  projectTokenInput,
-  setProjectTokenInput,
-  projectTokenProvider,
-  setProjectTokenProvider,
-  projectCodexLoginState,
-  setProjectCodexLoginState,
-  codexLoginState,
   isWriteMode,
   config,
   setSelectedProject,
   fetchProjectData,
   fetchGlobalStatus,
   removeProject,
-  hasGlobalToken,
-  globalTokenPreview,
 }) {
+  const [keys, setKeys] = useState([])
+  const [keySelection, setKeySelection] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!selectedProject) return
+    // Fetch key pool and project key selection
+    fetch('/api/keys').then(r => r.json()).then(d => setKeys(d.keys || [])).catch(() => {})
+    fetch(projectApi('/config')).then(r => r.json()).then(d => {
+      setKeySelection(d.keySelection || null)
+    }).catch(() => {})
+  }, [selectedProject?.id])
+
   if (!selectedProject) return null
+
+  const selectedKeyId = keySelection?.keyId || null
+  const fallbackEnabled = keySelection?.fallback !== false
+  const defaultKey = keys.find(k => k.enabled)
+  const selectedKey = selectedKeyId ? keys.find(k => k.id === selectedKeyId) : null
+  const effectiveKey = selectedKey || defaultKey
+
+  const handleKeyChange = async (keyId) => {
+    setSaving(true)
+    try {
+      const res = await authFetch(projectApi('/token'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyId: keyId || null,
+          fallback: fallbackEnabled,
+        })
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setKeySelection(d.keySelection || null)
+        setToast(keyId ? 'Key selection updated' : 'Using global default')
+      }
+    } catch {}
+    setSaving(false)
+  }
+
+  const handleFallbackChange = async (fallback) => {
+    setSaving(true)
+    try {
+      const res = await authFetch(projectApi('/token'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyId: selectedKeyId,
+          fallback,
+        })
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setKeySelection(d.keySelection || null)
+      }
+    } catch {}
+    setSaving(false)
+  }
 
   return (
     <Panel id="project-settings" open={projectSettingsOpen} onClose={() => setProjectSettingsOpen(false)}>
@@ -85,10 +125,10 @@ export default function ProjectSettingsPanel({
           </div>
         </div>
 
-        {/* Models section */}
+        {/* API Key Selection */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Models</h3>
+            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">API Key</h3>
             <button
               onClick={() => setShowApiKeyHelp(true)}
               className="text-neutral-400 hover:text-blue-500 dark:text-neutral-500 dark:hover:text-blue-400 transition-colors"
@@ -97,159 +137,60 @@ export default function ProjectSettingsPanel({
               <Info className="w-4 h-4" />
             </button>
           </div>
-          <div className="py-2 space-y-3">
-            {/* Current key status */}
-            {hasProjectToken ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 shrink-0">
-                    {projectTokenProviderLabel ? projectTokenProviderLabel.charAt(0).toUpperCase() + projectTokenProviderLabel.slice(1) : detectProvider(projectTokenPreview) || 'API Key'}
-                  </span>
-                  <code className="text-xs text-neutral-500 dark:text-neutral-400 truncate">{projectTokenPreview}</code>
+
+          <div className="space-y-3">
+            {/* Key selector */}
+            <select
+              value={selectedKeyId || ''}
+              onChange={e => handleKeyChange(e.target.value || null)}
+              disabled={saving}
+              className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+            >
+              <option value="">
+                Use global default{defaultKey ? ` ("${defaultKey.label}")` : ''}
+              </option>
+              {keys.filter(k => k.enabled).map(k => (
+                <option key={k.id} value={k.id}>
+                  {k.label} — {k.provider} ({k.preview})
+                </option>
+              ))}
+            </select>
+
+            {/* Effective key display */}
+            {effectiveKey && (
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
+                <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                <span className="text-xs text-neutral-600 dark:text-neutral-400">
+                  Using: <span className="font-medium text-neutral-800 dark:text-neutral-200">{effectiveKey.label}</span>
+                  {' '}({effectiveKey.provider})
+                </span>
+              </div>
+            )}
+
+            {/* Fallback option — only show when a specific key is selected */}
+            {selectedKeyId && (
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <span className="text-sm text-neutral-700 dark:text-neutral-300">Allow fallback</span>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                    Use other keys if this one hits rate limits
+                  </p>
                 </div>
                 <button
-                  onClick={async () => {
-                    setProjectTokenSaving(true)
-                    try {
-                      const res = await authFetch(projectApi('/token'), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ token: '' })
-                      })
-                      if (res.ok) {
-                        setHasProjectToken(false)
-                        setProjectTokenPreview(null)
-                        setProjectTokenProviderLabel(null)
-                        setToast('Project token removed')
-                      }
-                    } catch {}
-                    setProjectTokenSaving(false)
-                  }}
-                  className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                  onClick={() => handleFallbackChange(!fallbackEnabled)}
+                  disabled={saving}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${fallbackEnabled ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
                 >
-                  Remove
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${fallbackEnabled ? 'translate-x-5' : ''}`} />
                 </button>
               </div>
-            ) : (
+            )}
+
+            {keys.length === 0 && (
               <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                {hasGlobalToken ? `Using global token (${globalTokenPreview})` : 'No token configured'}
+                No API keys configured. Add keys in global Settings.
               </p>
             )}
-            {/* Input for new key */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <select
-                  value={projectTokenProvider}
-                  onChange={e => setProjectTokenProvider(e.target.value)}
-                  className="w-full sm:w-40 shrink-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-                >
-                  <option value="">Provider...</option>
-                  <option value="anthropic">Anthropic (API Key)</option>
-                  <option value="anthropic-oauth">Anthropic (OAuth)</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="google">Google (Gemini)</option>
-                  <option value="minimax">MiniMax</option>
-                </select>
-                <input
-                  type="password"
-                  placeholder={hasProjectToken ? 'Replace with new key...' : 'Paste API key...'}
-                  value={projectTokenInput}
-                  onChange={e => setProjectTokenInput(e.target.value)}
-                  className="flex-1 min-w-0 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-                />
-                <button
-                  onClick={async () => {
-                    if (!projectTokenProvider || !projectTokenInput) return
-                    setProjectTokenSaving(true)
-                    try {
-                      const providerValue = projectTokenProvider === 'anthropic-oauth' ? 'anthropic' : projectTokenProvider
-                      const res = await authFetch(projectApi('/token'), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ token: projectTokenInput, provider: providerValue })
-                      })
-                      if (res.ok) {
-                        const d = await res.json()
-                        setHasProjectToken(d.hasProjectToken)
-                        setProjectTokenPreview(d.hasProjectToken ? projectTokenInput.slice(0, 4) + '****' + projectTokenInput.slice(-4) : null)
-                        setProjectTokenProviderLabel(providerValue)
-                        setProjectTokenInput('')
-                        setProjectTokenProvider('')
-                        setToast(`${providerValue.charAt(0).toUpperCase() + providerValue.slice(1)} key saved`)
-                      }
-                    } catch {}
-                    setProjectTokenSaving(false)
-                  }}
-                  disabled={projectTokenSaving || !projectTokenProvider || !projectTokenInput}
-                  className="px-3 py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 shrink-0"
-                >
-                  {projectTokenSaving ? '...' : 'Save'}
-                </button>
-              </div>
-            </div>
-            {/* OpenAI Codex (ChatGPT OAuth) — per-project */}
-            <div className="flex items-center justify-between text-xs py-1 mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-700/50">
-              <span className={projectCodexLoginState === 'success' ? 'text-green-600 dark:text-green-400' : 'text-neutral-400 dark:text-neutral-500'}>
-                {projectCodexLoginState === 'success' ? '✓' : '○'} OpenAI Codex (ChatGPT)
-              </span>
-              {projectCodexLoginState === 'success' ? (
-                <button
-                  onClick={async () => {
-                    await authFetch(`/api/openai-codex/logout?project=${encodeURIComponent(selectedProject.id)}`, { method: 'POST' })
-                    setProjectCodexLoginState(null)
-                    setToast('Project ChatGPT account disconnected')
-                  }}
-                  className="text-red-500 hover:text-red-700 text-xs"
-                >
-                  Disconnect
-                </button>
-              ) : projectCodexLoginState === 'waiting' ? (
-                <span className="text-xs text-blue-500 animate-pulse">Waiting for sign-in...</span>
-              ) : (
-                <button
-                  onClick={async () => {
-                    if (!selectedProject?.id) return
-                    try {
-                      setProjectCodexLoginState('polling')
-                      const res = await authFetch(`/api/openai-codex/login?project=${encodeURIComponent(selectedProject.id)}`, { method: 'POST' })
-                      if (!res.ok) throw new Error('Failed')
-                      const data = await res.json()
-                      setProjectCodexLoginState('waiting')
-                      window.open(data.authorization_url, '_blank')
-                      const pollInterval = setInterval(async () => {
-                        try {
-                          const statusRes = await fetch(`/api/openai-codex/status?project=${encodeURIComponent(selectedProject.id)}`)
-                          const status = await statusRes.json()
-                          if (status.authenticated) {
-                            clearInterval(pollInterval)
-                            setProjectCodexLoginState('success')
-                            setToast('Project ChatGPT account connected')
-                          }
-                        } catch {}
-                      }, 3000)
-                      setTimeout(() => {
-                        clearInterval(pollInterval)
-                        setProjectCodexLoginState(prev => prev === 'success' ? prev : null)
-                      }, 300000)
-                    } catch {
-                      setProjectCodexLoginState(null)
-                    }
-                  }}
-                  disabled={projectCodexLoginState === 'polling'}
-                  className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-xs"
-                >
-                  {projectCodexLoginState === 'polling' ? 'Starting...' : 'Login'}
-                </button>
-              )}
-            </div>
-            {projectCodexLoginState === 'waiting' && (
-              <div className="mt-2 p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs">
-                <p className="text-blue-700 dark:text-blue-300">Complete sign-in in the browser tab that just opened.</p>
-              </div>
-            )}
-            <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-2">
-              {codexLoginState === 'success' && projectCodexLoginState !== 'success' ? 'Using global ChatGPT login' : ''}
-            </p>
           </div>
         </div>
 

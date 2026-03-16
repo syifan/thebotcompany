@@ -8,7 +8,15 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { getProvider } from './providers/index.js';
+import {
+  resolveModel,
+  formatTools,
+  callModel,
+  buildAssistantMessage,
+  buildToolResultMessages,
+  buildUserMessage,
+  calculateCost,
+} from './providers/index.js';
 
 // ---------------------------------------------------------------------------
 // Git/gh sandbox: block unauthorized repo operations
@@ -460,13 +468,15 @@ async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = 
  * @param {Object} opts.env          - Environment variables for Bash commands
  * @param {AbortSignal} opts.abortSignal - Optional external abort signal
  * @param {function} opts.log        - Logging function (optional)
+ * @param {function} opts.onRateLimited - Callback when rate limited: (keyId) => void
+ * @param {function} opts.resolveNewToken - Async callback to get new token after rotation: () => { token, keyId }
  * @returns {Promise<Object>}        - { success, resultText, usage, cost, durationMs }
  */
 export async function runAgentWithAPI(opts) {
   const {
     prompt,
     model: rawModel = 'claude-opus-4-6',
-    token,
+    token: initialToken,
     reasoningEffort,
     cwd,
     timeoutMs = 0,
@@ -474,18 +484,20 @@ export async function runAgentWithAPI(opts) {
     abortSignal = null,
     log = () => {},
     allowedRepo = null,
+    keyId: initialKeyId = null,
+    onRateLimited = null,
+    resolveNewToken = null,
   } = opts;
 
   const startTime = Date.now();
-  const { provider, model } = getProvider(rawModel);
+  const { piModel } = resolveModel(rawModel);
+  let token = initialToken;
+  let keyId = initialKeyId;
   const isOAuth = token && token.startsWith('sk-ant-oat');
 
-  // Create provider client
-  const client = provider.createClient({ token, isOAuth });
-
-  // Format tools for this provider
+  // Format tools for pi-ai
   const canonicalTools = getToolDefinitions();
-  const tools = provider.formatTools(canonicalTools);
+  const tools = formatTools(canonicalTools);
 
   // Set up env for Bash commands
   const bashEnv = { ...process.env, ...env };
@@ -544,18 +556,18 @@ export async function runAgentWithAPI(opts) {
       success,
       resultText,
       usage: totalUsage,
-      cost: provider.calculateCost(totalUsage, model),
+      cost: totalCost,
       durationMs: Date.now() - startTime,
       ...extra,
     };
   }
 
-  // Initial messages (provider-agnostic format, converted in buildRequest)
+  // Accumulated cost (from pi-ai per-call cost)
+  let totalCost = 0;
+
+  // Initial messages in pi-ai format
   const messages = [
-    {
-      role: 'user',
-      content: [{ type: 'text', text: 'Begin your work now. Follow the instructions in the system prompt.' }],
-    },
+    buildUserMessage('Begin your work now. Follow the instructions in the system prompt.'),
   ];
 
   const MAX_ITERATIONS = 200;
@@ -579,9 +591,7 @@ export async function runAgentWithAPI(opts) {
         let splitIdx = messages.length - keep;
         while (splitIdx < messages.length - 1) {
           const msg = messages[splitIdx];
-          const hasToolResults = Array.isArray(msg.content) &&
-            msg.content[0]?.type && (msg.content[0].type === 'tool_result' || msg.content[0].type === 'function_call_output');
-          if (msg.role === 'user' && hasToolResults) {
+          if (msg.role === 'toolResult') {
             splitIdx--; // include the preceding assistant message
           } else {
             break;
@@ -592,70 +602,73 @@ export async function runAgentWithAPI(opts) {
         log(`Compacting ${toCompact.length} messages (last request: ${lastInputTokens} tokens)...`);
 
         // Build a text representation of old messages for summarization
-        const compactText = toCompact.map((m, i) => {
+        const compactText = toCompact.map((m) => {
           const role = m.role || 'unknown';
           let text = '';
           if (Array.isArray(m.content)) {
             text = m.content.map(c => {
               if (c.type === 'text') return c.text;
-              if (c.type === 'tool_use') return `[Tool call: ${c.name}(${JSON.stringify(c.input).slice(0, 200)})]`;
-              if (c.type === 'tool_result') return `[Tool result: ${(typeof c.content === 'string' ? c.content : JSON.stringify(c.content)).slice(0, 500)}]`;
+              if (c.type === 'toolCall') return `[Tool call: ${c.name}(${JSON.stringify(c.arguments).slice(0, 200)})]`;
               return `[${c.type}]`;
             }).join('\n');
           } else if (typeof m.content === 'string') {
             text = m.content;
+          }
+          if (role === 'toolResult') {
+            const resultText = m.content?.map(c => c.text || '').join('') || '';
+            text = `[Tool result for ${m.toolName}: ${resultText.slice(0, 500)}]`;
           }
           return `[${role}] ${text.slice(0, 1000)}`;
         }).join('\n---\n');
 
         // Use a cheap/fast model for summarization
         try {
-          const summaryParams = provider.buildRequest({
-            model: model.includes('opus') ? model.replace('opus', 'sonnet') : model,
-            systemPrompt: 'Summarize this agent conversation history concisely. Focus on: what tasks were attempted, what succeeded/failed, what files were modified, current state, and any important decisions. Be specific about file paths, issue numbers, and error messages. Output only the summary.',
-            messages: [{
-              role: 'user',
-              content: [{ type: 'text', text: compactText.slice(0, 80000) }],
-            }],
-            tools: [],
-            isOAuth,
-          });
+          // Pick a cheaper model for summarization if available
+          let summaryModelName = rawModel;
+          if (rawModel.includes('opus')) summaryModelName = rawModel.replace('opus', 'sonnet');
+          const { piModel: summaryPiModel } = resolveModel(summaryModelName);
 
-          const summaryResponse = await provider.callAPI(client, summaryParams, abortController.signal);
+          const summaryResponse = await callModel(
+            summaryPiModel,
+            'Summarize this agent conversation history concisely. Focus on: what tasks were attempted, what succeeded/failed, what files were modified, current state, and any important decisions. Be specific about file paths, issue numbers, and error messages. Output only the summary.',
+            [buildUserMessage(compactText.slice(0, 80000))],
+            [], // no tools for summarization
+            { token, isOAuth, signal: abortController.signal },
+          );
+
           totalUsage.inputTokens += summaryResponse.usage.inputTokens;
           totalUsage.outputTokens += summaryResponse.usage.outputTokens;
           totalUsage.cacheReadTokens += summaryResponse.usage.cacheReadTokens || 0;
+          totalCost += summaryResponse.cost || 0;
 
           const summary = summaryResponse.content || '(compaction failed — earlier context was dropped)';
           log(`Compacted ${toCompact.length} messages into summary (${summary.length} chars)`);
 
-          messages.splice(1, 0, {
-            role: 'user',
-            content: [{ type: 'text', text: `[System: The conversation history was auto-compacted to stay within context limits. Here is a summary of the earlier work:]\n\n${summary}` }],
-          });
+          messages.splice(1, 0,
+            buildUserMessage(`[System: The conversation history was auto-compacted to stay within context limits. Here is a summary of the earlier work:]\n\n${summary}`),
+          );
         } catch (compactErr) {
           log(`Compaction summarization failed: ${compactErr.message}, falling back to trim`);
-          messages.splice(1, 0, {
-            role: 'user',
-            content: [{ type: 'text', text: `[System: ${toCompact.length} earlier messages were trimmed to stay within context limits. Continue your work based on what you can see.]` }],
-          });
+          messages.splice(1, 0,
+            buildUserMessage(`[System: ${toCompact.length} earlier messages were trimmed to stay within context limits. Continue your work based on what you can see.]`),
+          );
         }
       }
 
-      // Provider-specific cache hints
-      provider.applyCacheHints(messages);
-
-      // Build request
-      const params = provider.buildRequest({
-        model, systemPrompt: prompt, messages, tools, isOAuth, reasoningEffort,
-      });
+      // Prepare system prompt (add Claude Code prefix for Anthropic OAuth)
+      let systemPrompt = prompt;
+      if (isOAuth && piModel.provider === 'anthropic') {
+        systemPrompt = 'You are Claude Code, Anthropic\'s official CLI for Claude.\n\n' + systemPrompt;
+      }
 
       // Call API with retry for transient errors (429, 503)
       let response;
       const MAX_RETRIES = 3;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-          response = await provider.callAPI(client, params, abortController.signal);
+          response = await callModel(piModel, systemPrompt, messages, tools, {
+            token, isOAuth, reasoningEffort, signal: abortController.signal,
+          });
           break; // success
         } catch (err) {
           if (aborted || err.name === 'AbortError' || abortController.signal.aborted) {
@@ -665,6 +678,22 @@ export async function runAgentWithAPI(opts) {
           const status = err.status || err.code || 0;
           const isRetryable = status === 429 || status === 503 || /rate.limit|overloaded|unavailable|quota/i.test(err.message);
           if (isRetryable && attempt < MAX_RETRIES) {
+            // Notify caller about rate limit so key pool can rotate
+            if (onRateLimited && keyId) {
+              onRateLimited(keyId);
+            }
+            // Try to get a new token from the key pool
+            if (resolveNewToken) {
+              try {
+                const newKey = await resolveNewToken();
+                if (newKey?.token && newKey.token !== token) {
+                  token = newKey.token;
+                  keyId = newKey.keyId;
+                  log(`Rotated to key ${keyId} after rate limit`);
+                  continue; // retry immediately with new key
+                }
+              } catch {}
+            }
             // Parse retry-after from error message or use exponential backoff
             const retryMatch = err.message.match(/retry in ([\d.]+)s/i);
             const hintDelay = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 0;
@@ -685,6 +714,7 @@ export async function runAgentWithAPI(opts) {
         totalUsage.inputTokens += response.usage.inputTokens;
         totalUsage.outputTokens += response.usage.outputTokens;
         totalUsage.cacheReadTokens += response.usage.cacheReadTokens || 0;
+        totalCost += response.cost || 0;
         log(`Agent timeout after API call (iteration ${iteration})`);
         return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
       }
@@ -694,6 +724,7 @@ export async function runAgentWithAPI(opts) {
       totalUsage.inputTokens += response.usage.inputTokens;
       totalUsage.outputTokens += response.usage.outputTokens;
       totalUsage.cacheReadTokens += response.usage.cacheReadTokens || 0;
+      totalCost += response.cost || 0;
 
       // Extract text
       if (response.content) {
@@ -708,7 +739,7 @@ export async function runAgentWithAPI(opts) {
       // Handle tool use
       if (response.stopReason === 'tool_use') {
         // Add assistant message to history
-        messages.push(provider.buildAssistantMessage(response));
+        messages.push(buildAssistantMessage(response));
 
         // Execute tools
         const toolResults = [];
@@ -719,7 +750,7 @@ export async function runAgentWithAPI(opts) {
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
           const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo);
-          toolResults.push({ toolCallId: tc.id, content: result });
+          toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: result });
         }
 
         if (aborted) {
@@ -728,7 +759,9 @@ export async function runAgentWithAPI(opts) {
         }
 
         // Add tool results to messages
-        messages.push(provider.buildToolResultMessage(toolResults));
+        for (const trMsg of buildToolResultMessages(toolResults)) {
+          messages.push(trMsg);
+        }
       } else {
         log(`Unexpected stop reason: ${response.stopReason}`);
         return makeResult(true, lastResultText);
