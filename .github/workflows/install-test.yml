@@ -13,13 +13,16 @@ jobs:
         node: [20, 22]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Install from npm
-        run: npm install -g thebotcompany
+      - name: Install from source
+        run: npm install -g .
 
       - name: Verify tbc CLI exists
         run: tbc --help
