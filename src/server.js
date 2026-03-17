@@ -3049,14 +3049,15 @@ const server = http.createServer(async (req, res) => {
 
         const prompt = `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}`;
 
-        // Use pi-ai adapter for summarization (provider-agnostic)
+        // Use pi-ai adapter for summarization (same auth logic as agent calls)
         const { piModel } = resolveModel(model);
+        const isOAuth = keyResult?.type === 'oauth';
         const summaryResponse = await callModel(
           piModel,
           'You are a helpful assistant. Return ONLY the summary, nothing else.',
           [buildUserMessage(prompt)],
           [], // no tools
-          { token },
+          { token, isOAuth, provider: actualProvider },
         );
         const summary = summaryResponse.content?.trim() || null;
 
