@@ -1772,6 +1772,12 @@ class ProjectRunner {
 
     if (!resolvedToken) {
       log(`No API token configured for ${agent.name} (model: ${agentModel}). Skipping agent run. Add a key in Settings.`, this.id);
+      this.currentAgent = null;
+      this.currentAgentProcess = null;
+      this.currentAgentStartTime = null;
+      this.currentAgentLog = [];
+      this.currentAgentModel = null;
+      broadcastStatusUpdate(this.id);
       return { error: 'no_token', message: 'No API key configured. Add one in Settings > Credentials.' };
     }
 
