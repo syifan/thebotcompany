@@ -1238,13 +1238,22 @@ class ProjectRunner {
     
     let total = 0;
     let failures = 0;
+    let reachedPending = false; // true once we pass all completed agents
     const freshWorkers = this.loadAgents().workers;
     
     for (const step of schedule._steps) {
       if (!this.running) break;
       
-      // Delay step
+      // Delay step — skip if resuming past completed agents
       if (step.delay !== undefined) {
+        if (this.completedAgents.length > 0 && !reachedPending) {
+          // Check if the next agent step is already completed
+          const nextAgentStep = schedule._steps.slice(schedule._steps.indexOf(step) + 1).find(s => !('delay' in s));
+          const nextName = nextAgentStep ? Object.keys(nextAgentStep).find(k => k !== 'delay') : null;
+          if (nextName && this.completedAgents.includes(nextName.toLowerCase())) {
+            continue; // skip delay before a completed agent
+          }
+        }
         await this.sleepDelay(step.delay, 'schedule');
         continue;
       }
@@ -1258,6 +1267,7 @@ class ProjectRunner {
         log(`Skipping ${name} (already completed this cycle)`, this.id);
         continue;
       }
+      reachedPending = true;
       
       const value = step[name];
       const worker = freshWorkers.find(w => w.name.toLowerCase() === name.toLowerCase());
