@@ -1054,7 +1054,9 @@ class ProjectRunner {
         this.isComplete = state.isComplete || false;
         this.completionSuccess = state.completionSuccess || false;
         this.completionMessage = state.completionMessage || null;
-        log(`Loaded state: cycle ${this.cycleCount}, phase: ${this.phase}, completed: [${this.completedAgents.join(', ')}]${this.isPaused ? ', paused' : ''}`, this.id);
+        this.pauseReason = state.pauseReason || null;
+        this.consecutiveFailures = state.consecutiveFailures || 0;
+        log(`Loaded state: cycle ${this.cycleCount}, phase: ${this.phase}, completed: [${this.completedAgents.join(', ')}]${this.isPaused ? `, paused (${this.pauseReason || 'no reason'})` : ''}${this.consecutiveFailures ? `, ${this.consecutiveFailures} consecutive failures` : ''}`, this.id);
       } else {
         // New project — start paused
         this.setState({ isPaused: true, pauseReason: 'New project (paused by default)' }, { save: false });
@@ -1089,6 +1091,8 @@ class ProjectRunner {
         isComplete: this.isComplete || false,
         completionSuccess: this.completionSuccess || false,
         completionMessage: this.completionMessage || null,
+        pauseReason: this.pauseReason || null,
+        consecutiveFailures: this.consecutiveFailures || 0,
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
