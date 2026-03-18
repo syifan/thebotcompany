@@ -130,8 +130,35 @@ function App() {
       }
     }
     init()
-    const interval = setInterval(fetchGlobalStatus, 5000)
-    return () => clearInterval(interval)
+    // Polling as fallback (longer interval since SSE handles real-time)
+    const interval = setInterval(fetchGlobalStatus, 30000)
+
+    // SSE for instant status updates
+    const evtSource = new EventSource('/api/events')
+    evtSource.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data)
+        if (event.type === 'status-update' && event.status) {
+          setProjects(prev => prev.map(p => p.id === event.project ? event.status : p))
+          setSelectedProject(prev => {
+            if (!prev || prev.id !== event.project) return prev
+            const prevAgent = prevAgentRef.current
+            const curAgent = event.status.currentAgent || null
+            if (prevAgent !== null && prevAgent !== curAgent) {
+              if (onAgentChangeRef.current) onAgentChangeRef.current()
+            }
+            prevAgentRef.current = curAgent
+            return event.status
+          })
+          setLastUpdate(new Date())
+        }
+      } catch {}
+    }
+
+    return () => {
+      clearInterval(interval)
+      evtSource.close()
+    }
   }, [])
 
   // Handle browser back/forward

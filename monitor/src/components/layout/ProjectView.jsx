@@ -223,13 +223,26 @@ export default function ProjectView({
       }
 
       const logsInterval = setInterval(fetchLogs, 10000)
-      const commentsInterval = setInterval(() => fetchComments(1, localStorage.getItem('selectedAgent') || null, false, true), 30000)
-      const projectDataInterval = setInterval(fetchProjectData, 30000)
+      // Longer polling intervals — SSE handles real-time updates
+      const commentsInterval = setInterval(() => fetchComments(1, localStorage.getItem('selectedAgent') || null, false, true), 60000)
+      const projectDataInterval = setInterval(fetchProjectData, 60000)
+
+      // SSE for instant report updates
+      const evtSource = new EventSource('/api/events')
+      evtSource.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data)
+          if (event.type === 'report-new' && event.project === selectedProject.id) {
+            fetchComments(1, localStorage.getItem('selectedAgent') || null, false, true)
+          }
+        } catch {}
+      }
       
       return () => {
         clearInterval(logsInterval)
         clearInterval(commentsInterval)
         clearInterval(projectDataInterval)
+        evtSource.close()
       }
     }
   }, [selectedProject?.id])

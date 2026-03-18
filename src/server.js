@@ -171,6 +171,28 @@ const sseClients = new Set();
 const notifications = []; // In-memory notification store
 const MAX_NOTIFICATIONS = 200;
 
+// Throttled status broadcasts — at most once per second per project
+const _statusBroadcastTimers = new Map();
+function broadcastStatusUpdate(projectId) {
+  if (_statusBroadcastTimers.has(projectId)) return; // already scheduled
+  _statusBroadcastTimers.set(projectId, setTimeout(() => {
+    _statusBroadcastTimers.delete(projectId);
+    const runner = projects.get(projectId);
+    if (!runner) return;
+    const data = JSON.stringify({ type: 'status-update', project: projectId, status: runner.getStatus() });
+    for (const client of sseClients) {
+      client.write(`data: ${data}\n\n`);
+    }
+  }, 500)); // 500ms debounce
+}
+
+function broadcastReportUpdate(projectId, reportId, agent, cycle) {
+  const data = JSON.stringify({ type: 'report-new', project: projectId, reportId, agent, cycle });
+  for (const client of sseClients) {
+    client.write(`data: ${data}\n\n`);
+  }
+}
+
 function broadcastEvent(event) {
   const messages = {
     milestone: `📌 New milestone: ${event.title}`,
@@ -317,6 +339,9 @@ class ProjectRunner {
     }
 
     if (save) this.saveState();
+
+    // Broadcast status update via SSE for instant dashboard refresh
+    broadcastStatusUpdate(this.id);
   }
 
   get projectDir() {
@@ -1689,8 +1714,11 @@ class ProjectRunner {
         )`);
         try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
         db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(this.cycleCount, agent.name, reportBody, new Date().toISOString());
+        const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
         db.close();
         log(`Saved report for ${agent.name}`, this.id);
+        // Broadcast new report via SSE
+        broadcastReportUpdate(this.id, lastId, agent.name, this.cycleCount);
       } catch (dbErr) {
         log(`Failed to write report: ${dbErr.message}`, this.id);
       }
@@ -1703,6 +1731,7 @@ class ProjectRunner {
     this.currentAgentProcess = null;
     this.currentAgentStartTime = null;
     this.currentAgentLog = [];
+    broadcastStatusUpdate(this.id);
     this.currentAgentModel = null;
 
     return { success, resultText, killedByTimeout: !!killedByTimeout };
@@ -1711,6 +1740,7 @@ class ProjectRunner {
   async runAgent(agent, config, mode = null, task = null, visibility = null) {
     this.currentAgent = agent.name;
     this.currentAgentStartTime = Date.now();
+    broadcastStatusUpdate(this.id);
     const runAbortController = new AbortController();
     this.currentAgentProcess = {
       kill: () => runAbortController.abort(),
