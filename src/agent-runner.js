@@ -694,6 +694,7 @@ export async function runAgentWithAPI(opts) {
 
       // Call API with retry for transient errors (429, 503)
       let response;
+      let contextCompacted = false; // track emergency compaction to prevent loops
       const MAX_RETRIES = 3;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -751,6 +752,74 @@ export async function runAgentWithAPI(opts) {
             }
             continue;
           }
+          // Context length exceeded — emergency compact and retry once
+          const isContextError = /context_length_exceeded|context.window|too.many.tokens|maximum.context/i.test(err.message);
+          if (isContextError && messages.length > 3 && !contextCompacted) {
+            log(`Context length exceeded — emergency compaction (${messages.length} messages)...`);
+            // Aggressively compact: keep only first message + last 20% of history
+            const keep = Math.max(2, Math.floor(messages.length * 0.2));
+            let splitIdx = messages.length - keep;
+            // Don't split assistant/tool-result pairs
+            while (splitIdx < messages.length - 1) {
+              const msg = messages[splitIdx];
+              if (msg.role === 'toolResult') { splitIdx--; } else { break; }
+            }
+            if (splitIdx < 1) splitIdx = 1;
+            const toCompact = messages.splice(1, splitIdx - 1);
+            log(`Emergency compact: removed ${toCompact.length} messages, ${messages.length} remaining`);
+
+            // Build summary text from compacted messages
+            const compactText = toCompact.map((m) => {
+              const role = m.role || 'unknown';
+              let text = '';
+              if (Array.isArray(m.content)) {
+                text = m.content.map(c => {
+                  if (c.type === 'text') return c.text;
+                  if (c.type === 'toolCall') return `[Tool: ${c.name}]`;
+                  return `[${c.type}]`;
+                }).join('\n');
+              } else if (typeof m.content === 'string') {
+                text = m.content;
+              }
+              if (role === 'toolResult') {
+                const resultText = m.content?.map(c => c.text || '').join('') || '';
+                text = `[Tool result for ${m.toolName}: ${resultText.slice(0, 300)}]`;
+              }
+              return `[${role}] ${text.slice(0, 500)}`;
+            }).join('\n---\n');
+
+            // Try to summarize, fall back to simple trim
+            try {
+              let summaryModelName = rawModel;
+              if (rawModel.includes('opus')) summaryModelName = rawModel.replace('opus', 'sonnet');
+              if (rawModel.includes('codex')) summaryModelName = rawModel; // codex has no cheaper variant
+              const { piModel: summaryPiModel } = resolveModel(summaryModelName);
+              const summaryResponse = await callModel(
+                summaryPiModel,
+                'Summarize this agent conversation concisely. Focus on: tasks attempted, results, files modified, current state. Be specific. Output only the summary.',
+                [buildUserMessage(compactText.slice(0, 40000))], // smaller slice for emergency
+                [],
+                { token, isOAuth, provider: keyProvider, signal: abortController.signal },
+              );
+              totalUsage.inputTokens += summaryResponse.usage.inputTokens;
+              totalUsage.outputTokens += summaryResponse.usage.outputTokens;
+              totalCost += summaryResponse.cost || 0;
+              const summary = summaryResponse.content || '(context was trimmed)';
+              log(`Emergency compaction summary: ${summary.length} chars`);
+              messages.splice(1, 0,
+                buildUserMessage(`[System: Context was too large. ${toCompact.length} earlier messages were compacted. Summary:]\n\n${summary}`),
+              );
+            } catch (compactErr) {
+              log(`Emergency compaction summarization failed: ${compactErr.message}`);
+              messages.splice(1, 0,
+                buildUserMessage(`[System: ${toCompact.length} earlier messages were trimmed due to context limits. Continue based on what you can see.]`),
+              );
+            }
+            contextCompacted = true; // prevent infinite compaction loops
+            attempt--; // don't count this as a retry attempt
+            continue; // retry the API call with compacted history
+          }
+
           log(`API error: ${err.message}`);
           return makeResult(false, `API error: ${err.message}`);
         }
