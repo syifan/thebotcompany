@@ -123,8 +123,23 @@ export function CostBudgetCard({ selectedProject, setBudgetInfoModal }) {
                 </span>
               </div>
               {selectedProject.budget.exhausted && (
-                <div className="p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-xs font-medium">
-                  Budget exhausted — cycle paused until spend rolls off
+                <div className="p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-red-700 dark:text-red-300 text-xs font-medium flex items-center justify-between">
+                  <span>Budget exhausted — cycle paused</span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/projects/${selectedProject.id}/config`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ budgetPer24h: 0 }),
+                        })
+                        if (res.ok) window.location.reload()
+                      } catch {}
+                    }}
+                    className="ml-2 px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded font-medium whitespace-nowrap"
+                  >
+                    Remove limit
+                  </button>
                 </div>
               )}
               {!selectedProject.budget.exhausted && (
@@ -212,6 +227,15 @@ export function ConfigCard({
               </button>
             </label>
             <div className="flex items-center">
+              {configForm.budgetPer24h > 0 && (
+                <button
+                  onClick={() => updateConfigField('budgetPer24h', 0)}
+                  className="mr-2 px-2 py-1.5 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium"
+                  title="Remove budget limit"
+                >
+                  ✕
+                </button>
+              )}
               <button
                 onClick={() => updateConfigField('budgetPer24h', Math.max(0, (configForm.budgetPer24h || 0) - 20))}
                 className="px-2 py-1.5 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 rounded-l-md text-sm font-medium text-neutral-600 dark:text-neutral-300"
