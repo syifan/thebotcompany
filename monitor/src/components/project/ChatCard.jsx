@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { MessageCircle, Plus, Trash2 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { useAuth } from '@/hooks/useAuth'
 
 export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
+  const { authFetch } = useAuth()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -24,7 +26,7 @@ export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
   const handleNew = async () => {
     if (!selectedProject) return
     try {
-      const res = await fetch(`/api/projects/${selectedProject.id}/chats`, {
+      const res = await authFetch(`/api/projects/${selectedProject.id}/chats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -40,7 +42,7 @@ export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
   const handleDelete = async (e, chatId) => {
     e.stopPropagation()
     try {
-      await fetch(`/api/projects/${selectedProject.id}/chats/${chatId}`, { method: 'DELETE' })
+      await authFetch(`/api/projects/${selectedProject.id}/chats/${chatId}`, { method: 'DELETE' })
       setSessions(prev => prev.filter(s => s.id !== chatId))
     } catch {}
   }

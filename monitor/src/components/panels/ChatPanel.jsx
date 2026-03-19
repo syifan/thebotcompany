@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Send, Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
+import { useAuth } from '@/hooks/useAuth'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -85,6 +86,7 @@ function MessageBubble({ msg }) {
 }
 
 export default function ChatPanel({ open, onClose, selectedProject, chatSession }) {
+  const { authFetch } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -132,7 +134,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession 
     setStreamingToolCalls([])
 
     try {
-      const response = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}/message`, {
+      const response = await authFetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg }),
