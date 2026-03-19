@@ -3438,6 +3438,7 @@ const server = http.createServer(async (req, res) => {
 
     // POST /api/projects/:id/chats — create new session
     if (req.method === 'POST' && subPath === 'chats') {
+      if (!requireWrite(req, res)) return;
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
@@ -3476,6 +3477,7 @@ const server = http.createServer(async (req, res) => {
     // DELETE /api/projects/:id/chats/:chatId — delete session
     const chatDeleteMatch = req.method === 'DELETE' && subPath.match(/^chats\/(\d+)$/);
     if (chatDeleteMatch) {
+      if (!requireWrite(req, res)) return;
       try {
         chatDeleteSession(runner.agentDir, parseInt(chatDeleteMatch[1]));
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -3490,6 +3492,7 @@ const server = http.createServer(async (req, res) => {
     // POST /api/projects/:id/chats/:chatId/message — send message (SSE streaming)
     const chatMessageMatch = req.method === 'POST' && subPath.match(/^chats\/(\d+)\/message$/);
     if (chatMessageMatch) {
+      if (!requireWrite(req, res)) return;
       const chatId = parseInt(chatMessageMatch[1]);
       let body = '';
       req.on('data', chunk => body += chunk);

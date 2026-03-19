@@ -795,11 +795,11 @@ export default function ProjectView({
                 setReportsPanelOpen={setReportsPanelOpen}
               />
 
-              <ChatCard
+              {isWriteMode && <ChatCard
                 selectedProject={selectedProject}
                 onOpenChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
                 onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
-              />
+              />}
 
               <IssuesSidebar
                 issues={issues}
