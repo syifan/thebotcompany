@@ -1136,6 +1136,44 @@ class ProjectRunner {
     }
   }
 
+  // Kill Run: terminate the current agent, move to next in schedule
+  killRun() {
+    if (this.currentAgentProcess) {
+      log(`🔴 Kill Run: terminating current agent`, this.id);
+      this.currentAgentProcess.kill('SIGTERM');
+    }
+  }
+
+  // Kill Cycle: terminate current agent + skip remaining workers in schedule
+  killCycle() {
+    log(`🔴 Kill Cycle: terminating agent and clearing schedule`, this.id);
+    if (this.currentAgentProcess) {
+      this.currentAgentProcess.kill('SIGTERM');
+    }
+    this.currentSchedule = null;
+    this.completedAgents = [];
+    this.saveState();
+  }
+
+  // Kill Epoch: terminate everything + force back to Athena
+  killEpoch() {
+    log(`🔴 Kill Epoch: terminating agent, clearing schedule, returning to Athena`, this.id);
+    if (this.currentAgentProcess) {
+      this.currentAgentProcess.kill('SIGTERM');
+    }
+    this.currentSchedule = null;
+    this.completedAgents = [];
+    this.setState({
+      phase: 'athena',
+      milestoneTitle: null,
+      milestoneDescription: null,
+      milestoneCyclesBudget: 0,
+      milestoneCyclesUsed: 0,
+      verificationFeedback: null,
+      isFixRound: false,
+    });
+  }
+
   // Wait while paused, auto-resuming after intervalMs. Optional condition check to resume early.
   async _autoPauseWait(intervalMs, resumeCondition = null) {
     const retryAt = Date.now() + intervalMs;
@@ -1331,12 +1369,15 @@ class ProjectRunner {
 
       const { managers, workers } = this.loadAgents();
 
-      // Start new cycle
-      this.cycleCount++;
-      this.completedAgents = [];
-      this.currentSchedule = null;
-      this.saveState();
-      log(`===== CYCLE ${this.cycleCount} (phase: ${this.phase}) =====`, this.id);
+      // Start new cycle — preserve schedule state if resuming from reboot
+      const resuming = this.currentSchedule && this.completedAgents.length > 0;
+      if (!resuming) {
+        this.cycleCount++;
+        this.completedAgents = [];
+        this.currentSchedule = null;
+        this.saveState();
+      }
+      log(`===== CYCLE ${this.cycleCount} (phase: ${this.phase})${resuming ? ' [RESUMING]' : ''} =====`, this.id);
 
       let cycleFailures = 0;
       let cycleTotal = 0;
@@ -3405,7 +3446,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === 'POST' && ['pause', 'resume', 'skip', 'start', 'stop'].includes(subPath)) {
+    if (req.method === 'POST' && ['pause', 'resume', 'skip', 'start', 'stop', 'kill-run', 'kill-cycle', 'kill-epoch'].includes(subPath)) {
       if (!requireWrite(req, res)) return;
       switch (subPath) {
         case 'pause': runner.pause(); break;
@@ -3413,6 +3454,9 @@ const server = http.createServer(async (req, res) => {
         case 'skip': runner.skip(); break;
         case 'start': runner.start(); break;
         case 'stop': runner.stop(); break;
+        case 'kill-run': runner.killRun(); break;
+        case 'kill-cycle': runner.killCycle(); break;
+        case 'kill-epoch': runner.killEpoch(); break;
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, action: subPath, projectId }));

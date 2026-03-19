@@ -1,5 +1,5 @@
-import React from 'react'
-import { Activity, DollarSign, Settings, Save, Info } from 'lucide-react'
+import React, { useState } from 'react'
+import { Activity, DollarSign, Settings, Save, Info, AlertTriangle } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -86,8 +86,64 @@ export function OrchestratorStateCard({ selectedProject, globalUptime, controlAc
             <span className="text-sm font-mono">{Math.floor(globalUptime / 3600)}h {Math.floor((globalUptime % 3600) / 60)}m</span>
           </div>
         </div>
+        {isWriteMode && !selectedProject.paused && selectedProject.running && (
+          <DangerZone controlAction={controlAction} selectedProject={selectedProject} />
+        )}
       </CardContent>
     </Card>
+  )
+}
+
+function DangerZone({ controlAction, selectedProject }) {
+  const [open, setOpen] = useState(false)
+  const [confirming, setConfirming] = useState(null) // 'kill-run' | 'kill-cycle' | 'kill-epoch'
+
+  const handleKill = (action) => {
+    if (confirming === action) {
+      controlAction(action)
+      setConfirming(null)
+      setOpen(false)
+    } else {
+      setConfirming(action)
+    }
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700">
+      <button
+        onClick={() => { setOpen(!open); setConfirming(null) }}
+        className="flex items-center gap-1.5 text-xs text-neutral-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+      >
+        <AlertTriangle className="w-3 h-3" />
+        {open ? 'Hide danger zone' : 'Danger zone'}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          <button
+            onClick={() => handleKill('kill-run')}
+            disabled={!selectedProject.currentAgent}
+            className="w-full px-3 py-1.5 text-xs font-medium rounded border transition-colors disabled:opacity-30 disabled:cursor-not-allowed border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950"
+          >
+            {confirming === 'kill-run' ? '⚠️ Click again to confirm' : '⏹ Kill Run'}
+            <span className="block text-[10px] font-normal opacity-60">Terminate current agent, move to next in schedule</span>
+          </button>
+          <button
+            onClick={() => handleKill('kill-cycle')}
+            className="w-full px-3 py-1.5 text-xs font-medium rounded border transition-colors border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950"
+          >
+            {confirming === 'kill-cycle' ? '⚠️ Click again to confirm' : '⏹ Kill Cycle'}
+            <span className="block text-[10px] font-normal opacity-60">Kill agent + skip remaining workers</span>
+          </button>
+          <button
+            onClick={() => handleKill('kill-epoch')}
+            className="w-full px-3 py-1.5 text-xs font-medium rounded border transition-colors border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900"
+          >
+            {confirming === 'kill-epoch' ? '⚠️ Click again to confirm' : '💀 Kill Epoch'}
+            <span className="block text-[10px] font-normal opacity-60">Kill everything, return to Athena</span>
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
