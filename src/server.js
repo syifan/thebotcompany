@@ -14,6 +14,7 @@ import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
 import { runAgentWithAPI } from './agent-runner.js';
+import { listSessions as chatListSessions, createSession as chatCreateSession, getSession as chatGetSession, deleteSession as chatDeleteSession, streamChatMessage } from './chat.js';
 import { resolveModel, callModel, buildUserMessage, getModels as getPiModels } from './providers/index.js';
 import { startOAuthLogin, submitManualCode, checkOAuthStatus, getAccessToken as getOAuthAccessToken, clearCredentials as clearOAuthCredentials, listOAuthProviders, loadCredentials as loadOAuthCredentials } from './oauth.js';
 import {
@@ -3411,6 +3412,136 @@ const server = http.createServer(async (req, res) => {
         } catch (e) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // --- Chat endpoints ---
+
+    // GET /api/projects/:id/chats — list chat sessions
+    if (req.method === 'GET' && subPath === 'chats') {
+      try {
+        const sessions = chatListSessions(runner.agentDir);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sessions }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
+    // POST /api/projects/:id/chats — create new session
+    if (req.method === 'POST' && subPath === 'chats') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const data = body ? JSON.parse(body) : {};
+          const session = chatCreateSession(runner.agentDir, data.title);
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ session }));
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // GET /api/projects/:id/chats/:chatId — get session with messages
+    const chatDetailMatch = req.method === 'GET' && subPath.match(/^chats\/(\d+)$/);
+    if (chatDetailMatch) {
+      try {
+        const session = chatGetSession(runner.agentDir, parseInt(chatDetailMatch[1]));
+        if (!session) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Session not found' }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ session }));
+        }
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
+    // DELETE /api/projects/:id/chats/:chatId — delete session
+    const chatDeleteMatch = req.method === 'DELETE' && subPath.match(/^chats\/(\d+)$/);
+    if (chatDeleteMatch) {
+      try {
+        chatDeleteSession(runner.agentDir, parseInt(chatDeleteMatch[1]));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
+    // POST /api/projects/:id/chats/:chatId/message — send message (SSE streaming)
+    const chatMessageMatch = req.method === 'POST' && subPath.match(/^chats\/(\d+)\/message$/);
+    if (chatMessageMatch) {
+      const chatId = parseInt(chatMessageMatch[1]);
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.message?.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Message is required' }));
+            return;
+          }
+
+          // Resolve API key
+          const config = runner.loadConfig();
+          const oauthTokenGetter = async (authFile, provider) => {
+            return getOAuthAccessToken(provider, runner.id);
+          };
+          const keyResult = await resolveKeyForProject(config, null, oauthTokenGetter);
+          if (!keyResult?.token) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No API key configured. Add one in Settings > Credentials.' }));
+            return;
+          }
+
+          // Resolve model (use mid tier)
+          const providerHint = keyResult.provider || detectProviderFromToken(keyResult.token);
+          const resolved = resolveModelTier(config.model || 'mid', providerHint, config.models);
+
+          // SSE headers
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          });
+
+          await streamChatMessage({
+            agentDir: runner.agentDir,
+            projectPath: runner.path,
+            chatId,
+            userMessage: data.message.trim(),
+            model: resolved.model,
+            token: keyResult.token,
+            provider: providerHint,
+            res,
+            reasoningEffort: resolved.reasoningEffort || null,
+          });
+
+          res.end();
+        } catch (e) {
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          } else {
+            res.write(`data: ${JSON.stringify({ type: 'error', content: e.message })}\n\n`);
+            res.end();
+          }
         }
       });
       return;

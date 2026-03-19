@@ -10,10 +10,12 @@ import { OrchestratorStateCard, CostBudgetCard, ConfigCard } from '@/components/
 import WorkerCard from '@/components/project/WorkerCard'
 import IssuesSidebar from '@/components/project/IssuesSidebar'
 import AgentReportsCard from '@/components/project/AgentReportsCard'
+import ChatCard from '@/components/project/ChatCard'
 import SettingsPanel from '@/components/panels/SettingsPanel'
 import NotificationPanel from '@/components/panels/NotificationPanel'
 import BootstrapPanel from '@/components/panels/BootstrapPanel'
 import ReportsPanel from '@/components/panels/ReportsPanel'
+import ChatPanel from '@/components/panels/ChatPanel'
 import AgentDetailPanel from '@/components/panels/AgentDetailPanel'
 import IssueDetailPanel from '@/components/panels/IssueDetailPanel'
 import ProjectSettingsPanel from '@/components/panels/ProjectSettingsPanel'
@@ -103,6 +105,8 @@ export default function ProjectView({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showApiKeyHelp, setShowApiKeyHelp] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
+  const [chatPanelOpen, setChatPanelOpen] = useState(false)
+  const [chatSession, setChatSession] = useState(null)
 
   // Project settings (token state now managed inside ProjectSettingsPanel)
 
@@ -791,6 +795,12 @@ export default function ProjectView({
                 setReportsPanelOpen={setReportsPanelOpen}
               />
 
+              <ChatCard
+                selectedProject={selectedProject}
+                onOpenChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
+                onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
+              />
+
               <IssuesSidebar
                 issues={issues}
                 issueFilter={issueFilter}
@@ -843,6 +853,12 @@ export default function ProjectView({
         projectApi={projectApi}
         submitIssueComment={submitIssueComment}
         modKey={modKey}
+      />
+      <ChatPanel
+        open={chatPanelOpen}
+        onClose={() => setChatPanelOpen(false)}
+        selectedProject={selectedProject}
+        chatSession={chatSession}
       />
       <ReportsPanel
         open={reportsPanelOpen}

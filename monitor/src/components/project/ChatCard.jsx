@@ -1,0 +1,107 @@
+import React, { useEffect, useState } from 'react'
+import { MessageCircle, Plus, Trash2 } from 'lucide-react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+
+export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
+  const [sessions, setSessions] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const fetchSessions = async () => {
+    if (!selectedProject) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/projects/${selectedProject.id}/chats`)
+      if (res.ok) {
+        const data = await res.json()
+        setSessions(data.sessions || [])
+      }
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { fetchSessions() }, [selectedProject?.id])
+
+  const handleNew = async () => {
+    if (!selectedProject) return
+    try {
+      const res = await fetch(`/api/projects/${selectedProject.id}/chats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        fetchSessions()
+        if (onNewChat) onNewChat(data.session)
+      }
+    } catch {}
+  }
+
+  const handleDelete = async (e, chatId) => {
+    e.stopPropagation()
+    try {
+      await fetch(`/api/projects/${selectedProject.id}/chats/${chatId}`, { method: 'DELETE' })
+      setSessions(prev => prev.filter(s => s.id !== chatId))
+    } catch {}
+  }
+
+  return (
+    <Card className="h-[500px]">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <MessageCircle className="w-4 h-4" />
+            Chat
+          </span>
+          <button
+            onClick={handleNew}
+            className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400 transition-colors"
+            title="New Chat"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0 overflow-hidden">
+        <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto h-full">
+          {sessions.length === 0 && !loading && (
+            <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">
+              No chats yet
+            </p>
+          )}
+          {sessions.map((session) => (
+            <div
+              key={session.id}
+              className="py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors -mx-1 px-1 rounded group"
+              onClick={() => onOpenChat(session)}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate flex-1">
+                  {session.title}
+                </span>
+                <span className="text-[11px] text-neutral-400 dark:text-neutral-500 whitespace-nowrap">
+                  {session.message_count || 0} msgs
+                </span>
+                <button
+                  onClick={(e) => handleDelete(e, session.id)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-neutral-400 hover:text-red-500 transition-all"
+                  title="Delete chat"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
+                {new Date(session.updated_at).toLocaleString()}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex items-center justify-center py-3 text-neutral-400">
+              <span className="text-xs">Loading...</span>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
