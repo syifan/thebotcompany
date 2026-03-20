@@ -446,7 +446,8 @@ export async function streamChatMessage(opts) {
       const toolResults = [];
       for (const tc of toolCalls) {
         try {
-          const result = await executeTool(tc.name, tc.input, worktreePath);
+          const chatEnv = { TBC_DB: path.join(agentDir, 'project.db') };
+          const result = await executeTool(tc.name, tc.input, worktreePath, 0, chatEnv);
           const output = typeof result === 'string' ? result : JSON.stringify(result);
           toolResults.push({
             toolCallId: tc.id,
