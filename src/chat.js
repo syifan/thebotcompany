@@ -372,6 +372,10 @@ Be concise and helpful. When asked about code, use the tools to look things up r
 
           case 'error':
             const errMsg = event.error?.errorMessage || 'Stream error';
+            // Throw on rate-limit errors so caller can retry with fallback key
+            if (/rate.limit|usage.limit|quota|429/i.test(errMsg)) {
+              throw new Error(errMsg);
+            }
             res.write(`data: ${JSON.stringify({ type: 'error', content: errMsg })}\n\n`);
             res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
             return;
@@ -444,6 +448,10 @@ Be concise and helpful. When asked about code, use the tools to look things up r
     saveMessage(agentDir, chatId, 'assistant', fullAssistantText, allToolCalls.length > 0 ? allToolCalls : null);
 
   } catch (err) {
+    // Re-throw rate-limit errors so caller can retry with fallback key
+    if (/rate.limit|usage.limit|quota|429/i.test(err.message)) {
+      throw err;
+    }
     res.write(`data: ${JSON.stringify({ type: 'error', content: err.message })}\n\n`);
   }
 
