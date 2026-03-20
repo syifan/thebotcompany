@@ -92,6 +92,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession 
   const [streaming, setStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [streamingToolCalls, setStreamingToolCalls] = useState([])
+  const [lastFailedMessage, setLastFailedMessage] = useState(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -128,6 +129,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession 
 
     const userMsg = input.trim()
     setInput('')
+    setLastFailedMessage(null)
     setMessages(prev => [...prev, { role: 'user', content: userMsg }])
     setStreaming(true)
     setStreamingText('')
@@ -197,10 +199,9 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession 
         }
       }
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `⚠️ Network error: ${err.message}`,
-      }])
+      // On network error, remove the user message (will be retried) and show error
+      setLastFailedMessage(userMsg)
+      setMessages(prev => prev.slice(0, -1)) // remove the user message we just added
     } finally {
       setStreaming(false)
       setStreamingText('')
@@ -260,6 +261,19 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession 
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Retry banner */}
+        {lastFailedMessage && (
+          <div className="border-t border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950 px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-orange-600 dark:text-orange-400">⚠️ Connection lost</span>
+            <button
+              onClick={() => { setInput(lastFailedMessage); setLastFailedMessage(null) }}
+              className="px-2 py-1 text-xs font-medium bg-orange-500 hover:bg-orange-600 text-white rounded"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Input area */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 p-3 bg-white dark:bg-neutral-800">
