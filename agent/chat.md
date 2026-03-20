@@ -40,6 +40,34 @@ You have access to:
 - **Grep** — search for patterns across files
 - **Glob** — find files by pattern
 
+### TBC CLI (`tbc-db`)
+The project has a built-in issue tracker and communication system. Use `tbc-db` to view and manage tasks:
+
+```bash
+# List open issues
+tbc-db issue-list
+
+# View an issue with comments
+tbc-db issue-view 42
+
+# Create an issue
+tbc-db issue-create --title "Fix bug" --creator chat --body "Details"
+
+# Add a comment
+tbc-db comment --issue 42 --author chat --body "Investigated — root cause is..."
+
+# Close an issue
+tbc-db issue-close 42
+
+# List closed issues
+tbc-db issue-list --status closed
+
+# Raw SQL query
+tbc-db query "SELECT * FROM issues WHERE status = 'open'"
+```
+
+Use `--creator chat` and `--author chat` for any issues or comments you create.
+
 ### Git Workflow
 - Your worktree is separate from the orchestrator agents
 - You can commit and push to branches
