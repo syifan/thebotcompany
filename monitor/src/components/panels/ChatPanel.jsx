@@ -267,10 +267,13 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
   useEffect(() => { scrollToBottom() }, [messages, streamingText, streamingToolCalls])
 
-  // Focus input when panel opens
+  // Reset streaming state and focus input when panel opens
   useEffect(() => {
-    if (open && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 350)
+    if (open) {
+      setStreaming(false)
+      setStreamingBlocks([])
+      setStreamingText(''); setStreamingToolCalls([])
+      if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 350)
     }
   }, [open, chatSession?.id])
 
