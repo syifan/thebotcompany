@@ -608,8 +608,9 @@ export async function runAgentWithAPI(opts) {
   try {
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       if (aborted || (timeoutMs > 0 && (Date.now() - startTime) >= timeoutMs)) {
-        log(`Agent timeout after ${iteration} iterations`);
-        return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
+        const isTimeout = abortReason === 'timeout' || (timeoutMs > 0 && (Date.now() - startTime) >= timeoutMs);
+        log(`Agent ${isTimeout ? 'timeout' : 'termination'} after ${iteration} iterations`);
+        return makeResult(false, lastResultText || (isTimeout ? 'Agent timed out' : 'Agent was terminated'), { timedOut: isTimeout });
       }
 
       // Auto-compact conversation history when approaching context limit
