@@ -214,6 +214,10 @@ export default function ProjectView({
       setIssueFilter('open')
       setChatPanelOpen(false)
       setChatSession(null)
+      setIssueModal({ open: false, issue: null, comments: [], loading: false })
+      setReportsPanelOpen(false)
+      setAgentModal({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
+      setCreateIssueModal(prev => ({ ...prev, open: false }))
 
       fetchProjectData(true)
       const savedAgent = localStorage.getItem('selectedAgent')
