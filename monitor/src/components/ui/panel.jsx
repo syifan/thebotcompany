@@ -183,4 +183,14 @@ function PanelProvider({ children }) {
   return children
 }
 
-export { PanelProvider, Panel, PanelSlot, PanelHeader, PanelContent, usePanelOpen }
+function closeAllPanels() {
+  if (_activePanelId && _closers[_activePanelId]) {
+    _closers[_activePanelId]()
+  }
+  _activePanelId = null
+  _renderedId = null
+  _animate = false
+  _notify()
+}
+
+export { PanelProvider, Panel, PanelSlot, PanelHeader, PanelContent, usePanelOpen, closeAllPanels }

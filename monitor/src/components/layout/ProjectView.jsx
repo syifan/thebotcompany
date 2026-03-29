@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Users, User, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
-import { PanelSlot } from '@/components/ui/panel'
+import { PanelSlot, closeAllPanels } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
 import { OrchestratorStateCard, CostBudgetCard, ConfigCard } from '@/components/project/OrchestratorState'
@@ -204,7 +204,16 @@ export default function ProjectView({
   // Fetch on project change
   useEffect(() => {
     if (selectedProject) {
-      // Reset state for new project
+      // Reset state for new project — close all side panels
+      closeAllPanels()
+      setChatPanelOpen(false)
+      setChatSession(null)
+      setIssueModal({ open: false, issue: null, comments: [], loading: false })
+      setReportsPanelOpen(false)
+      setAgentModal({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
+      setCreateIssueModal(prev => ({ ...prev, open: false }))
+      setProjectSettingsOpen(false)
+      setSettingsOpen(false)
       setLogs([])
       setAgents({ workers: [], managers: [] })
       setComments([])
@@ -212,8 +221,7 @@ export default function ProjectView({
       setPrs([])
       setIssues([])
       setIssueFilter('open')
-      setChatPanelOpen(false)
-      setChatSession(null)
+
 
       fetchProjectData(true)
       const savedAgent = localStorage.getItem('selectedAgent')
