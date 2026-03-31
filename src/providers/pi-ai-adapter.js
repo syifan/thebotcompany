@@ -100,11 +100,20 @@ function buildOptions({ token, isOAuth, reasoningEffort, signal, provider }) {
     opts.reasoning = reasoningEffort; // pi-ai accepts: 'minimal'|'low'|'medium'|'high'|'xhigh'
   }
 
-  // pi-ai handles OAuth tokens natively for all providers:
-  // - Anthropic: detects sk-ant-oat tokens, uses authToken (Bearer) automatically
-  // - OpenAI/Codex: uses Bearer auth natively
-  // Just pass the token as apiKey — pi-ai does the right thing.
-  if (token) {
+  if (isOAuth && provider === 'anthropic') {
+    // Anthropic OAuth needs Bearer auth + custom headers
+    // The SDK sends apiKey as x-api-key, so we override with Authorization header
+    opts.apiKey = token;
+    opts.headers = {
+      'Authorization': `Bearer ${token}`,
+      'x-api-key': '',  // Clear the x-api-key header
+      'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20',
+      'user-agent': 'claude-cli/2.1.2 (external, cli)',
+      'x-app': 'cli',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    };
+  } else if (token) {
+    // For OpenAI/Google/etc, apiKey is sent as Authorization: Bearer natively
     opts.apiKey = token;
   }
 

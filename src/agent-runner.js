@@ -709,7 +709,7 @@ export async function runAgentWithAPI(opts) {
             return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
           }
           const status = err.status || err.code || 0;
-          const isRetryable = status === 429 || status === 503 || status === 401 || /rate.limit|usage.limit|overloaded|unavailable|quota|authentication_error|invalid.*api.key/i.test(err.message);
+          const isRetryable = status === 429 || status === 503 || /rate.limit|usage.limit|overloaded|unavailable|quota/i.test(err.message);
           if (isRetryable && attempt < MAX_RETRIES) {
             // Parse cooldown from error message (supports "~162 min", "30s", "2 hours", etc.)
             const cooldownMs = parseRetryCooldown(err.message);
