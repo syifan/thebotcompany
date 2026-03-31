@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { MessageSquare, CheckCircle, XCircle, Clock, Timer } from 'lucide-react'
+import { MessageSquare, XCircle, Timer } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { parseTimingBlock } from '@/components/ScheduleDiagram'
 import LiveDuration from '@/components/layout/LiveDuration'
 
 // Lazy report summary — triggers summarization on first render if missing
@@ -58,12 +57,9 @@ function formatTokens(n) {
 
 function ReportCardHeader({ report }) {
   const agent = report.agent || report.author
-  const hasMeta = report.cost != null || report.duration_ms != null || report.model != null
-  const timing = !hasMeta ? parseTimingBlock(report.body) : null
 
   return (
     <div className="mb-0.5">
-      {/* Row 1: Agent name + status + time */}
       <div className="flex items-center gap-2">
         <Avatar className="w-5 h-5">
           <AvatarFallback className={`text-white text-[9px] ${
@@ -75,40 +71,21 @@ function ReportCardHeader({ report }) {
           </AvatarFallback>
         </Avatar>
         <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{agent}</span>
-        {report.success === 0 && (
-          <XCircle className="w-3 h-3 text-red-500 shrink-0" />
-        )}
-        {report.timed_out === 1 && (
-          <Timer className="w-3 h-3 text-orange-500 shrink-0" title="Timed out" />
-        )}
+        {report.success === 0 && <XCircle className="w-3 h-3 text-red-500 shrink-0" />}
+        {report.timed_out === 1 && <Timer className="w-3 h-3 text-orange-500 shrink-0" title="Timed out" />}
         <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap flex items-center gap-1">
-          {hasMeta ? (
+          {report.duration_ms != null && <span>{formatDuration(report.duration_ms)}</span>}
+          {report.cost != null && (
             <>
-              {report.duration_ms != null && <span>{formatDuration(report.duration_ms)}</span>}
-              {report.cost != null && (
-                <>
-                  <span className="text-neutral-300 dark:text-neutral-600">·</span>
-                  <span>${report.cost.toFixed(2)}</span>
-                </>
-              )}
-            </>
-          ) : timing ? (
-            <>
-              <span>{timing.ended}</span>
               <span className="text-neutral-300 dark:text-neutral-600">·</span>
-              <span>{timing.duration}</span>
+              <span>${report.cost.toFixed(2)}</span>
             </>
-          ) : (
-            <span>{new Date(report.created_at).toLocaleString()}</span>
           )}
         </span>
       </div>
-      {/* Row 2: Model + tokens (only if metadata available) */}
-      {hasMeta && (
+      {(report.model || report.input_tokens != null) && (
         <div className="flex items-center gap-1.5 pl-7 mt-0.5">
-          {report.model && (
-            <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">{report.model}</Badge>
-          )}
+          {report.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">{report.model}</Badge>}
           {(report.input_tokens != null || report.output_tokens != null) && (
             <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
               {formatTokens(report.input_tokens)}↑ {formatTokens(report.output_tokens)}↓
