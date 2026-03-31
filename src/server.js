@@ -315,7 +315,7 @@ class ProjectRunner {
     this.completionMessage = null;
     this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
     this.currentAgentLog = [];
-    this.currentAgentModel = null;
+    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
     this._repo = null;
   }
 
@@ -891,7 +891,7 @@ class ProjectRunner {
       this.currentAgent = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
     }
     this.isPaused = true;
     this.pauseReason = 'Bootstrapping';
@@ -1776,7 +1776,7 @@ class ProjectRunner {
     this.currentAgentStartTime = null;
     this.currentAgentLog = [];
     broadcastStatusUpdate(this.id);
-    this.currentAgentModel = null;
+    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
 
     return { success, resultText, killedByTimeout: !!killedByTimeout };
   }
@@ -1807,7 +1807,7 @@ class ProjectRunner {
       this.currentAgentProcess = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
       return { success: false, resultText: '' };
     }
 
@@ -1850,7 +1850,7 @@ class ProjectRunner {
       this.currentAgentProcess = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
       broadcastStatusUpdate(this.id);
       return { error: 'no_token', message: 'No API key configured. Add one in Settings > Credentials.' };
     }
@@ -1896,6 +1896,10 @@ class ProjectRunner {
         log(`  [${agent.name}] ${msg}`, projectId);
         this.currentAgentLog.push({ time: Date.now(), msg });
         if (this.currentAgentLog.length > 500) this.currentAgentLog.shift();
+      },
+      onProgress: ({ usage, cost }) => {
+        this.currentAgentCost = cost;
+        this.currentAgentUsage = usage;
       },
     });
 
@@ -2790,6 +2794,8 @@ const server = http.createServer(async (req, res) => {
         agent: runner.currentAgent,
         model: runner.currentAgentModel,
         startTime: runner.currentAgentStartTime,
+        cost: runner.currentAgentCost || 0,
+        usage: runner.currentAgentUsage || null,
         log: running ? runner.currentAgentLog : [],
       }));
       return;

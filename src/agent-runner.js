@@ -516,6 +516,7 @@ export async function runAgentWithAPI(opts) {
     keyId: initialKeyId = null,
     onRateLimited = null,
     resolveNewToken = null,
+    onProgress = null,
   } = opts;
 
   const startTime = Date.now();
@@ -841,6 +842,9 @@ export async function runAgentWithAPI(opts) {
       totalUsage.outputTokens += response.usage.outputTokens;
       totalUsage.cacheReadTokens += response.usage.cacheReadTokens || 0;
       totalCost += response.cost || 0;
+
+      // Report progress (live cost/tokens for dashboard)
+      if (onProgress) onProgress({ usage: { ...totalUsage }, cost: totalCost });
 
       // Extract text
       if (response.content) {

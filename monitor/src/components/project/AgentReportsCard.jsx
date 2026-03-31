@@ -88,8 +88,9 @@ function ReportCardHeader({ report }) {
           {report.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">{report.model}</Badge>}
           {(report.input_tokens != null || report.output_tokens != null) && (
             <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
-              {formatTokens(report.input_tokens)}↑ {formatTokens(report.output_tokens)}↓
-              {report.cache_read_tokens > 0 && <span className="ml-0.5">{formatTokens(report.cache_read_tokens)}⚡</span>}
+              {formatTokens(report.input_tokens)} new
+              {report.cache_read_tokens > 0 && <span className="ml-1">{formatTokens(report.cache_read_tokens)} cached</span>}
+              <span className="ml-1">{formatTokens(report.output_tokens)} out</span>
             </span>
           )}
         </div>
