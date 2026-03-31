@@ -18,16 +18,14 @@ export default function IssuesSidebar({
   return (
     <Card className="flex flex-col h-[500px]">
       <CardHeader className="shrink-0">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Issues ({filteredIssues.length})</CardTitle>
-          <div className="flex gap-1">
-            {['open', 'closed', 'all'].map(f => (
-              <button key={f} onClick={() => setIssueFilter(f)}
-                className={`px-2 py-0.5 text-xs rounded-full transition-colors ${issueFilter === f ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}>
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            ))}
-          </div>
+        <CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Issues ({filteredIssues.length})</CardTitle>
+        <div className="flex gap-1 mt-1">
+          {['open', 'closed', 'all'].map(f => (
+            <button key={f} onClick={() => setIssueFilter(f)}
+              className={`px-2 py-0.5 text-xs rounded-full transition-colors ${issueFilter === f ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}>
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden">

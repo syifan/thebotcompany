@@ -28,24 +28,22 @@ export default function HumanInterventionCard({
     <Card className="flex flex-col max-h-[500px]">
       <CardHeader className="shrink-0 pb-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center justify-between w-full">
-            <CardTitle className="flex items-center gap-2 shrink-0">
-              <AlertTriangle className="w-4 h-4" />
-              Intervention
-              {openCount > 0 && (
-                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
-                  {openCount}
-                </Badge>
-              )}
-            </CardTitle>
-            <div className="flex gap-1 ml-3 shrink-0">
-              {['open', 'closed', 'all'].map(f => (
-                <button key={f} onClick={() => setFilter(f)}
-                  className={`px-2 py-0.5 text-xs rounded-full transition-colors ${filter === f ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}>
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                </button>
-              ))}
-            </div>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Intervention
+            {openCount > 0 && (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
+                {openCount}
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex gap-1 mt-1">
+            {['open', 'closed', 'all'].map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`px-2 py-0.5 text-xs rounded-full transition-colors ${filter === f ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}>
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
       </CardHeader>
