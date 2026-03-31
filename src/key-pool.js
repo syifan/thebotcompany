@@ -20,7 +20,7 @@ const POOL_PATH = path.join(TBC_HOME, 'key-pool.json');
 /** @type {Map<string, number>} keyId → cooldown-until timestamp */
 const _rateLimits = new Map();
 
-export function markRateLimited(keyId, cooldownMs = 60_000) {
+export function markRateLimited(keyId, cooldownMs = 5 * 60_000) {
   _rateLimits.set(keyId, Date.now() + cooldownMs);
 }
 

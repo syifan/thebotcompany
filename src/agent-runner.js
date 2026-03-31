@@ -24,7 +24,7 @@ import {
 // ---------------------------------------------------------------------------
 
 function parseRetryCooldown(message) {
-  if (!message) return 60_000; // default 1 min
+  if (!message) return 5 * 60_000; // default 5 min
 
   // "~162 min" or "162 minutes"
   const minMatch = message.match(/~?(\d+)\s*min/i);
@@ -42,7 +42,7 @@ function parseRetryCooldown(message) {
   const retryAfter = message.match(/retry.after:\s*(\d+)/i);
   if (retryAfter) return parseInt(retryAfter[1]) * 1000;
 
-  return 60_000; // default 1 min
+  return 5 * 60_000; // default 5 min
 }
 
 // ---------------------------------------------------------------------------
