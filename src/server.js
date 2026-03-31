@@ -615,68 +615,10 @@ class ProjectRunner {
 
       db.close();
 
-      // Fallback: if no cost data in SQLite yet, try legacy cost.csv
-      if (totalCost === 0) {
-        const csvSummary = this._getCostSummaryFromCsv();
-        if (csvSummary.totalCost > 0) return csvSummary;
-      }
-
       return { totalCost, last24hCost, lastCycleCost, avgCycleCost, lastCycleDuration, avgCycleDuration, agents };
     } catch {
-      // Fallback to CSV if SQLite fails
-      return this._getCostSummaryFromCsv();
+      return empty;
     }
-  }
-
-  // Legacy fallback: read cost data from cost.csv (for projects not yet migrated)
-  _getCostSummaryFromCsv() {
-    const empty = { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, lastCycleDuration: 0, avgCycleDuration: 0, agents: {} };
-    const csvPath = path.join(this.agentDir, 'cost.csv');
-    if (!fs.existsSync(csvPath)) return empty;
-    try {
-      const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(l => l.trim());
-      if (lines.length <= 1) return empty;
-      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      let totalCost = 0, last24hCost = 0;
-      const agents = {};
-      const cycleData = new Map();
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(',');
-        if (parts.length < 4) continue;
-        const time = new Date(parts[0]).getTime();
-        const cycle = parseInt(parts[1]);
-        const agentName = parts[2];
-        const cost = parseFloat(parts[3]);
-        const duration = parts.length >= 5 ? parseInt(parts[4]) : 0;
-        if (isNaN(cost)) continue;
-        totalCost += cost;
-        if (!isNaN(cycle)) {
-          if (!cycleData.has(cycle)) cycleData.set(cycle, { cost: 0, duration: 0 });
-          cycleData.get(cycle).cost += cost;
-          cycleData.get(cycle).duration += duration;
-        }
-        if (!agents[agentName]) agents[agentName] = { totalCost: 0, last24hCost: 0, callCount: 0, lastCallCost: 0 };
-        agents[agentName].totalCost += cost;
-        agents[agentName].callCount += 1;
-        agents[agentName].lastCallCost = cost;
-        if (time >= cutoff) { last24hCost += cost; agents[agentName].last24hCost += cost; }
-      }
-      for (const name of Object.keys(agents)) {
-        agents[name].avgCallCost = agents[name].callCount > 0 ? agents[name].totalCost / agents[name].callCount : 0;
-      }
-      let lastCycleCost = 0, avgCycleCost = 0, lastCycleDuration = 0, avgCycleDuration = 0;
-      if (cycleData.size > 0) {
-        const cycles = Array.from(cycleData.keys()).sort((a, b) => a - b);
-        const lastData = cycleData.get(cycles[cycles.length - 1]);
-        lastCycleCost = lastData?.cost || 0;
-        lastCycleDuration = lastData?.duration || 0;
-        let tc = 0, td = 0;
-        for (const d of cycleData.values()) { tc += d.cost; td += d.duration; }
-        avgCycleCost = tc / cycleData.size;
-        avgCycleDuration = td / cycleData.size;
-      }
-      return { totalCost, last24hCost, lastCycleCost, avgCycleCost, lastCycleDuration, avgCycleDuration, agents };
-    } catch { return empty; }
   }
 
   computeSleepInterval() {
@@ -692,46 +634,25 @@ class ProjectRunner {
 
     const minFloor = config.cycleIntervalMs > 0 ? config.cycleIntervalMs : MIN_SLEEP;
 
-    // Parse cost.csv to get per-cycle data
-    const csvPath = path.join(this.agentDir, 'cost.csv');
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    let cycleCosts = [];    // { cycle, totalCost, totalDuration }
+    // Query cost data from SQLite reports table
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    let cycleCosts = [];
     let spent24h = 0;
     let oldestTime24h = Infinity;
 
-    if (fs.existsSync(csvPath)) {
-      try {
-        const lines = fs.readFileSync(csvPath, 'utf-8').split('\n').filter(l => l.trim());
-        const cycleMap = new Map(); // cycle -> { cost, duration }
+    try {
+      const db = this.getDb();
+      try { db.exec('ALTER TABLE reports ADD COLUMN cost REAL'); } catch {}
+      try { db.exec('ALTER TABLE reports ADD COLUMN duration_ms INTEGER'); } catch {}
 
-        for (let i = 1; i < lines.length; i++) {
-          const parts = lines[i].split(',');
-          if (parts.length < 4) continue;
-          const time = new Date(parts[0]).getTime();
-          const cycle = parseInt(parts[1]);
-          const cost = parseFloat(parts[3]);
-          const duration = parts.length >= 5 ? parseInt(parts[4]) : 0;
-          if (isNaN(cost)) continue;
+      spent24h = db.prepare('SELECT COALESCE(SUM(cost), 0) as v FROM reports WHERE created_at > ?').get(cutoff).v;
+      const oldest = db.prepare('SELECT MIN(created_at) as v FROM reports WHERE created_at > ?').get(cutoff);
+      if (oldest?.v) oldestTime24h = new Date(oldest.v).getTime();
 
-          // Track 24h spending (raw cost always counts)
-          if (time >= cutoff) {
-            spent24h += cost;
-            if (time < oldestTime24h) oldestTime24h = time;
-          }
-
-          // Group by cycle for EMA
-          if (!cycleMap.has(cycle)) cycleMap.set(cycle, { cost: 0, duration: 0 });
-          const entry = cycleMap.get(cycle);
-          entry.cost += cost;
-          entry.duration = Math.max(entry.duration, duration); // agents run sequentially, use max as proxy
-        }
-
-        // Sort cycles by number
-        cycleCosts = Array.from(cycleMap.entries())
-          .sort((a, b) => a[0] - b[0])
-          .map(([, v]) => v);
-      } catch {}
-    }
+      const cycles = db.prepare('SELECT cycle, SUM(cost) as cost, MAX(duration_ms) as duration FROM reports WHERE cost IS NOT NULL GROUP BY cycle ORDER BY cycle ASC').all();
+      cycleCosts = cycles.map(c => ({ cost: c.cost || 0, duration: c.duration || 0 }));
+      db.close();
+    } catch {}
 
     const remaining = budgetPer24h - spent24h;
 
@@ -1777,18 +1698,7 @@ class ProjectRunner {
       log(`Failed to log response for ${agent.name}: ${e.message}`, this.id);
     }
 
-    // Append cost row to cost.csv
-    if (cost !== undefined) {
-      try {
-        const csvPath = path.join(this.agentDir, 'cost.csv');
-        if (!fs.existsSync(csvPath)) {
-          fs.writeFileSync(csvPath, 'time,cycle,agent,cost,durationMs\n');
-        }
-        fs.appendFileSync(csvPath, `${new Date().toISOString()},${this.cycleCount},${agent.name},${cost.toFixed(6)},${durationMs}\n`);
-      } catch {}
-    }
-
-    // Write agent report to SQLite
+    // Write agent report to SQLite (cost data included — no longer writes to cost.csv)
     if (resultText || killedByTimeout || !success) {
       try {
         let reportBody;
