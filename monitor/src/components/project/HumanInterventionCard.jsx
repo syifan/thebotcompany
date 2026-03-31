@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { AlertTriangle, User, UserCheck, MessageSquare, ArrowUp, ArrowDown } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,16 +11,18 @@ export default function HumanInterventionCard({
   setCreateIssueModal,
   isWriteMode,
 }) {
+  const [filter, setFilter] = useState('open')
+
   // Human intervention issues: created by human OR assigned to human
   const humanIssues = issues.filter(i =>
     i.creator === 'human' || i.assignee === 'human' || i.creator === 'chat'
   )
-  const openIssues = humanIssues.filter(i => i.status === 'open')
-  const closedIssues = humanIssues.filter(i => i.status !== 'open')
+  const filtered = filter === 'all' ? humanIssues : humanIssues.filter(i => i.status === filter)
+  const openCount = humanIssues.filter(i => i.status === 'open').length
 
   // Split into: from human (human created) and to human (assigned to human)
-  const fromHuman = openIssues.filter(i => i.creator === 'human' || i.creator === 'chat')
-  const toHuman = openIssues.filter(i => i.assignee === 'human' && i.creator !== 'human' && i.creator !== 'chat')
+  const fromHuman = filtered.filter(i => i.creator === 'human' || i.creator === 'chat')
+  const toHuman = filtered.filter(i => i.assignee === 'human' && i.creator !== 'human' && i.creator !== 'chat')
 
   return (
     <Card className="flex flex-col max-h-[500px]">
@@ -29,12 +31,20 @@ export default function HumanInterventionCard({
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
             Human Intervention
-            {openIssues.length > 0 && (
+            {openCount > 0 && (
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
-                {openIssues.length}
+                {openCount}
               </Badge>
             )}
           </CardTitle>
+          <div className="flex gap-1">
+            {['open', 'closed', 'all'].map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`px-2 py-0.5 text-xs rounded-full transition-colors ${filter === f ? 'bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}>
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden pt-0">
@@ -65,27 +75,10 @@ export default function HumanInterventionCard({
             </div>
           )}
 
-          {openIssues.length === 0 && (
+          {filtered.length === 0 && (
             <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">
-              No open human intervention issues
+              No {filter === 'all' ? '' : filter} human intervention issues
             </p>
-          )}
-
-          {/* Closed issues — collapsed */}
-          {closedIssues.length > 0 && (
-            <details className="text-xs">
-              <summary className="text-neutral-400 dark:text-neutral-500 cursor-pointer hover:text-neutral-600 dark:hover:text-neutral-300">
-                {closedIssues.length} resolved
-              </summary>
-              <div className="mt-1 space-y-1">
-                {closedIssues.slice(0, 5).map(issue => (
-                  <IssueRow key={issue.id} issue={issue} openIssueModal={openIssueModal} />
-                ))}
-                {closedIssues.length > 5 && (
-                  <p className="text-neutral-400 text-[10px]">...and {closedIssues.length - 5} more</p>
-                )}
-              </div>
-            </details>
           )}
         </div>
 

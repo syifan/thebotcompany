@@ -717,6 +717,19 @@ export default function ProjectView({
                 setBudgetInfoModal={setBudgetInfoModal}
               />
 
+              <HumanInterventionCard
+                issues={issues}
+                openIssueModal={openIssueModal}
+                setCreateIssueModal={setCreateIssueModal}
+                isWriteMode={isWriteMode}
+              />
+
+              {isWriteMode && <ChatCard
+                selectedProject={selectedProject}
+                onOpenChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
+                onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
+              />}
+
               <ConfigCard
                 configForm={configForm}
                 configError={configError}
@@ -806,18 +819,6 @@ export default function ProjectView({
                 setReportsPanelOpen={setReportsPanelOpen}
               />
 
-              {isWriteMode && <ChatCard
-                selectedProject={selectedProject}
-                onOpenChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
-                onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
-              />}
-
-              <HumanInterventionCard
-                issues={issues}
-                openIssueModal={openIssueModal}
-                setCreateIssueModal={setCreateIssueModal}
-                isWriteMode={isWriteMode}
-              />
               <IssuesSidebar
                 issues={issues}
                 issueFilter={issueFilter}
