@@ -51,14 +51,14 @@ function detectTokenProvider(token) {
 
 // Parse retry cooldown from rate-limit error messages
 function parseSummarizeCooldown(message) {
-  if (!message) return 5 * 60_000; // default 5 min
+  if (!message) return 5 * 60_000;
   const minMatch = message.match(/~?(\d+)\s*min/i);
   if (minMatch) return parseInt(minMatch[1]) * 60_000;
   const hourMatch = message.match(/(\d+)\s*h(?:ours?)?/i);
   if (hourMatch) return parseInt(hourMatch[1]) * 3600_000;
   const secMatch = message.match(/(\d+)\s*s(?:ec(?:onds?)?)?/i);
   if (secMatch) return parseInt(secMatch[1]) * 1000;
-  return 5 * 60_000; // default 5 min
+  return 5 * 60_000;
 }
 
 // Model tier system — maps abstract tiers to provider-specific models
@@ -1929,7 +1929,7 @@ class ProjectRunner {
       allowedRepo: this.repo || null,
       abortSignal: runAbortController.signal,
       keyId: resolvedKeyId,
-      onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 60_000),
+      onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),
       resolveNewToken: async () => {
         const newKey = await resolveKeyForProject(config, providerHint, oauthTokenGetter);
         if (newKey?.provider && newKey.provider !== providerHint) {
