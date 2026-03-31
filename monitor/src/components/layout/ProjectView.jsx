@@ -704,7 +704,7 @@ export default function ProjectView({
             )}
 
             {/* Row 1: State, Cost & Budget, Config */}
-            <div className="grid gap-4 items-start" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
               <OrchestratorStateCard
                 selectedProject={selectedProject}
                 globalUptime={globalUptime}
