@@ -566,7 +566,7 @@ export default function ProjectView({
 
   return (
     <div className="flex min-h-screen">
-    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6">
+    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6 max-w-screen-2xl mx-auto">
       <div>
         {/* Header */}
         <div className="mb-6 space-y-3">
