@@ -288,7 +288,7 @@ function getChatToolDefinitions() {
  * @param {string} [opts.reasoningEffort] - Optional reasoning effort
  */
 export async function streamChatMessage(opts) {
-  const { agentDir, projectPath, chatId, userMessage, model, token, provider, res, reasoningEffort } = opts;
+  const { agentDir, projectPath, chatId, userMessage, images, model, token, provider, res, reasoningEffort } = opts;
 
   // Initialize active stream tracking
   const stream = { text: '', toolCalls: [], clients: new Set() };
@@ -359,6 +359,29 @@ export async function streamChatMessage(opts) {
       }
     }
     // Skip tool_result messages — they're captured in the assistant text summary
+  }
+
+  // Add current user message (with images if any)
+  const userContent = [];
+  if (userMessage) {
+    userContent.push({ type: 'text', text: userMessage });
+  }
+  if (images && images.length > 0) {
+    for (const img of images) {
+      const imgPath = path.join(agentDir, 'uploads', img.filename);
+      if (fs.existsSync(imgPath)) {
+        const data = fs.readFileSync(imgPath);
+        const base64 = data.toString('base64');
+        const mimeType = img.mimeType || 'image/jpeg';
+        userContent.push({
+          type: 'image',
+          image: `data:${mimeType};base64,${base64}`,
+        });
+      }
+    }
+  }
+  if (userContent.length > 0) {
+    piMessages.push({ role: 'user', content: userContent, timestamp: Date.now() });
   }
 
   // Tool loop — essentially unlimited, safety net only

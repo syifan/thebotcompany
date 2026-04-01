@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch, Paperclip, X } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import { useAuth } from '@/hooks/useAuth'
 import ReactMarkdown from 'react-markdown'
@@ -54,8 +54,19 @@ function MessageBubble({ msg }) {
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end mb-3">
-        <div className="max-w-[85%] bg-blue-500 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm">
-          {msg.content}
+        <div className="max-w-[85%]">
+          {msg.images && msg.images.length > 0 && (
+            <div className="flex gap-1 justify-end mb-1">
+              {msg.images.map((url, i) => (
+                <img key={i} src={url} alt="" className="max-w-[200px] max-h-[200px] rounded-lg object-cover" />
+              ))}
+            </div>
+          )}
+          {msg.content && (
+            <div className="bg-blue-500 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm">
+              {msg.content}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -90,6 +101,8 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [modelTier, setModelTier] = useState(chatSession?.model_tier || 'high')
+  const [attachedImages, setAttachedImages] = useState([]) // [{ file, preview, uploaded: { filename, url, mimeType } }]
+  const fileInputRef = useRef(null)
   const [streaming, setStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [streamingToolCalls, setStreamingToolCalls] = useState([])
@@ -281,8 +294,38 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
 
 
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || [])
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue
+      const preview = URL.createObjectURL(file)
+      // Upload immediately
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await authFetch(`/api/projects/${selectedProject.id}/chats/upload`, {
+          method: 'POST',
+          body: formData,
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setAttachedImages(prev => [...prev, { file, preview, uploaded: data }])
+        }
+      } catch {}
+    }
+    e.target.value = '' // reset input
+  }
+
+  const removeImage = (idx) => {
+    setAttachedImages(prev => {
+      const removed = prev[idx]
+      if (removed?.preview) URL.revokeObjectURL(removed.preview)
+      return prev.filter((_, i) => i !== idx)
+    })
+  }
+
   const sendMessage = async () => {
-    if (!input.trim() || streaming || !chatSession || !selectedProject) return
+    if ((!input.trim() && attachedImages.length === 0) || streaming || !chatSession || !selectedProject) return
 
     let activeSession = chatSession
 
@@ -313,7 +356,9 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
     const userMsg = input.trim()
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }])
+    const imageUrls = attachedImages.filter(a => a.uploaded).map(a => a.uploaded.url)
+    setAttachedImages([])
+    setMessages(prev => [...prev, { role: 'user', content: userMsg, images: imageUrls }])
     setStreaming(true)
     setStreamingText(''); setStreamingBlocks([])
     setStreamingToolCalls([])
@@ -322,7 +367,14 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
       const response = await authFetch(`/api/projects/${selectedProject.id}/chats/${activeSession.id}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, modelTier }),
+        body: JSON.stringify({
+          message: userMsg,
+          modelTier,
+          images: attachedImages.filter(a => a.uploaded).map(a => ({
+            filename: a.uploaded.filename,
+            mimeType: a.uploaded.mimeType,
+          })),
+        }),
       })
 
       const reader = response.body.getReader()
@@ -528,7 +580,28 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               })}
             </select>
           </div>
+          {/* Image previews */}
+          {attachedImages.length > 0 && (
+            <div className="flex gap-2 mb-2 overflow-x-auto">
+              {attachedImages.map((img, idx) => (
+                <div key={idx} className="relative shrink-0">
+                  <img src={img.preview} alt="" className="w-16 h-16 object-cover rounded border border-neutral-200 dark:border-neutral-600" />
+                  <button onClick={() => removeImage(idx)} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2">
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={streaming}
+              className="p-3 rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600 disabled:opacity-50 transition-colors shrink-0"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
             <textarea
               ref={inputRef}
               value={input}

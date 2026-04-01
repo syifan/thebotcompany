@@ -3470,6 +3470,91 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // POST /api/projects/:id/chats/upload — upload file for chat
+    if (req.method === 'POST' && subPath === 'chats/upload') {
+      if (!requireWrite(req, res)) return;
+      const chunks = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => {
+        try {
+          const body = Buffer.concat(chunks);
+          // Parse multipart boundary
+          const contentType = req.headers['content-type'] || '';
+          const boundaryMatch = contentType.match(/boundary=(.+)/);
+          if (!boundaryMatch) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing multipart boundary' }));
+            return;
+          }
+          const boundary = '--' + boundaryMatch[1];
+          const parts = body.toString('binary').split(boundary).filter(p => p.trim() && p.trim() !== '--');
+          
+          let filename = null;
+          let fileData = null;
+          let mimeType = null;
+
+          for (const part of parts) {
+            const headerEnd = part.indexOf('\r\n\r\n');
+            if (headerEnd === -1) continue;
+            const headers = part.slice(0, headerEnd);
+            const filenameMatch = headers.match(/filename="([^"]+)"/);
+            const ctMatch = headers.match(/Content-Type:\s*(.+)/i);
+            if (filenameMatch) {
+              filename = filenameMatch[1];
+              mimeType = ctMatch ? ctMatch[1].trim() : 'application/octet-stream';
+              // Extract binary data (skip headers + \r\n\r\n, remove trailing \r\n)
+              const dataStart = headerEnd + 4;
+              const dataEnd = part.endsWith('\r\n') ? part.length - 2 : part.length;
+              fileData = Buffer.from(part.slice(dataStart, dataEnd), 'binary');
+            }
+          }
+
+          if (!filename || !fileData) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No file in upload' }));
+            return;
+          }
+
+          // Save to workspace/uploads/
+          const uploadsDir = path.join(runner.agentDir, 'uploads');
+          if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+          const ext = path.extname(filename) || '.bin';
+          const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+          fs.writeFileSync(path.join(uploadsDir, safeName), fileData);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            filename: safeName,
+            originalName: filename,
+            mimeType,
+            size: fileData.length,
+            url: `/api/projects/${projectId}/uploads/${safeName}`,
+          }));
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+      return;
+    }
+
+    // GET /api/projects/:id/uploads/:filename — serve uploaded files
+    const uploadMatch = req.method === 'GET' && subPath.match(/^uploads\/(.+)$/);
+    if (uploadMatch) {
+      const filename = uploadMatch[1];
+      const filePath = path.join(runner.agentDir, 'uploads', filename);
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+      const ext = path.extname(filename).toLowerCase();
+      const mimeTypes = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf', '.txt': 'text/plain', '.csv': 'text/csv' };
+      res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
+
     // POST /api/projects/:id/chats/:chatId/message — send message (SSE streaming)
     const chatMessageMatch = req.method === 'POST' && subPath.match(/^chats\/(\d+)\/message$/);
     if (chatMessageMatch) {
@@ -3518,6 +3603,7 @@ const server = http.createServer(async (req, res) => {
             projectPath: runner.path,
             chatId,
             userMessage: data.message.trim(),
+            images: data.images || [],
             model: resolved.model,
             token: keyResult.token,
             provider: providerHint,
