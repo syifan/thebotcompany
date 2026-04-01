@@ -740,7 +740,7 @@ export default function ProjectView({
                 onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
               />}
 
-              <Card className="h-[300px]">
+              <Card className="h-[500px]">
                 <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
                 <CardContent className="flex-1 overflow-hidden">
                   <div className="space-y-2 h-full overflow-y-auto">
