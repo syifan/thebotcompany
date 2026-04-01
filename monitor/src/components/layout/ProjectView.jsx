@@ -874,6 +874,7 @@ export default function ProjectView({
         selectedProject={selectedProject}
         chatSession={chatSession}
         onSessionCreated={(session) => setChatSession(session)}
+        modelTiers={config?.tiers || {}}
       />
       <ReportsPanel
         open={reportsPanelOpen}

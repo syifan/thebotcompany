@@ -3498,9 +3498,10 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          // Resolve model (use mid tier)
+          // Resolve model from request's model tier (frontend sends it with each message)
+          const modelTier = data.modelTier || 'high';
           const providerHint = keyResult.provider || detectProviderFromToken(keyResult.token);
-          const resolved = resolveModelTier(config.model || 'mid', providerHint, config.models);
+          const resolved = resolveModelTier(modelTier, providerHint, config.models);
 
           // Save user message once (before any retry/fallback)
           chatSaveMessage(runner.agentDir, chatId, 'user', data.message.trim());

@@ -85,10 +85,11 @@ function MessageBubble({ msg }) {
   )
 }
 
-export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated }) {
+export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated, modelTiers = {} }) {
   const { authFetch } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
+  const [modelTier, setModelTier] = useState(chatSession?.model_tier || 'high')
   const [streaming, setStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
   const [streamingToolCalls, setStreamingToolCalls] = useState([])
@@ -267,15 +268,18 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
   useEffect(() => { scrollToBottom() }, [messages, streamingText, streamingToolCalls])
 
-  // Reset streaming state and focus input when panel opens
+  // Reset streaming state and sync model tier when panel opens
   useEffect(() => {
     if (open) {
       setStreaming(false)
       setStreamingBlocks([])
       setStreamingText(''); setStreamingToolCalls([])
+      if (chatSession?.model_tier) setModelTier(chatSession.model_tier)
       if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 350)
     }
   }, [open, chatSession?.id])
+
+
 
   const sendMessage = async () => {
     if (!input.trim() || streaming || !chatSession || !selectedProject) return
@@ -318,7 +322,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
       const response = await authFetch(`/api/projects/${selectedProject.id}/chats/${activeSession.id}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg }),
+        body: JSON.stringify({ message: userMsg, modelTier }),
       })
 
       const reader = response.body.getReader()
@@ -458,9 +462,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   return (
     <Panel id="chat" open={open} onClose={onClose}>
       <PanelHeader onClose={onClose}>
-        <span className="flex items-center gap-2">
-          💬 {chatSession?.title || 'Chat'}
-        </span>
+        💬 {chatSession?.title || 'Chat'}
       </PanelHeader>
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Messages area */}
@@ -508,9 +510,25 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
           </div>
         )}
 
-        {/* Input area */}
+        {/* Model selector + Input area */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 p-3 bg-white dark:bg-neutral-800">
-          <div className="flex items-end gap-2">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] text-neutral-400 dark:text-neutral-500">Model</span>
+            <select
+              value={modelTier}
+              onChange={(e) => setModelTier(e.target.value)}
+              className="px-2 py-0.5 text-xs bg-neutral-100 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {['high', 'mid', 'low', 'xlow'].map(tier => {
+                const info = modelTiers[tier]
+                const label = info?.model
+                  ? `${tier.charAt(0).toUpperCase() + tier.slice(1)} — ${info.model}${info.reasoningEffort ? ` (${info.reasoningEffort})` : ''}`
+                  : tier.charAt(0).toUpperCase() + tier.slice(1)
+                return <option key={tier} value={tier}>{label}</option>
+              })}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
             <textarea
               ref={inputRef}
               value={input}
@@ -519,7 +537,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               placeholder="Type a message..."
               disabled={streaming}
               rows={1}
-              className="flex-1 resize-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 max-h-32 overflow-y-auto"
+              className="flex-1 resize-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-base text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 max-h-32 overflow-y-auto"
               style={{ minHeight: '38px' }}
               onInput={(e) => {
                 e.target.style.height = 'auto'
@@ -529,9 +547,9 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
             <button
               onClick={sendMessage}
               disabled={streaming || !input.trim()}
-              className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+              className="p-3 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
             >
-              {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </div>
         </div>
