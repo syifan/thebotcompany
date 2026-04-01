@@ -528,7 +528,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               })}
             </select>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex items-center gap-2">
             <textarea
               ref={inputRef}
               value={input}
