@@ -52,12 +52,14 @@ function ToolCallBlock({ name, input, output }) {
 
 function MessageBubble({ msg }) {
   if (msg.role === 'user') {
+    // Images stored in tool_calls field for user messages (from DB), or in images field (from local state)
+    const images = msg.images || (msg.tool_calls ? (typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls) : null)
     return (
       <div className="flex justify-end mb-3">
         <div className="max-w-[85%]">
-          {msg.images && msg.images.length > 0 && (
+          {images && images.length > 0 && (
             <div className="flex gap-1 justify-end mb-1">
-              {msg.images.map((url, i) => (
+              {images.map((url, i) => (
                 <img key={i} src={url} alt="" className="max-w-[200px] max-h-[200px] rounded-lg object-cover" />
               ))}
             </div>

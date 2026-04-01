@@ -3589,7 +3589,9 @@ const server = http.createServer(async (req, res) => {
           const resolved = resolveModelTier(modelTier, providerHint, config.models);
 
           // Save user message once (before any retry/fallback)
-          chatSaveMessage(runner.agentDir, chatId, 'user', data.message.trim());
+          // Save user message with image references
+          const imageUrls = (data.images || []).map(img => `/api/projects/${projectId}/uploads/${img.filename}`);
+          chatSaveMessage(runner.agentDir, chatId, 'user', data.message.trim(), imageUrls.length > 0 ? imageUrls : null);
 
           // SSE headers
           res.writeHead(200, {
