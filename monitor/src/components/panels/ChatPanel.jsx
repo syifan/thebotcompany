@@ -1,9 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch } from 'lucide-react'
-import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch } from 'lucide-react'
+import { Panel, PanelHeader } from '@/components/ui/panel'
 import { useAuth } from '@/hooks/useAuth'
-import ReactMarkdown from 'react-markdown'
+import {
+  useLocalRuntime,
+  AssistantRuntimeProvider,
+  ThreadPrimitive,
+  MessagePrimitive,
+  ComposerPrimitive,
+} from '@assistant-ui/react'
+import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
 import remarkGfm from 'remark-gfm'
+
+// ── Tool call rendering ──────────────────────────────────────────────
 
 const TOOL_ICONS = {
   Bash: Terminal,
@@ -14,9 +23,17 @@ const TOOL_ICONS = {
   Grep: Search,
 }
 
-function ToolCallBlock({ name, input, output }) {
+function ToolCallBlock({ name, args, result }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = TOOL_ICONS[name] || Terminal
+
+  const summary = (() => {
+    if (name === 'Bash' && args?.command) return args.command.slice(0, 60)
+    if (['Read', 'Write', 'Edit'].includes(name) && args?.file_path) return args.file_path
+    if (name === 'Grep' && args?.pattern) return `/${args.pattern}/`
+    if (name === 'Glob' && args?.pattern) return args.pattern
+    return ''
+  })()
 
   return (
     <div className="my-1.5 rounded border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/50 text-xs overflow-hidden">
@@ -27,21 +44,16 @@ function ToolCallBlock({ name, input, output }) {
         {expanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
         <Icon className="w-3 h-3 shrink-0 text-blue-500" />
         <span className="font-semibold text-blue-600 dark:text-blue-400">{name}</span>
-        <span className="text-neutral-500 dark:text-neutral-400 truncate text-left flex-1">
-          {name === 'Bash' && input?.command ? input.command.slice(0, 60) : ''}
-          {(name === 'Read' || name === 'Write' || name === 'Edit') && input?.file_path ? input.file_path : ''}
-          {name === 'Grep' && input?.pattern ? `/${input.pattern}/` : ''}
-          {name === 'Glob' && input?.pattern ? input.pattern : ''}
-        </span>
+        <span className="text-neutral-500 dark:text-neutral-400 truncate text-left flex-1">{summary}</span>
       </button>
       {expanded && (
         <div className="border-t border-neutral-200 dark:border-neutral-700">
           <div className="px-2 py-1 bg-neutral-100 dark:bg-neutral-900 font-mono whitespace-pre-wrap break-all max-h-32 overflow-y-auto text-neutral-600 dark:text-neutral-400">
-            {JSON.stringify(input, null, 2)}
+            {JSON.stringify(args, null, 2)}
           </div>
-          {output && (
+          {result !== undefined && (
             <div className="px-2 py-1 border-t border-neutral-200 dark:border-neutral-700 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto text-neutral-600 dark:text-neutral-300 bg-white dark:bg-neutral-950">
-              {output}
+              {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
             </div>
           )}
         </div>
@@ -50,282 +62,195 @@ function ToolCallBlock({ name, input, output }) {
   )
 }
 
-function MessageBubble({ msg }) {
-  if (msg.role === 'user') {
-    return (
-      <div className="flex justify-end mb-3">
-        <div className="max-w-[85%] bg-blue-500 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm">
-          {msg.content}
-        </div>
-      </div>
-    )
-  }
+// ── Message part components ─────────────────────────────────────────
 
-  if (msg.role === 'tool_result') {
-    // Don't render separately — tool results are shown inline in tool calls
-    return null
-  }
+function UserTextPart({ part }) {
+  return <span>{part.text}</span>
+}
 
-  // Assistant
-  const toolCalls = msg.tool_calls ? (typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls) : []
+function UserImagePart({ part }) {
+  return <img src={part.image} alt="attachment" className="max-w-full rounded mt-1" />
+}
 
+function AssistantTextPart() {
   return (
-    <div className="flex justify-start mb-3">
-      <div className="max-w-[90%]">
-        {toolCalls.map((tc, i) => (
-          <ToolCallBlock key={tc.id || i} name={tc.name} input={tc.input} output={tc.output} />
-        ))}
-        {msg.content && (
-          <div className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2 text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none [&_code]:break-all [&_pre]:overflow-x-auto [&_pre]:text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-          </div>
-        )}
-      </div>
+    <div className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2 text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none [&_code]:break-all [&_pre]:overflow-x-auto [&_pre]:text-xs [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} />
     </div>
   )
 }
 
-export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated }) {
-  const { authFetch } = useAuth()
-  const [messages, setMessages] = useState([])
-  const [input, setInput] = useState('')
-  const [streaming, setStreaming] = useState(false)
-  const [streamingText, setStreamingText] = useState('')
-  const [streamingToolCalls, setStreamingToolCalls] = useState([])
-  const [streamingBlocks, setStreamingBlocks] = useState([]) // ordered: {type:'text',content} | {type:'tool',...}
-  const [reconnecting, setReconnecting] = useState(false)
-  const messagesEndRef = useRef(null)
-  const inputRef = useRef(null)
+function AssistantToolCallPart({ part }) {
+  return (
+    <ToolCallBlock
+      name={part.toolName}
+      args={part.args}
+      result={part.result}
+    />
+  )
+}
 
-  // Load messages when session changes
-  useEffect(() => {
-    if (!chatSession || !selectedProject) {
-      setMessages([])
-      return
-    }
-    if (chatSession._temp) {
-      setMessages([])
-      return
-    }
-    let cancelled = false
-    const load = async () => {
-      try {
-        const res = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
-        if (cancelled) return
-        const data = await res.json()
-        if (data.session?.messages) setMessages(data.session.messages)
+// ── Message components ──────────────────────────────────────────────
 
-        // If backend is NOT streaming, ensure frontend streaming state is cleared
-        if (!data.streaming) {
-          setStreaming(false)
-          setStreamingBlocks([])
-          setStreamingText('')
-          setStreamingToolCalls([])
+function UserMessage() {
+  return (
+    <MessagePrimitive.Root className="flex justify-end mb-3">
+      <div className="max-w-[85%] bg-blue-500 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm whitespace-pre-wrap">
+        <MessagePrimitive.Parts
+          components={{
+            Text: UserTextPart,
+            Image: UserImagePart,
+          }}
+        />
+      </div>
+    </MessagePrimitive.Root>
+  )
+}
+
+function AssistantMessage() {
+  return (
+    <MessagePrimitive.Root className="flex justify-start mb-3">
+      <div className="max-w-[90%] space-y-1">
+        <MessagePrimitive.Parts
+          components={{
+            Text: AssistantTextPart,
+            ToolCall: AssistantToolCallPart,
+          }}
+        />
+      </div>
+    </MessagePrimitive.Root>
+  )
+}
+
+// ── Composer ─────────────────────────────────────────────────────────
+
+function ChatComposer() {
+  return (
+    <ComposerPrimitive.Root className="border-t border-neutral-200 dark:border-neutral-700 p-3 bg-white dark:bg-neutral-800">
+      <div className="flex items-end gap-2">
+        <ComposerPrimitive.Input
+          placeholder="Type a message..."
+          rows={1}
+          autoFocus
+          className="flex-1 resize-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 max-h-32 overflow-y-auto"
+          style={{ minHeight: '38px' }}
+        />
+        <ComposerPrimitive.Send
+          className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+          </svg>
+        </ComposerPrimitive.Send>
+      </div>
+    </ComposerPrimitive.Root>
+  )
+}
+
+// ── Thread ───────────────────────────────────────────────────────────
+
+function ChatThread() {
+  return (
+    <ThreadPrimitive.Root className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-1 overscroll-contain">
+        <ThreadPrimitive.Empty>
+          <div className="text-center text-neutral-400 dark:text-neutral-500 text-sm py-12">
+            Ask anything about the project...
+          </div>
+        </ThreadPrimitive.Empty>
+
+        <ThreadPrimitive.Messages
+          components={{
+            UserMessage,
+            AssistantMessage,
+          }}
+        />
+      </ThreadPrimitive.Viewport>
+
+      <ChatComposer />
+    </ThreadPrimitive.Root>
+  )
+}
+
+// ── Convert backend messages to ThreadMessageLike ───────────────────
+
+function convertBackendMessages(messages) {
+  if (!messages || messages.length === 0) return []
+
+  return messages
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map((msg, idx) => {
+      if (msg.role === 'user') {
+        return {
+          role: 'user',
+          content: msg.content || '',
+          id: `msg-${idx}`,
         }
+      }
 
-        // If backend is still streaming, show current content and reconnect
-        if (data.streaming && data.streamingContent) {
-          setStreaming(true)
-          // Build initial blocks from streaming content
-          const initialBlocks = []
-          const sc = data.streamingContent
-          if (sc.text) initialBlocks.push({ type: 'text', content: sc.text })
-          if (sc.toolCalls) sc.toolCalls.forEach(tc => initialBlocks.push({ type: 'tool', ...tc }))
-          setStreamingBlocks(initialBlocks)
-          setStreamingText(sc.text || '')
-          setStreamingToolCalls(sc.toolCalls || [])
+      // Assistant — may have tool_calls and text content
+      const parts = []
+      const toolCalls = msg.tool_calls
+        ? (typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls)
+        : []
 
-          // Reconnect to SSE stream for remaining events
-          const evtRes = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}/stream`)
-          if (cancelled) return
-          const reader = evtRes.body.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
-
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done || cancelled) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop()
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue
-              try {
-                const evt = JSON.parse(line.slice(6))
-                switch (evt.type) {
-                  case 'text':
-                    setStreamingBlocks(prev => {
-                      const last = prev[prev.length - 1]
-                      if (last?.type === 'text') return [...prev.slice(0, -1), { type: 'text', content: last.content + evt.content }]
-                      return [...prev, { type: 'text', content: evt.content }]
-                    })
-                    break
-                  case 'tool_call':
-                    setStreamingBlocks(prev => [...prev, { type: 'tool', ...evt }])
-                    break
-                  case 'tool_result':
-                    setStreamingBlocks(prev => prev.map(b => b.type === 'tool' && b.id === evt.id ? { ...b, output: evt.output } : b))
-                    break
-                  case 'done':
-                    const finalRes = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
-                    const finalData = await finalRes.json()
-                    if (finalData.session?.messages) setMessages(finalData.session.messages)
-                    setStreaming(false)
-                    setStreamingText(''); setStreamingBlocks([])
-                    setStreamingToolCalls([])
-                    return
-                }
-              } catch {}
-            }
-          }
-          setStreaming(false)
-          setStreamingText(''); setStreamingBlocks([])
-          setStreamingToolCalls([])
-        }
-      } catch {}
-    }
-    load()
-    return () => { cancelled = true }
-  }, [chatSession?.id, selectedProject?.id])
-
-  // Poll for new messages (syncs across devices, picks up background completions)
-  useEffect(() => {
-    if (!chatSession || !selectedProject || !open || chatSession._temp) return
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
-        if (!res.ok) return
-        const data = await res.json()
-        if (data.session?.messages && data.session.messages.length !== messages.length) {
-          setMessages(data.session.messages)
-        }
-        // If backend started streaming (from another device), show content and reconnect
-        if (data.streaming && !streaming) {
-          setStreaming(true)
-          if (data.streamingContent) {
-            const blocks = []
-            if (data.streamingContent.text) blocks.push({ type: 'text', content: data.streamingContent.text })
-            if (data.streamingContent.toolCalls) data.streamingContent.toolCalls.forEach(tc => blocks.push({ type: 'tool', ...tc }))
-            setStreamingBlocks(blocks)
-            setStreamingText(data.streamingContent.text || '')
-          }
-          // Connect to SSE stream
-          try {
-            const evtRes = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}/stream`)
-            const reader = evtRes.body.getReader()
-            const decoder = new TextDecoder()
-            let buffer = ''
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              buffer += decoder.decode(value, { stream: true })
-              const lines = buffer.split('\n')
-              buffer = lines.pop()
-              for (const line of lines) {
-                if (!line.startsWith('data: ')) continue
-                try {
-                  const evt = JSON.parse(line.slice(6))
-                  if (evt.type === 'text') setStreamingBlocks(prev => {
-                    const last = prev[prev.length - 1]
-                    if (last?.type === 'text') return [...prev.slice(0, -1), { type: 'text', content: last.content + evt.content }]
-                    return [...prev, { type: 'text', content: evt.content }]
-                  })
-                  else if (evt.type === 'tool_call') setStreamingBlocks(prev => [...prev, { type: 'tool', ...evt }])
-                  else if (evt.type === 'tool_result') setStreamingBlocks(prev => prev.map(b => b.id === evt.id ? { ...b, output: evt.output } : b))
-                  else if (evt.type === 'done') {
-                    const fr = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
-                    const fd = await fr.json()
-                    if (fd.session?.messages) setMessages(fd.session.messages)
-                    setStreaming(false)
-                    setStreamingBlocks([])
-                    setStreamingText('')
-                    break
-                  }
-                } catch {}
-              }
-            }
-          } catch { setStreaming(false); setStreamingBlocks([]) }
-        }
-        // If backend stopped streaming, update messages
-        if (!data.streaming && streaming) {
-          setStreaming(false)
-          setStreamingBlocks([])
-          setStreamingText('')
-        }
-      } catch {}
-    }
-    const interval = setInterval(poll, 3000)
-    return () => clearInterval(interval)
-  }, [chatSession?.id, selectedProject?.id, open, streaming, messages.length])
-
-  // Auto-scroll — use scrollTop instead of scrollIntoView to prevent parent scroll
-  const messagesContainerRef = useRef(null)
-  const scrollToBottom = useCallback(() => {
-    const container = messagesContainerRef.current
-    if (container) container.scrollTop = container.scrollHeight
-  }, [])
-
-  useEffect(() => { scrollToBottom() }, [messages, streamingText, streamingToolCalls])
-
-  // Reset streaming state and focus input when panel opens
-  useEffect(() => {
-    if (open) {
-      setStreaming(false)
-      setStreamingBlocks([])
-      setStreamingText(''); setStreamingToolCalls([])
-      if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 350)
-    }
-  }, [open, chatSession?.id])
-
-  const sendMessage = async () => {
-    if (!input.trim() || streaming || !chatSession || !selectedProject) return
-
-    let activeSession = chatSession
-
-    // If temp session, create it in DB first
-    if (chatSession._temp) {
-      try {
-        const res = await authFetch(`/api/projects/${selectedProject.id}/chats`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+      for (const tc of toolCalls) {
+        parts.push({
+          type: 'tool-call',
+          toolCallId: tc.id || `tc-${idx}-${parts.length}`,
+          toolName: tc.name,
+          args: tc.input || {},
+          argsText: JSON.stringify(tc.input || {}),
+          result: tc.output,
         })
-        if (!res.ok) return
-        const data = await res.json()
-        activeSession = data.session
-        if (onSessionCreated) onSessionCreated(activeSession)
-      } catch { return }
-    } else {
-      // Double-check backend isn't already processing
-      try {
-        const checkRes = await fetch(`/api/projects/${selectedProject.id}/chats/${activeSession.id}`)
-        const checkData = await checkRes.json()
-        if (checkData.streaming) {
-          setStreaming(true)
-          return
-        }
-      } catch {}
-    }
+      }
 
-    const userMsg = input.trim()
-    setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }])
-    setStreaming(true)
-    setStreamingText(''); setStreamingBlocks([])
-    setStreamingToolCalls([])
+      if (msg.content) {
+        parts.push({ type: 'text', text: msg.content })
+      }
 
-    try {
-      const response = await authFetch(`/api/projects/${selectedProject.id}/chats/${activeSession.id}/message`, {
+      return {
+        role: 'assistant',
+        content: parts.length > 0 ? parts : (msg.content || ''),
+        id: `msg-${idx}`,
+        status: { type: 'complete' },
+      }
+    })
+}
+
+// ── Chat model adapter (SSE) ────────────────────────────────────────
+
+function createChatModelAdapter({ projectId, sessionId, authFetch, onSessionCreate }) {
+  return {
+    async *run({ messages, abortSignal }) {
+      // Extract the last user message text
+      const lastMsg = messages[messages.length - 1]
+      if (!lastMsg || lastMsg.role !== 'user') return
+
+      const textParts = lastMsg.content?.filter?.(p => p.type === 'text') || []
+      const userText = textParts.map(p => p.text).join('') || ''
+      if (!userText.trim()) return
+
+      // Handle temp session creation
+      let activeSessionId = sessionId
+      if (!activeSessionId) {
+        const created = await onSessionCreate()
+        if (!created) return
+        activeSessionId = created
+      }
+
+      // Send message via SSE
+      const response = await authFetch(`/api/projects/${projectId}/chats/${activeSessionId}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg }),
+        body: JSON.stringify({ message: userText }),
+        signal: abortSignal,
       })
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      let accText = ''
-      let accToolCalls = []
+      const contentParts = []
 
       while (true) {
         const { done, value } = await reader.read()
@@ -333,127 +258,155 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
-        buffer = lines.pop() // Keep incomplete line
+        buffer = lines.pop()
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           try {
-            const data = JSON.parse(line.slice(6))
+            const evt = JSON.parse(line.slice(6))
 
-            switch (data.type) {
-              case 'text':
-                accText += data.content
-                setStreamingText(accText)
-                // Append to or update last text block
-                setStreamingBlocks(prev => {
-                  const last = prev[prev.length - 1]
-                  if (last && last.type === 'text') {
-                    return [...prev.slice(0, -1), { type: 'text', content: last.content + data.content }]
-                  }
-                  return [...prev, { type: 'text', content: data.content }]
-                })
-                break
-
-              case 'tool_call':
-                accToolCalls = [...accToolCalls, { id: data.id, name: data.name, input: data.input }]
-                setStreamingToolCalls([...accToolCalls])
-                setStreamingBlocks(prev => [...prev, { type: 'tool', id: data.id, name: data.name, input: data.input }])
-                break
-
-              case 'tool_result':
-                accToolCalls = accToolCalls.map(tc =>
-                  tc.id === data.id ? { ...tc, output: data.output } : tc
-                )
-                setStreamingToolCalls([...accToolCalls])
-                setStreamingBlocks(prev => prev.map(b =>
-                  b.type === 'tool' && b.id === data.id ? { ...b, output: data.output } : b
-                ))
-                break
-
-              case 'error':
-                accText += `\n\n⚠️ Error: ${data.content}`
-                setStreamingText(accText)
-                setStreamingBlocks(prev => [...prev, { type: 'text', content: `\n\n⚠️ Error: ${data.content}` }])
-                break
-
-              case 'done':
-                // Finalize — add assistant message with ordered blocks
-                if (accText || accToolCalls.length > 0) {
-                  setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: accText,
-                    tool_calls: accToolCalls.length > 0 ? accToolCalls : null,
-                  }])
+            switch (evt.type) {
+              case 'text': {
+                const lastPart = contentParts[contentParts.length - 1]
+                if (lastPart?.type === 'text') {
+                  lastPart.text += evt.content
+                } else {
+                  contentParts.push({ type: 'text', text: evt.content })
                 }
-                // cleared
+                yield { content: contentParts.map(p => ({ ...p })) }
                 break
-            }
-          } catch {}
-        }
-      }
-    } catch (err) {
-      // Connection lost — backend continues processing in background.
-      // Reload saved state and check if still streaming to reconnect.
-      setReconnecting(true)
-      try {
-        const res = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.session?.messages) setMessages(data.session.messages)
-          if (data.streaming && data.streamingContent) {
-            // Still streaming — show current content and reconnect
-            setStreamingText(data.streamingContent.text || '')
-            setStreamingBlocks(data.streamingContent.toolCalls?.map(tc => ({ type: 'tool', ...tc })) || [])
-            // Reconnect SSE
-            try {
-              const evtRes = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}/stream`)
-              const reader = evtRes.body.getReader()
-              const decoder = new TextDecoder()
-              let buffer = ''
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                buffer += decoder.decode(value, { stream: true })
-                const lines = buffer.split('\n')
-                buffer = lines.pop()
-                for (const line of lines) {
-                  if (!line.startsWith('data: ')) continue
-                  try {
-                    const evt = JSON.parse(line.slice(6))
-                    if (evt.type === 'text') setStreamingBlocks(prev => {
-                      const last = prev[prev.length - 1]
-                      if (last?.type === 'text') return [...prev.slice(0, -1), { type: 'text', content: last.content + evt.content }]
-                      return [...prev, { type: 'text', content: evt.content }]
-                    })
-                    else if (evt.type === 'tool_call') setStreamingBlocks(prev => [...prev, { type: 'tool', ...evt }])
-                    else if (evt.type === 'tool_result') setStreamingBlocks(prev => prev.map(b => b.id === evt.id ? { ...b, output: evt.output } : b))
-                    else if (evt.type === 'done') {
-                      const finalRes2 = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
-                      const finalData2 = await finalRes2.json()
-                      if (finalData2.session?.messages) setMessages(finalData2.session.messages)
-                      break
-                    }
-                  } catch {}
+              }
+
+              case 'tool_call': {
+                contentParts.push({
+                  type: 'tool-call',
+                  toolCallId: evt.id,
+                  toolName: evt.name,
+                  args: evt.input || {},
+                  argsText: JSON.stringify(evt.input || {}),
+                })
+                yield { content: contentParts.map(p => ({ ...p })) }
+                break
+              }
+
+              case 'tool_result': {
+                const tc = contentParts.find(p => p.type === 'tool-call' && p.toolCallId === evt.id)
+                if (tc) tc.result = evt.output
+                yield { content: contentParts.map(p => ({ ...p })) }
+                break
+              }
+
+              case 'error': {
+                contentParts.push({ type: 'text', text: `\n\n⚠️ Error: ${evt.content}` })
+                yield { content: contentParts.map(p => ({ ...p })) }
+                break
+              }
+
+              case 'done': {
+                return {
+                  content: contentParts.map(p => ({ ...p })),
+                  status: { type: 'complete' },
                 }
               }
-            } catch {}
+            }
+          } catch {
+            // Skip malformed SSE lines
           }
         }
-      } catch {}
-      setReconnecting(false)
-    } finally {
-      setStreaming(false)
-      setStreamingText(''); setStreamingBlocks([])
-      setStreamingToolCalls([])
-    }
-  }
+      }
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+      // Stream ended without explicit done
+      return {
+        content: contentParts.map(p => ({ ...p })),
+        status: { type: 'complete' },
+      }
+    },
   }
+}
+
+// ── Inner chat component (keyed per session) ────────────────────────
+
+function AssistantChat({ projectId, sessionId, authFetch, onSessionCreate, initialMessages }) {
+  const adapter = useMemo(
+    () => createChatModelAdapter({ projectId, sessionId, authFetch, onSessionCreate }),
+    [projectId, sessionId, authFetch, onSessionCreate]
+  )
+
+  const runtime = useLocalRuntime(adapter, {
+    initialMessages,
+  })
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ChatThread />
+    </AssistantRuntimeProvider>
+  )
+}
+
+// ── Main ChatPanel ──────────────────────────────────────────────────
+
+export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated }) {
+  const { authFetch } = useAuth()
+  const [initialMessages, setInitialMessages] = useState(null)
+  const [sessionId, setSessionId] = useState(chatSession?.id || null)
+  const [loading, setLoading] = useState(false)
+
+  // Track sessionId from props
+  useEffect(() => {
+    setSessionId(chatSession?.id || null)
+  }, [chatSession?.id])
+
+  // Load messages when session changes
+  useEffect(() => {
+    if (!chatSession || !selectedProject) {
+      setInitialMessages([])
+      return
+    }
+    if (chatSession._temp) {
+      setInitialMessages([])
+      return
+    }
+
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
+        if (cancelled) return
+        const data = await res.json()
+        const converted = convertBackendMessages(data.session?.messages || [])
+        setInitialMessages(converted)
+      } catch {
+        setInitialMessages([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [chatSession?.id, selectedProject?.id])
+
+  // Create session callback for temp sessions
+  const handleSessionCreate = useCallback(async () => {
+    if (!selectedProject) return null
+    try {
+      const res = await authFetch(`/api/projects/${selectedProject.id}/chats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      const newSession = data.session
+      setSessionId(newSession.id)
+      if (onSessionCreated) onSessionCreated(newSession)
+      return newSession.id
+    } catch {
+      return null
+    }
+  }, [selectedProject?.id, authFetch, onSessionCreated])
+
+  const chatKey = `${selectedProject?.id}-${sessionId || 'temp'}-${chatSession?._temp ? 'temp' : 'saved'}`
 
   return (
     <Panel id="chat" open={open} onClose={onClose}>
@@ -462,80 +415,21 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
           💬 {chatSession?.title || 'Chat'}
         </span>
       </PanelHeader>
-      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* Messages area */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-1 overscroll-contain">
-          {messages.length === 0 && !streaming && (
-            <div className="text-center text-neutral-400 dark:text-neutral-500 text-sm py-12">
-              Ask anything about the project...
-            </div>
-          )}
-          {messages.map((msg, i) => (
-            <MessageBubble key={i} msg={msg} />
-          ))}
 
-          {/* Streaming indicators */}
-          {streaming && streamingBlocks.length > 0 && (
-            <div className="flex justify-start mb-3">
-              <div className="max-w-[90%] space-y-1">
-                {streamingBlocks.filter(b => b.type === 'tool' || (b.content && b.content.trim())).map((block, i) => (
-                  block.type === 'tool'
-                    ? <ToolCallBlock key={block.id || i} name={block.name} input={block.input} output={block.output} />
-                    : <div key={i} className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2 text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content}</ReactMarkdown>
-                      </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {streaming && !streamingText && streamingToolCalls.length === 0 && (
-            <div className="flex justify-start mb-3">
-              <div className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2">
-                <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
+      {loading || initialMessages === null ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-neutral-400" />
         </div>
-
-        {/* Reconnecting indicator */}
-        {reconnecting && (
-          <div className="border-t border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 px-3 py-2 flex items-center gap-2">
-            <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
-            <span className="text-xs text-blue-600 dark:text-blue-400">Reconnecting...</span>
-          </div>
-        )}
-
-        {/* Input area */}
-        <div className="border-t border-neutral-200 dark:border-neutral-700 p-3 bg-white dark:bg-neutral-800">
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
-              disabled={streaming}
-              rows={1}
-              className="flex-1 resize-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 max-h-32 overflow-y-auto"
-              style={{ minHeight: '38px' }}
-              onInput={(e) => {
-                e.target.style.height = 'auto'
-                e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px'
-              }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={streaming || !input.trim()}
-              className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-            >
-              {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-      </div>
+      ) : (
+        <AssistantChat
+          key={chatKey}
+          projectId={selectedProject?.id}
+          sessionId={sessionId}
+          authFetch={authFetch}
+          onSessionCreate={handleSessionCreate}
+          initialMessages={initialMessages}
+        />
+      )}
     </Panel>
   )
 }
