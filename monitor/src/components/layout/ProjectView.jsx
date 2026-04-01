@@ -740,10 +740,10 @@ export default function ProjectView({
                 onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
               />}
 
-              <Card className="!h-auto">
+              <Card className="h-[300px]">
                 <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                <CardContent className="flex-1 overflow-hidden">
+                  <div className="space-y-2 h-full overflow-y-auto">
                     {agents.managers.map((agent) => (
                       <WorkerCard
                         key={agent.name}
@@ -762,10 +762,10 @@ export default function ProjectView({
                 </CardContent>
               </Card>
 
-              <Card className="!h-auto">
+              <Card className="h-[500px]">
                 <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-4 h-4" />Workers ({agents.workers.length})</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                <CardContent className="flex-1 overflow-hidden">
+                  <div className="space-y-2 h-full overflow-y-auto">
                     {agents.workers.map((agent) => (
                       <WorkerCard
                         key={agent.name}
