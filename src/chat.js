@@ -375,7 +375,8 @@ export async function streamChatMessage(opts) {
         const mimeType = img.mimeType || 'image/jpeg';
         userContent.push({
           type: 'image',
-          image: `data:${mimeType};base64,${base64}`,
+          data: base64,
+          mimeType,
         });
       }
     }
