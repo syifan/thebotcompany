@@ -1,15 +1,13 @@
 import React, { useState } from 'react'
 import { Activity, DollarSign, Settings, Save, Info, AlertTriangle } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import SleepCountdown from '@/components/layout/SleepCountdown'
 
 export function OrchestratorStateCard({ selectedProject, globalUptime, controlAction, isWriteMode }) {
   return (
-    <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="w-4 h-4" />Orchestrator State</CardTitle></CardHeader>
-      <CardContent>
+    <DashboardWidget icon={Activity} title="Orchestrator State">
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-neutral-600 dark:text-neutral-300">Status</span>
@@ -89,8 +87,7 @@ export function OrchestratorStateCard({ selectedProject, globalUptime, controlAc
         {isWriteMode && !selectedProject.paused && selectedProject.running && (
           <DangerZone controlAction={controlAction} selectedProject={selectedProject} />
         )}
-      </CardContent>
-    </Card>
+    </DashboardWidget>
   )
 }
 
@@ -149,9 +146,7 @@ function DangerZone({ controlAction, selectedProject }) {
 
 export function CostBudgetCard({ selectedProject, setBudgetInfoModal, configForm, configError, configDirty, configSaving, updateConfigField, resetConfig, saveConfig, isWriteMode, setIntervalInfoModal, setTimeoutInfoModal }) {
   return (
-    <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><DollarSign className="w-4 h-4" />Cost, Budget & Config</CardTitle></CardHeader>
-      <CardContent>
+    <DashboardWidget icon={DollarSign} title="Cost, Budget & Config">
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-neutral-600 dark:text-neutral-300">Last Cycle</span>
@@ -305,7 +300,6 @@ export function CostBudgetCard({ selectedProject, setBudgetInfoModal, configForm
           </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </DashboardWidget>
   )
 }

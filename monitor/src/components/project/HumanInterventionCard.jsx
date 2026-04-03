@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { AlertTriangle, User, UserCheck, MessageSquare, ArrowUp, ArrowDown } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -25,17 +25,15 @@ export default function HumanInterventionCard({
   const toHuman = filtered.filter(i => i.assignee === 'human' && i.creator !== 'human' && i.creator !== 'chat')
 
   return (
-    <Card className="flex flex-col max-h-[500px]">
-      <CardHeader className="shrink-0 pb-2">
-        <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4" />
-          Intervention
-          {openCount > 0 && (
-            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
-              {openCount}
-            </Badge>
-          )}
-        </CardTitle>
+    <DashboardWidget
+      icon={AlertTriangle}
+      title="Intervention"
+      badge={openCount > 0 && (
+        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
+          {openCount}
+        </Badge>
+      )}
+      headerExtra={
         <div className="flex gap-1 mt-2">
           {['open', 'closed', 'all'].map(f => (
             <button key={f} onClick={() => setFilter(f)}
@@ -44,8 +42,9 @@ export default function HumanInterventionCard({
             </button>
           ))}
         </div>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col overflow-hidden pt-0">
+      }
+      contentClassName="flex flex-col"
+    >
         <div className="flex-1 overflow-y-auto space-y-3">
           {/* Needs your attention — agents asking for help */}
           {toHuman.length > 0 && (
@@ -92,8 +91,7 @@ export default function HumanInterventionCard({
             </Button>
           </>
         )}
-      </CardContent>
-    </Card>
+    </DashboardWidget>
   )
 }
 

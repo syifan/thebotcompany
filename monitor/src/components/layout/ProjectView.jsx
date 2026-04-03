@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Users, User, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
@@ -740,10 +741,8 @@ export default function ProjectView({
                 onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
               />}
 
-              <Card className="h-[500px]">
-                <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="w-4 h-4" />Managers ({agents.managers.length})</CardTitle></CardHeader>
-                <CardContent className="flex-1 overflow-hidden">
-                  <div className="space-y-2 h-full overflow-y-auto">
+              <DashboardWidget icon={Sparkles} title={`Managers (${agents.managers.length})`}>
+                  <div className="space-y-2">
                     {agents.managers.map((agent) => (
                       <WorkerCard
                         key={agent.name}
@@ -759,13 +758,10 @@ export default function ProjectView({
                     ))}
                     {agents.managers.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No managers</p>}
                   </div>
-                </CardContent>
-              </Card>
+              </DashboardWidget>
 
-              <Card className="h-[500px]">
-                <CardHeader><CardTitle className="flex items-center gap-2"><Users className="w-4 h-4" />Workers ({agents.workers.length})</CardTitle></CardHeader>
-                <CardContent className="flex-1 overflow-hidden">
-                  <div className="space-y-2 h-full overflow-y-auto">
+              <DashboardWidget icon={Users} title={`Workers (${agents.workers.length})`}>
+                  <div className="space-y-2">
                     {agents.workers.map((agent) => (
                       <WorkerCard
                         key={agent.name}
@@ -780,13 +776,10 @@ export default function ProjectView({
                     ))}
                     {agents.workers.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No workers</p>}
                   </div>
-                </CardContent>
-              </Card>
+              </DashboardWidget>
 
-              <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><GitPullRequest className="w-4 h-4" />Open PRs ({prs.length})</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+              <DashboardWidget icon={GitPullRequest} title={`Open PRs (${prs.length})`}>
+                  <div className="space-y-2">
                     {prs.map((pr) => (
                       <a key={pr.number} href={`${repoUrl}/pull/${pr.number}`} target="_blank" rel="noopener noreferrer"
                         className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer transition-colors">
@@ -802,8 +795,7 @@ export default function ProjectView({
                     ))}
                     {prs.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open PRs</p>}
                   </div>
-                </CardContent>
-              </Card>
+              </DashboardWidget>
 
               <AgentReportsCard
                 comments={comments}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { MessageCircle, Plus, Trash2 } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import DashboardWidget from '@/components/ui/DashboardWidget'
 import { useAuth } from '@/hooks/useAuth'
 
 export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
@@ -39,23 +39,19 @@ export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
   }
 
   return (
-    <Card className="h-[500px]">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <MessageCircle className="w-4 h-4" />
-            Chat
-          </span>
-          <button
-            onClick={handleNew}
-            className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400 transition-colors"
-            title="New Chat"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-0 overflow-hidden">
+    <DashboardWidget
+      icon={MessageCircle}
+      title="Chat"
+      headerRight={
+        <button
+          onClick={handleNew}
+          className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400 transition-colors"
+          title="New Chat"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      }
+    >
         <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto h-full">
           {sessions.length === 0 && !loading && (
             <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">
@@ -94,7 +90,6 @@ export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
             </div>
           )}
         </div>
-      </CardContent>
-    </Card>
+    </DashboardWidget>
   )
 }

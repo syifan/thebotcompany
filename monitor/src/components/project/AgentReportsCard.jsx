@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { MessageSquare, XCircle, Timer } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -109,14 +109,11 @@ export default function AgentReportsCard({
   setReportsPanelOpen,
 }) {
   return (
-    <Card className="h-[500px]">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between">
-          <span className="flex items-center gap-2"><MessageSquare className="w-4 h-4" />Agent Reports</span>
-          <span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-0 overflow-hidden">
+    <DashboardWidget
+      icon={MessageSquare}
+      title="Agent Reports"
+      headerRight={<span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>}
+    >
         <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto overflow-x-hidden h-full" onScroll={(e) => {
           const { scrollTop, scrollHeight, clientHeight } = e.target
           if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
@@ -166,7 +163,6 @@ export default function AgentReportsCard({
             </div>
           )}
         </div>
-      </CardContent>
-    </Card>
+    </DashboardWidget>
   )
 }
