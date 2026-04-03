@@ -1332,11 +1332,10 @@ class ProjectRunner {
       const { managers, workers } = this.loadAgents();
 
       // Start new cycle — preserve schedule state if resuming from reboot
-      const resuming = this.currentSchedule && this.completedAgents.length > 0;
+      const resuming = !!this.currentSchedule;
       if (!resuming) {
         this.cycleCount++;
         this.completedAgents = [];
-        this.currentSchedule = null;
         this.saveState();
       }
       log(`===== CYCLE ${this.cycleCount} (phase: ${this.phase})${resuming ? ' [RESUMING]' : ''} =====`, this.id);
@@ -1424,6 +1423,7 @@ class ProjectRunner {
           // Execute schedule steps (delays + workers)
           if (schedule) {
             this.currentSchedule = schedule;
+            this.saveState(); // Persist schedule before execution so it survives reboot
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
@@ -1443,8 +1443,9 @@ class ProjectRunner {
         }
 
         // Resume interrupted schedule from previous cycle (e.g. after reboot)
-        if (this.currentSchedule && this.completedAgents.length > 0) {
-          log(`Resuming interrupted schedule (${this.completedAgents.length} agents already completed: [${this.completedAgents.join(', ')}])`, this.id);
+        // Note: don't require completedAgents — schedule may start with a delay step
+        if (this.currentSchedule) {
+          log(`Resuming interrupted schedule (${this.completedAgents.length} agents already completed${this.completedAgents.length ? ': [' + this.completedAgents.join(', ') + ']' : ''})`, this.id);
           const { total, failures } = await this.executeSchedule(this.currentSchedule, config);
           cycleTotal += total;
           cycleFailures += failures;
@@ -1486,6 +1487,7 @@ class ProjectRunner {
           // Execute schedule steps (delays + workers)
           if (schedule) {
             this.completedAgents = [];
+            this.saveState(); // Persist schedule before execution so it survives reboot
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
@@ -1553,6 +1555,7 @@ class ProjectRunner {
           if (schedule) {
             this.currentSchedule = schedule;
             this.completedAgents = [];
+            this.saveState(); // Persist schedule before execution so it survives reboot
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
