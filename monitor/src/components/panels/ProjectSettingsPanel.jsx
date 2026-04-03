@@ -40,7 +40,9 @@ export default function ProjectSettingsPanel({
   const fallbackEnabled = keySelection?.fallback !== false
   const defaultKey = keys.find(k => k.enabled)
   const selectedKey = selectedKeyId ? keys.find(k => k.id === selectedKeyId) : null
-  const effectiveKey = selectedKey || defaultKey
+  // Detect stale pinned key (disabled or deleted)
+  const pinnedKeyStale = selectedKeyId && (!selectedKey || !selectedKey.enabled)
+  const effectiveKey = (selectedKey && selectedKey.enabled) ? selectedKey : defaultKey
 
   const handleKeyChange = async (keyId) => {
     setSaving(true)
@@ -144,11 +146,16 @@ export default function ProjectSettingsPanel({
               value={selectedKeyId || ''}
               onChange={e => handleKeyChange(e.target.value || null)}
               disabled={saving}
-              className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+              className={`w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 ${pinnedKeyStale ? 'border-red-400 dark:border-red-600' : 'border-neutral-300 dark:border-neutral-600'}`}
             >
               <option value="">
                 Use global default{defaultKey ? ` ("${defaultKey.label}")` : ''}
               </option>
+              {pinnedKeyStale && (
+                <option value={selectedKeyId} disabled>
+                  ⚠️ {selectedKey ? selectedKey.label : selectedKeyId.slice(0, 8)} — disabled / unavailable
+                </option>
+              )}
               {keys.filter(k => k.enabled).map(k => (
                 <option key={k.id} value={k.id}>
                   {k.label} — {k.provider} ({k.preview})
@@ -156,8 +163,16 @@ export default function ProjectSettingsPanel({
               ))}
             </select>
 
+            {pinnedKeyStale && (
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <span className="text-xs text-red-600 dark:text-red-400">
+                  ⚠️ Selected key is {selectedKey ? 'disabled' : 'missing'}. Agents cannot run. Select a different key or switch to global default.
+                </span>
+              </div>
+            )}
+
             {/* Effective key display */}
-            {effectiveKey && (
+            {!pinnedKeyStale && effectiveKey && (
               <div className="flex items-center gap-2 p-2 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700">
                 <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
                 <span className="text-xs text-neutral-600 dark:text-neutral-400">
@@ -196,7 +211,7 @@ export default function ProjectSettingsPanel({
 
         {/* Model Overrides */}
         {isWriteMode && (() => {
-          const canOverride = selectedKeyId && !fallbackEnabled;
+          const canOverride = selectedKeyId && !fallbackEnabled && !pinnedKeyStale;
           const currentModels = selectedProject?.config?.models || {};
           const hasOverrides = !!(currentModels.high || currentModels.mid || currentModels.low || currentModels.xlow);
           const keyProvider = selectedKey?.provider || 'anthropic';
