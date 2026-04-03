@@ -81,14 +81,14 @@ The custom provider feature allows connecting to any OpenAI-compatible or Anthro
 - **Protocol restriction** — Only `http://` and `https://` URLs are accepted.
 - **Auth-gated** — Creating or editing custom credentials requires write authentication.
 
-**For public deployments**, disable the custom provider entirely:
+The custom provider is **disabled by default**. To enable it:
 
 ```bash
 # In your .env or environment
-TBC_ALLOW_CUSTOM_PROVIDER=false
+TBC_ALLOW_CUSTOM_PROVIDER=true
 ```
 
-This blocks custom credential creation at the API level and hides the option from the UI. **Recommended for any instance exposed to untrusted users.**
+When disabled, custom credential creation is blocked at the API level and the option is hidden from the UI.
 
 > **Note:** The hostname blocklist does not protect against DNS rebinding attacks (where an external hostname resolves to a private IP). For maximum security on public instances, use `TBC_ALLOW_CUSTOM_PROVIDER=false`.
 

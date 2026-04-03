@@ -171,7 +171,7 @@ const pushSubscriptions = new Map(); // endpoint -> subscription
 // --- Configuration ---
 const PORT = process.env.TBC_PORT || 3100;
 const SERVE_STATIC = process.env.TBC_SERVE_STATIC !== 'false';
-const ALLOW_CUSTOM_PROVIDER = process.env.TBC_ALLOW_CUSTOM_PROVIDER !== 'false';
+const ALLOW_CUSTOM_PROVIDER = process.env.TBC_ALLOW_CUSTOM_PROVIDER === 'true';
 
 // Ensure TBC_HOME exists
 if (!fs.existsSync(TBC_HOME)) {
