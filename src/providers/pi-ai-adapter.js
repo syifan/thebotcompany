@@ -12,6 +12,7 @@ import {
   completeSimple,
   Type,
 } from '@mariozechner/pi-ai';
+import { callCustomModel } from './custom-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Model resolution — map TBC model strings to pi-ai Model objects
@@ -59,7 +60,18 @@ function parseTBCModel(rawModel) {
  * @param {string} rawModel - TBC model string (e.g. "claude-opus-4-6")
  * @returns {{ piModel: object, providerName: string }}
  */
-export function resolveModel(rawModel) {
+export function resolveModel(rawModel, providerOverride = null) {
+  if (providerOverride === 'custom') {
+    return {
+      piModel: {
+        id: rawModel,
+        name: rawModel,
+        provider: 'custom',
+        cost: { input: 0, output: 0, cacheRead: 0 },
+      },
+      providerName: 'custom',
+    };
+  }
   const { provider, modelId } = parseTBCModel(rawModel);
   const piModel = getModel(provider, modelId);
   return { piModel, providerName: provider };
@@ -122,6 +134,10 @@ function buildOptions({ token, isOAuth, reasoningEffort, signal, provider }) {
  * @returns {Promise<object>} TBC normalized response
  */
 export async function callModel(piModel, systemPrompt, messages, tools, opts = {}) {
+  if (piModel.provider === 'custom') {
+    return callCustomModel(piModel, systemPrompt, messages, tools, opts);
+  }
+
   const piOpts = buildOptions(opts);
 
   const context = {
@@ -235,6 +251,7 @@ export function buildUserMessage(text) {
  * Calculate cost from accumulated TBC usage stats using a pi-ai Model.
  */
 export function calculateCost(usage, piModel) {
+  if (!piModel?.cost) return 0;
   const cost = piModel.cost;
   return (
     (usage.inputTokens * cost.input) +

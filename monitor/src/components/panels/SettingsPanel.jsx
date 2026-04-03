@@ -11,11 +11,172 @@ import { useToast } from '@/contexts/ToastContext'
 // Add Credential Wizard
 // ---------------------------------------------------------------------------
 
-function AddCredentialWizard({ onComplete, onCancel, authFetch }) {
+function CustomCredentialFields({
+  token,
+  setToken,
+  baseUrl,
+  setBaseUrl,
+  apiStyle,
+  setApiStyle,
+  defaultModel,
+  setDefaultModel,
+  tierModels,
+  setTierModels,
+  tokenLabel = 'API Key',
+  tokenPlaceholder = 'Paste your API key...',
+}) {
+  return (
+    <div className="space-y-2">
+      <input
+        type="password"
+        placeholder={tokenPlaceholder}
+        value={token}
+        onChange={e => setToken(e.target.value)}
+        autoFocus
+        className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+        aria-label={tokenLabel}
+      />
+      <input
+        type="text"
+        placeholder="Base URL (e.g. https://gateway.example.com/v1)"
+        value={baseUrl}
+        onChange={e => setBaseUrl(e.target.value)}
+        className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+      />
+      <select
+        value={apiStyle}
+        onChange={e => setApiStyle(e.target.value)}
+        className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+      >
+        <option value="openai">OpenAI-compatible</option>
+        <option value="anthropic">Anthropic-compatible</option>
+      </select>
+      <input
+        type="text"
+        placeholder="Default model (required)"
+        value={defaultModel}
+        onChange={e => setDefaultModel(e.target.value)}
+        className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        {['high', 'mid', 'low', 'xlow'].map(tier => (
+          <input
+            key={tier}
+            type="text"
+            placeholder={`${tier.toUpperCase()} model (optional)`}
+            value={tierModels[tier] || ''}
+            onChange={e => setTierModels(prev => ({ ...prev, [tier]: e.target.value }))}
+            className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function EditCustomCredentialCard({ credential, authFetch, onComplete, onCancel }) {
+  const [label, setLabel] = useState(credential.label || '')
+  const [token, setToken] = useState('')
+  const [baseUrl, setBaseUrl] = useState(credential.customConfig?.baseUrl || '')
+  const [apiStyle, setApiStyle] = useState(credential.customConfig?.apiStyle || 'openai')
+  const [defaultModel, setDefaultModel] = useState(credential.customConfig?.defaultModel || '')
+  const [tierModels, setTierModels] = useState({
+    high: credential.customConfig?.tierModels?.high || '',
+    mid: credential.customConfig?.tierModels?.mid || '',
+    low: credential.customConfig?.tierModels?.low || '',
+    xlow: credential.customConfig?.tierModels?.xlow || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const customConfig = {
+        apiStyle,
+        baseUrl,
+        defaultModel,
+      }
+      const trimmedTierModels = Object.fromEntries(
+        Object.entries(tierModels).filter(([, value]) => value.trim())
+      )
+      if (Object.keys(trimmedTierModels).length > 0) {
+        customConfig.tierModels = trimmedTierModels
+      }
+      const body = {
+        label,
+        customConfig,
+      }
+      if (token.trim()) body.token = token.trim()
+      const res = await authFetch(`/api/keys/${credential.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        onComplete()
+        return
+      }
+    } catch {}
+    setSaving(false)
+  }
+
+  return (
+    <div className="mb-4 border border-cyan-200 dark:border-cyan-800 rounded-lg p-3 bg-cyan-50/50 dark:bg-cyan-950/20">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Edit Custom Credential</h4>
+        <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="space-y-2">
+        <input
+          type="text"
+          placeholder="Credential label"
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+        />
+        <CustomCredentialFields
+          token={token}
+          setToken={setToken}
+          baseUrl={baseUrl}
+          setBaseUrl={setBaseUrl}
+          apiStyle={apiStyle}
+          setApiStyle={setApiStyle}
+          defaultModel={defaultModel}
+          setDefaultModel={setDefaultModel}
+          tierModels={tierModels}
+          setTierModels={setTierModels}
+          tokenLabel="Replacement API Key"
+          tokenPlaceholder="Replace API key (leave blank to keep current)"
+        />
+      </div>
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={handleSave}
+          disabled={saving || !label.trim() || !baseUrl.trim() || !defaultModel.trim()}
+          className="flex-1 px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Custom Credential'}
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-3 py-1.5 text-sm font-medium border rounded-lg border-neutral-300 dark:border-neutral-600 text-neutral-600 dark:text-neutral-300"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders }) {
   const [step, setStep] = useState('provider') // provider → method → action → label
   const [selectedProvider, setSelectedProvider] = useState(null)
   const [selectedMethod, setSelectedMethod] = useState(null) // 'api_key' | 'oauth'
   const [token, setToken] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [apiStyle, setApiStyle] = useState('openai')
+  const [defaultModel, setDefaultModel] = useState('')
+  const [tierModels, setTierModels] = useState({ high: '', mid: '', low: '', xlow: '' })
   const [label, setLabel] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -35,7 +196,7 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch }) {
           <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Step 1: Select Provider</h4>
           <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><X className="w-4 h-4" /></button>
         </div>
-        <ProviderSelector onSelect={(p) => {
+        <ProviderSelector exclude={excludeProviders} onSelect={(p) => {
           setSelectedProvider(p.id)
           if (p.methods.length === 1) {
             setSelectedMethod(p.methods[0])
@@ -132,6 +293,10 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch }) {
 
     // API key paste
     if (selectedMethod === 'api_key') {
+      const isCustomProvider = selectedProvider === 'custom'
+      const canContinue = isCustomProvider
+        ? !!token.trim() && !!baseUrl.trim() && !!defaultModel.trim()
+        : !!token
       return (
         <div className="border border-blue-200 dark:border-blue-800 rounded-lg p-3 bg-blue-50/50 dark:bg-blue-950/20">
           <div className="flex items-center justify-between mb-3">
@@ -141,17 +306,32 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch }) {
             </div>
             <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><X className="w-4 h-4" /></button>
           </div>
-          <input
-            type="password"
-            placeholder="Paste your API key..."
-            value={token}
-            onChange={e => setToken(e.target.value)}
-            autoFocus
-            className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 mb-2"
-          />
+          {isCustomProvider ? (
+            <CustomCredentialFields
+              token={token}
+              setToken={setToken}
+              baseUrl={baseUrl}
+              setBaseUrl={setBaseUrl}
+              apiStyle={apiStyle}
+              setApiStyle={setApiStyle}
+              defaultModel={defaultModel}
+              setDefaultModel={setDefaultModel}
+              tierModels={tierModels}
+              setTierModels={setTierModels}
+            />
+          ) : (
+            <input
+              type="password"
+              placeholder="Paste your API key..."
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 mb-2"
+            />
+          )}
           <button
-            onClick={() => { if (token) setStep('label') }}
-            disabled={!token}
+            onClick={() => { if (canContinue) setStep('label') }}
+            disabled={!canContinue}
             className="w-full px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center gap-1"
           >
             Next <ChevronRight className="w-3.5 h-3.5" />
@@ -327,15 +507,29 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch }) {
       setSaving(true)
       try {
         if (selectedMethod === 'api_key' || selectedMethod === 'setup_token') {
+          const body = {
+            token,
+            provider: selectedProvider,
+            type: selectedMethod === 'setup_token' ? 'oauth' : 'api_key',
+            label: label || providerDef?.label || selectedProvider,
+          }
+          if (selectedProvider === 'custom') {
+            const trimmedTierModels = Object.fromEntries(
+              Object.entries(tierModels).filter(([, value]) => value.trim())
+            )
+            body.customConfig = {
+              apiStyle,
+              baseUrl,
+              defaultModel,
+            }
+            if (Object.keys(trimmedTierModels).length > 0) {
+              body.customConfig.tierModels = trimmedTierModels
+            }
+          }
           const res = await authFetch('/api/keys', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              token,
-              provider: selectedProvider,
-              type: selectedMethod === 'setup_token' ? 'oauth' : 'api_key',
-              label: label || providerDef?.label || selectedProvider,
-            })
+            body: JSON.stringify(body)
           })
           if (res.ok) {
             onComplete()
@@ -421,13 +615,16 @@ export default function SettingsPanel({
   const { showToast } = useToast()
 
   const [keys, setKeys] = useState([])
+  const [allowCustomProvider, setAllowCustomProvider] = useState(true)
   const [showWizard, setShowWizard] = useState(false)
+  const [editingCustomKey, setEditingCustomKey] = useState(null)
   const [editingLabel, setEditingLabel] = useState(null)
   const [editLabelValue, setEditLabelValue] = useState('')
 
   const fetchKeys = () => {
     fetch('/api/keys').then(r => r.json()).then(d => {
       setKeys(d.keys || [])
+      if (d.allowCustomProvider !== undefined) setAllowCustomProvider(d.allowCustomProvider)
     }).catch(() => {})
   }
 
@@ -588,6 +785,7 @@ export default function SettingsPanel({
             <div className="mb-4">
               <AddCredentialWizard
                 authFetch={authFetch}
+                excludeProviders={!allowCustomProvider ? ['custom'] : []}
                 onComplete={() => {
                   setShowWizard(false)
                   fetchKeys()
@@ -604,6 +802,19 @@ export default function SettingsPanel({
               <Plus className="w-4 h-4" />
               Add Credential
             </button>
+          )}
+
+          {editingCustomKey && (
+            <EditCustomCredentialCard
+              credential={editingCustomKey}
+              authFetch={authFetch}
+              onComplete={() => {
+                setEditingCustomKey(null)
+                fetchKeys()
+                showToast('Custom credential updated')
+              }}
+              onCancel={() => setEditingCustomKey(null)}
+            />
           )}
 
           {/* Credential list */}
@@ -659,8 +870,21 @@ export default function SettingsPanel({
                       <span className="text-xs text-amber-500">rate limited</span>
                     )}
                   </div>
+                  {key.provider === 'custom' && key.customConfig && (
+                    <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                      {key.customConfig.apiStyle} · {key.customConfig.baseUrl} · {key.customConfig.defaultModel}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
+                  {key.provider === 'custom' && (
+                    <button
+                      onClick={() => setEditingCustomKey(key)}
+                      className="px-2 py-0.5 text-xs rounded text-cyan-700 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
+                    >
+                      Edit
+                    </button>
+                  )}
                   <button onClick={() => handleReorder(key.id, 'up')} disabled={idx === 0} className="p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
                   <button onClick={() => handleReorder(key.id, 'down')} disabled={idx === keys.length - 1} className="p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
                   <button onClick={() => handleToggleEnabled(key.id, !key.enabled)} className={`px-2 py-0.5 text-xs rounded ${key.enabled ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400' : 'text-green-600 hover:text-green-700 dark:text-green-400'}`}>{key.enabled ? 'Disable' : 'Enable'}</button>

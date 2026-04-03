@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import yaml from 'js-yaml';
+import { normalizeCustomConfig } from './providers/custom-config.js';
 
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 const POOL_PATH = path.join(TBC_HOME, 'key-pool.json');
@@ -82,7 +83,7 @@ function generateId() {
   return crypto.randomUUID();
 }
 
-export function addKey({ label, token, provider, type }) {
+export function addKey({ label, token, provider, type, customConfig }) {
   const pool = loadKeyPool();
   const detectedProvider = provider || detectTokenProvider(token) || 'unknown';
   const detectedType = type || (token && token.startsWith('sk-ant-oat') ? 'oauth' : 'api_key');
@@ -97,6 +98,9 @@ export function addKey({ label, token, provider, type }) {
     order: maxOrder + 1,
     createdAt: new Date().toISOString(),
   };
+  if (detectedProvider === 'custom') {
+    entry.customConfig = normalizeCustomConfig(customConfig);
+  }
   pool.keys.push(entry);
   saveKeyPool(pool);
   return entry;
@@ -131,8 +135,15 @@ export function updateKey(id, patch) {
   const key = pool.keys.find(k => k.id === id);
   if (!key) return null;
   if (patch.label !== undefined) key.label = patch.label;
+  if (patch.token !== undefined) key.token = patch.token;
   if (patch.enabled !== undefined) key.enabled = patch.enabled;
   if (patch.order !== undefined) key.order = patch.order;
+  if (patch.customConfig !== undefined) {
+    if (key.provider !== 'custom') {
+      throw new Error('customConfig can only be set for custom provider keys');
+    }
+    key.customConfig = normalizeCustomConfig(patch.customConfig);
+  }
   saveKeyPool(pool);
   return key;
 }
@@ -172,6 +183,7 @@ export function getKeyPoolSafe() {
         rateLimited: isRateLimited(k.id),
         cooldownMs: getRateLimitCooldown(k.id),
         createdAt: k.createdAt,
+        customConfig: k.provider === 'custom' ? k.customConfig : undefined,
       })),
   };
 }
@@ -201,7 +213,15 @@ export async function resolveKeyForProject(projectConfig, providerHint, getOAuth
     const selected = sorted.find(k => k.id === keySelection.keyId);
     if (selected && !isRateLimited(selected.id)) {
       const token = await resolveToken(selected, getOAuthToken);
-      if (token) return { token, provider: selected.provider, keyId: selected.id, type: selected.type || 'api_key' };
+      if (token) {
+        return {
+          token,
+          provider: selected.provider,
+          keyId: selected.id,
+          type: selected.type || 'api_key',
+          customConfig: selected.provider === 'custom' ? selected.customConfig : undefined,
+        };
+      }
     }
     // If fallback is disabled, return null (project waits)
     if (keySelection.fallback === false) return null;
@@ -215,14 +235,30 @@ export async function resolveKeyForProject(projectConfig, providerHint, getOAuth
     for (const key of candidates) {
       if (key.provider !== providerHint) continue;
       const token = await resolveToken(key, getOAuthToken);
-      if (token) return { token, provider: key.provider, keyId: key.id, type: key.type || 'api_key' };
+      if (token) {
+        return {
+          token,
+          provider: key.provider,
+          keyId: key.id,
+          type: key.type || 'api_key',
+          customConfig: key.provider === 'custom' ? key.customConfig : undefined,
+        };
+      }
     }
   }
 
   // Second pass: any available key (cross-provider fallback)
   for (const key of candidates) {
     const token = await resolveToken(key, getOAuthToken);
-    if (token) return { token, provider: key.provider, keyId: key.id, type: key.type || 'api_key' };
+    if (token) {
+      return {
+        token,
+        provider: key.provider,
+        keyId: key.id,
+        type: key.type || 'api_key',
+        customConfig: key.provider === 'custom' ? key.customConfig : undefined,
+      };
+    }
   }
 
   return null;

@@ -198,10 +198,14 @@ export default function ProjectSettingsPanel({
         {isWriteMode && (() => {
           const canOverride = selectedKeyId && !fallbackEnabled;
           const currentModels = selectedProject?.config?.models || {};
-          const hasOverrides = !!(currentModels.high || currentModels.mid || currentModels.low);
+          const hasOverrides = !!(currentModels.high || currentModels.mid || currentModels.low || currentModels.xlow);
           const keyProvider = selectedKey?.provider || 'anthropic';
-          const providerTiers = config?.allTiers?.[keyProvider] || {};
-          const availableModels = config?.availableModels?.[keyProvider] || [];
+          const providerTiers = keyProvider === 'custom'
+            ? (config?.tiers || {})
+            : (config?.allTiers?.[keyProvider] || {});
+          const availableModels = keyProvider === 'custom'
+            ? []
+            : (config?.availableModels?.[keyProvider] || []);
 
           const saveModels = async (models) => {
             try {
@@ -251,28 +255,46 @@ export default function ProjectSettingsPanel({
                 {['high', 'mid', 'low', 'xlow'].map(tier => (
                   <div key={tier} className="flex items-center gap-2">
                     <span className={`text-xs font-bold w-10 shrink-0 ${tier === 'high' ? 'text-purple-500' : tier === 'mid' ? 'text-blue-500' : tier === 'xlow' ? 'text-neutral-300 dark:text-neutral-600' : 'text-neutral-400'}`}>{tier.toUpperCase()}</span>
-                    <select
-                      value={currentModels[tier] || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const models = { ...currentModels };
-                        if (val) models[tier] = val; else delete models[tier];
-                        setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
-                        saveModels(models);
-                      }}
-                      className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-                    >
-                      <option value="">Default ({providerTiers[tier]?.model || '—'}{providerTiers[tier]?.reasoningEffort ? ` (${providerTiers[tier].reasoningEffort})` : ''})</option>
-                      {availableModels.map(m => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
+                    {keyProvider === 'custom' ? (
+                      <input
+                        type="text"
+                        value={currentModels[tier] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const models = { ...currentModels };
+                          if (val) models[tier] = val; else delete models[tier];
+                          setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
+                          saveModels(models);
+                        }}
+                        placeholder={`Default (${providerTiers[tier]?.model || '—'})`}
+                        className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                      />
+                    ) : (
+                      <select
+                        value={currentModels[tier] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const models = { ...currentModels };
+                          if (val) models[tier] = val; else delete models[tier];
+                          setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
+                          saveModels(models);
+                        }}
+                        className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                      >
+                        <option value="">Default ({providerTiers[tier]?.model || '—'}{providerTiers[tier]?.reasoningEffort ? ` (${providerTiers[tier].reasoningEffort})` : ''})</option>
+                        {availableModels.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 ))}
               </div>
             ) : (
               <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                Using {keyProvider} defaults. Enable to customize models per tier.
+                {keyProvider === 'custom'
+                  ? 'Using the selected custom credential defaults. Enable to enter models per tier manually.'
+                  : `Using ${keyProvider} defaults. Enable to customize models per tier.`}
               </p>
             )}
           </div>

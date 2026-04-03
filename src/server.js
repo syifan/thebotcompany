@@ -16,6 +16,7 @@ import Database from 'better-sqlite3';
 import { runAgentWithAPI } from './agent-runner.js';
 import { listSessions as chatListSessions, createSession as chatCreateSession, getSession as chatGetSession, deleteSession as chatDeleteSession, streamChatMessage, getActiveStream, isStreaming as isChatStreaming, saveMessage as chatSaveMessage } from './chat.js';
 import { resolveModel, callModel, buildUserMessage, getModels as getPiModels } from './providers/index.js';
+import { buildCustomTierMap, resolveProviderRuntime } from './providers/custom-config.js';
 import { startOAuthLogin, submitManualCode, checkOAuthStatus, getAccessToken as getOAuthAccessToken, clearCredentials as clearOAuthCredentials, listOAuthProviders, loadCredentials as loadOAuthCredentials } from './oauth.js';
 import {
   loadKeyPool, addKey, addOAuthKey, removeKey, updateKey, reorderKeys,
@@ -115,6 +116,16 @@ function resolveModelTier(tierOrModel, provider, projectModels) {
   return { model: tierOrModel };
 }
 
+function getProviderRuntimeSelection({ provider, modelTier, keyResult, projectModels }) {
+  return resolveProviderRuntime({
+    provider,
+    modelTier,
+    keyResult,
+    projectModels,
+    resolveModelTier,
+  });
+}
+
 function detectProviderFromToken(token) {
   if (!token) return 'anthropic';
   const p = detectTokenProvider(token);
@@ -160,6 +171,7 @@ const pushSubscriptions = new Map(); // endpoint -> subscription
 // --- Configuration ---
 const PORT = process.env.TBC_PORT || 3100;
 const SERVE_STATIC = process.env.TBC_SERVE_STATIC !== 'false';
+const ALLOW_CUSTOM_PROVIDER = process.env.TBC_ALLOW_CUSTOM_PROVIDER === 'true';
 
 // Ensure TBC_HOME exists
 if (!fs.existsSync(TBC_HOME)) {
@@ -1839,10 +1851,15 @@ class ProjectRunner {
       providerHint = 'anthropic';
     }
 
-    // Resolve tier to concrete model + optional reasoning effort
-    const resolved = resolveModelTier(agentTierOrModel, providerHint, config.models);
-    const agentModel = resolved.model;
-    const reasoningEffort = resolved.reasoningEffort || null;
+    const runtimeSelection = getProviderRuntimeSelection({
+      provider: providerHint,
+      modelTier: agentTierOrModel,
+      keyResult,
+      projectModels: config.models,
+    });
+    const agentModel = runtimeSelection.selectedModel;
+    const reasoningEffort = runtimeSelection.reasoningEffort || null;
+    const customConfig = runtimeSelection.customConfig || null;
 
     if (!resolvedToken) {
       log(`No API token configured for ${agent.name} (model: ${agentModel}). Skipping agent run. Add a key in Settings.`, this.id);
@@ -1862,7 +1879,7 @@ class ProjectRunner {
       TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
     };
 
-    const tierLabel = resolved.reasoningEffort ? `${agentModel} (${resolved.reasoningEffort})` : agentModel;
+    const tierLabel = runtimeSelection.reasoningEffort ? `${agentModel} (${runtimeSelection.reasoningEffort})` : agentModel;
     log(`Using API runner for ${agent.name} (model: ${tierLabel})`, this.id);
     this.currentAgentModel = tierLabel;
 
@@ -1873,6 +1890,7 @@ class ProjectRunner {
       token: resolvedToken,
       keyType: resolvedKeyType,
       provider: providerHint,
+      customConfig,
       reasoningEffort,
       cwd: this.path,
       timeoutMs: config.agentTimeoutMs || 0,
@@ -1883,12 +1901,16 @@ class ProjectRunner {
       onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),
       resolveNewToken: async () => {
         const newKey = await resolveKeyForProject(config, providerHint, oauthTokenGetter);
-        if (newKey?.provider && newKey.provider !== providerHint) {
-          // Provider changed — resolve model for new provider
-          // Ignore project model overrides (they're provider-specific)
-          const newResolved = resolveModelTier(agentTierOrModel, newKey.provider, null);
-          newKey.model = newResolved.model;
-          newKey.reasoningEffort = newResolved.reasoningEffort || null;
+        if (newKey?.provider) {
+          const newRuntimeSelection = getProviderRuntimeSelection({
+            provider: newKey.provider,
+            modelTier: agentTierOrModel,
+            keyResult: newKey,
+            projectModels: null,
+          });
+          newKey.model = newRuntimeSelection.selectedModel;
+          newKey.reasoningEffort = newRuntimeSelection.reasoningEffort || null;
+          newKey.customConfig = newRuntimeSelection.customConfig || null;
         }
         return newKey;
       },
@@ -2221,7 +2243,21 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/keys') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(getKeyPoolSafe()));
+    res.end(JSON.stringify({ ...getKeyPoolSafe(), allowCustomProvider: ALLOW_CUSTOM_PROVIDER }));
+    return;
+  }
+
+  const keyGetMatch = url.pathname.match(/^\/api\/keys\/([^/]+)$/);
+  if (req.method === 'GET' && keyGetMatch) {
+    if (!requireWrite(req, res)) return;
+    const key = getKeyPoolSafe().keys.find(k => k.id === keyGetMatch[1]);
+    if (!key) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Key not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ key }));
     return;
   }
 
@@ -2231,12 +2267,17 @@ const server = http.createServer(async (req, res) => {
     req.on('data', d => body += d);
     req.on('end', () => {
       try {
-        const { label, token, provider, type, authFile } = JSON.parse(body);
+        const { label, token, provider, type, authFile, customConfig } = JSON.parse(body);
+        if (provider === 'custom' && !ALLOW_CUSTOM_PROVIDER) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Custom provider is disabled on this instance (set TBC_ALLOW_CUSTOM_PROVIDER=true to enable)' }));
+          return;
+        }
         if (type === 'oauth' && authFile) {
           // OAuth credential (browser sign-in) — no token, has authFile
           addOAuthKey({ label, provider, authFile });
         } else if (token) {
-          addKey({ label, token, provider, type });
+          addKey({ label, token, provider, type, customConfig });
         } else {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Token is required (or authFile for OAuth)' }));
@@ -2261,6 +2302,11 @@ const server = http.createServer(async (req, res) => {
     req.on('end', () => {
       try {
         const patch = JSON.parse(body);
+        if (patch.customConfig && !ALLOW_CUSTOM_PROVIDER) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Custom provider is disabled on this instance' }));
+          return;
+        }
         const updated = updateKey(keysPutMatch[1], patch);
         if (!updated) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -2899,16 +2945,17 @@ const server = http.createServer(async (req, res) => {
       const keySelection = config.keySelection || null;
 
       // Determine effective provider from key selection
-      let detectedProvider = 'anthropic';
+      let detectedKey = null;
       if (keySelection?.keyId) {
-        const selectedKey = keyPool.keys.find(k => k.id === keySelection.keyId);
-        if (selectedKey) detectedProvider = selectedKey.provider;
+        detectedKey = keyPool.keys.find(k => k.id === keySelection.keyId) || null;
       }
-      if (detectedProvider === 'anthropic') {
-        // Fallback detection for global default
-        const firstKey = keyPool.keys.find(k => k.enabled);
-        if (firstKey) detectedProvider = firstKey.provider;
+      if (!detectedKey) {
+        detectedKey = keyPool.keys.find(k => k.enabled) || null;
       }
+      const detectedProvider = detectedKey?.provider || 'anthropic';
+      const detectedTiers = detectedProvider === 'custom' && detectedKey?.customConfig
+        ? buildCustomTierMap(detectedKey.customConfig)
+        : (MODEL_TIERS[detectedProvider] || {});
 
       // Build available models list per provider from pi-ai
       // Only show recent/relevant models, not the full historical catalog
@@ -2940,17 +2987,19 @@ const server = http.createServer(async (req, res) => {
           availableModels[provider] = entries;
         } catch { availableModels[provider] = []; }
       }
+      availableModels.custom = [];
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         config: safeConfig, raw, hasProjectToken,
         projectTokenPreview: projectToken ? maskToken(projectToken) : null,
         provider: detectedProvider,
-        tiers: MODEL_TIERS[detectedProvider] || {},
-        allTiers: MODEL_TIERS,
+        tiers: detectedTiers,
+        allTiers: detectedProvider === 'custom' ? { ...MODEL_TIERS, custom: detectedTiers } : MODEL_TIERS,
         availableModels,
         keyPool,
         keySelection,
+        allowCustomProvider: ALLOW_CUSTOM_PROVIDER,
       }));
       return;
     }
@@ -2962,7 +3011,7 @@ const server = http.createServer(async (req, res) => {
       req.on('data', c => body += c);
       req.on('end', () => {
         try {
-          const { keyId, fallback, token, provider: explicitProvider } = JSON.parse(body);
+          const { keyId, fallback, token, provider: explicitProvider, customConfig } = JSON.parse(body);
           const configPath = runner.configPath;
           const existing = fs.existsSync(configPath) ? yaml.load(fs.readFileSync(configPath, 'utf-8')) || {} : {};
 
@@ -2982,7 +3031,7 @@ const server = http.createServer(async (req, res) => {
               existing.setupToken = token;
               if (explicitProvider) existing.setupTokenProvider = explicitProvider;
               // Also add to global pool
-              const entry = addKey({ label: `${explicitProvider || 'API'} (from ${projectId})`, token, provider: explicitProvider });
+              const entry = addKey({ label: `${explicitProvider || 'API'} (from ${projectId})`, token, provider: explicitProvider, customConfig });
               existing.keySelection = { keyId: entry.id, fallback: true };
             } else {
               delete existing.setupToken;
@@ -3135,8 +3184,13 @@ const server = http.createServer(async (req, res) => {
 
         // Use the resolved key's actual provider for model resolution (not the hint)
         const actualProvider = keyResult?.provider || providerHintForSummary;
-        const resolved = resolveModelTier('xlow', actualProvider);
-        const model = resolved.model;
+        const runtimeSelection = getProviderRuntimeSelection({
+          provider: actualProvider,
+          modelTier: 'xlow',
+          keyResult,
+          projectModels: null,
+        });
+        const model = runtimeSelection.selectedModel;
 
         log(`Summarize report ${reportId}: provider=${actualProvider}, model=${model}`, runner.id);
 
@@ -3151,14 +3205,14 @@ const server = http.createServer(async (req, res) => {
         const prompt = `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}`;
 
         // Use pi-ai adapter for summarization (same auth logic as agent calls)
-        const { piModel } = resolveModel(model);
+        const { piModel } = resolveModel(model, actualProvider);
         const isOAuth = keyResult?.type === 'oauth';
         const summaryResponse = await callModel(
           piModel,
           'You are a helpful assistant. Return ONLY the summary, nothing else.',
           [buildUserMessage(prompt)],
           [], // no tools
-          { token, isOAuth, provider: actualProvider },
+          { token, isOAuth, provider: actualProvider, customConfig: runtimeSelection.customConfig || null },
         );
         const summary = summaryResponse.content?.trim() || null;
 
@@ -3586,7 +3640,12 @@ const server = http.createServer(async (req, res) => {
           // Resolve model from request's model tier (frontend sends it with each message)
           const modelTier = data.modelTier || 'high';
           const providerHint = keyResult.provider || detectProviderFromToken(keyResult.token);
-          const resolved = resolveModelTier(modelTier, providerHint, config.models);
+          const runtimeSelection = getProviderRuntimeSelection({
+            provider: providerHint,
+            modelTier,
+            keyResult,
+            projectModels: config.models,
+          });
 
           // Save user message once (before any retry/fallback)
           // Save user message with image references
@@ -3606,11 +3665,12 @@ const server = http.createServer(async (req, res) => {
             chatId,
             userMessage: data.message.trim(),
             images: data.images || [],
-            model: resolved.model,
+            model: runtimeSelection.selectedModel,
             token: keyResult.token,
             provider: providerHint,
+            customConfig: runtimeSelection.customConfig || null,
             res,
-            reasoningEffort: resolved.reasoningEffort || null,
+            reasoningEffort: runtimeSelection.reasoningEffort || null,
           };
 
           try {
@@ -3627,12 +3687,18 @@ const server = http.createServer(async (req, res) => {
               const fallbackKey = await resolveKeyForProject(config, null, oauthTokenGetter);
               if (fallbackKey?.token && fallbackKey.token !== keyResult.token) {
                 const fbProvider = fallbackKey.provider || detectProviderFromToken(fallbackKey.token);
-                const fbResolved = resolveModelTier(config.model || 'mid', fbProvider, null);
-                log(`Chat: falling back to key ${fallbackKey.keyId} (${fbProvider}), model → ${fbResolved.model}`, runner.id);
+                const fallbackSelection = getProviderRuntimeSelection({
+                  provider: fbProvider,
+                  modelTier,
+                  keyResult: fallbackKey,
+                  projectModels: null,
+                });
+                log(`Chat: falling back to key ${fallbackKey.keyId} (${fbProvider}), model → ${fallbackSelection.selectedModel}`, runner.id);
                 chatOpts.token = fallbackKey.token;
                 chatOpts.provider = fbProvider;
-                chatOpts.model = fbResolved.model;
-                chatOpts.reasoningEffort = fbResolved.reasoningEffort || null;
+                chatOpts.model = fallbackSelection.selectedModel;
+                chatOpts.reasoningEffort = fallbackSelection.reasoningEffort || null;
+                chatOpts.customConfig = fallbackSelection.customConfig || null;
                 await streamChatMessage(chatOpts);
               } else {
                 throw chatErr; // no fallback available

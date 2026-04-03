@@ -506,6 +506,7 @@ export async function runAgentWithAPI(opts) {
     token: initialToken,
     keyType = 'api',
     provider: initialProvider = null,
+    customConfig: initialCustomConfig = null,
     reasoningEffort: initialReasoningEffort,
     cwd,
     timeoutMs = 0,
@@ -520,11 +521,12 @@ export async function runAgentWithAPI(opts) {
   } = opts;
 
   const startTime = Date.now();
-  let { piModel } = resolveModel(rawModel);
+  let { piModel } = resolveModel(rawModel, initialProvider);
   let token = initialToken;
   let keyId = initialKeyId;
   let isOAuth = keyType === 'oauth';
   let keyProvider = initialProvider;
+  let customConfig = initialCustomConfig;
   let reasoningEffort = initialReasoningEffort;
 
   // Format tools for pi-ai
@@ -659,14 +661,14 @@ export async function runAgentWithAPI(opts) {
           // Pick a cheaper model for summarization if available
           let summaryModelName = rawModel;
           if (rawModel.includes('opus')) summaryModelName = rawModel.replace('opus', 'sonnet');
-          const { piModel: summaryPiModel } = resolveModel(summaryModelName);
+          const { piModel: summaryPiModel } = resolveModel(summaryModelName, keyProvider);
 
           const summaryResponse = await callModel(
             summaryPiModel,
             'Summarize this agent conversation history concisely. Focus on: what tasks were attempted, what succeeded/failed, what files were modified, current state, and any important decisions. Be specific about file paths, issue numbers, and error messages. Output only the summary.',
             [buildUserMessage(compactText.slice(0, 80000))],
             [], // no tools for summarization
-            { token, isOAuth, provider: keyProvider, signal: abortController.signal },
+            { token, isOAuth, provider: keyProvider, customConfig, signal: abortController.signal },
           );
 
           totalUsage.inputTokens += summaryResponse.usage.inputTokens;
@@ -701,7 +703,7 @@ export async function runAgentWithAPI(opts) {
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
           response = await callModel(piModel, systemPrompt, messages, tools, {
-            token, isOAuth, provider: keyProvider, reasoningEffort, signal: abortController.signal,
+            token, isOAuth, provider: keyProvider, customConfig, reasoningEffort, signal: abortController.signal,
           });
           break; // success
         } catch (err) {
@@ -729,9 +731,10 @@ export async function runAgentWithAPI(opts) {
                   token = newKey.token;
                   keyId = newKey.keyId;
                   isOAuth = newKey.type === 'oauth';
+                  customConfig = newKey.customConfig || null;
                   // If the fallback key resolved a different model (provider change), update
                   if (newKey.model) {
-                    const { piModel: newPiModel } = resolveModel(newKey.model);
+                    const { piModel: newPiModel } = resolveModel(newKey.model, newKey.provider);
                     piModel = newPiModel;
                     if (newKey.reasoningEffort !== undefined) reasoningEffort = newKey.reasoningEffort;
                     keyProvider = newKey.provider;
@@ -795,13 +798,13 @@ export async function runAgentWithAPI(opts) {
               let summaryModelName = rawModel;
               if (rawModel.includes('opus')) summaryModelName = rawModel.replace('opus', 'sonnet');
               if (rawModel.includes('codex')) summaryModelName = rawModel; // codex has no cheaper variant
-              const { piModel: summaryPiModel } = resolveModel(summaryModelName);
+              const { piModel: summaryPiModel } = resolveModel(summaryModelName, keyProvider);
               const summaryResponse = await callModel(
                 summaryPiModel,
                 'Summarize this agent conversation concisely. Focus on: tasks attempted, results, files modified, current state. Be specific. Output only the summary.',
                 [buildUserMessage(compactText.slice(0, 40000))], // smaller slice for emergency
                 [],
-                { token, isOAuth, provider: keyProvider, signal: abortController.signal },
+                { token, isOAuth, provider: keyProvider, customConfig, signal: abortController.signal },
               );
               totalUsage.inputTokens += summaryResponse.usage.inputTokens;
               totalUsage.outputTokens += summaryResponse.usage.outputTokens;

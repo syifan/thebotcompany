@@ -5,6 +5,7 @@ export const PROVIDERS = [
   { id: 'anthropic', label: 'Anthropic', methods: ['api_key', 'oauth', 'setup_token'] },
   { id: 'openai', label: 'OpenAI', methods: ['api_key', 'oauth'], oauthProviderId: 'openai-codex' },
   { id: 'google', label: 'Google (Gemini)', methods: ['api_key', 'oauth'] },
+  { id: 'custom', label: 'Custom', methods: ['api_key'] },
   { id: 'github-copilot', label: 'GitHub Copilot', methods: ['oauth'] },
   { id: 'minimax', label: 'MiniMax', methods: ['api_key'] },
   { id: 'amazon-bedrock', label: 'Amazon Bedrock', methods: ['api_key'] },
@@ -23,6 +24,7 @@ export const PROVIDER_COLORS = {
   anthropic: 'text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30',
   openai: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30',
   google: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30',
+  custom: 'text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-900/30',
   minimax: 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30',
   'openai-codex': 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30',
   'github-copilot': 'text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800/50',
@@ -45,10 +47,11 @@ export function ProviderBadge({ provider }) {
  * @param {(provider: { id: string, label: string, methods: string[] }) => void} props.onSelect
  * @param {string[]} [props.filterMethods] - Only show providers that support these methods (e.g., ['oauth'])
  */
-export default function ProviderSelector({ onSelect, filterMethods }) {
-  const filtered = filterMethods
+export default function ProviderSelector({ onSelect, filterMethods, exclude }) {
+  let filtered = filterMethods
     ? PROVIDERS.filter(p => filterMethods.some(m => p.methods.includes(m)))
     : PROVIDERS
+  if (exclude) filtered = filtered.filter(p => !exclude.includes(p.id))
 
   return (
     <div className="grid grid-cols-2 gap-1.5">

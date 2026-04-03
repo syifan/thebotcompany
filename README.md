@@ -60,6 +60,38 @@ The dashboard provides:
 
 The dashboard has read-only mode by default. Enter the password (set during first-run setup) via the login button to enable write operations (pause, resume, config changes, etc.).
 
+## Security
+
+### Authentication & Authorization
+
+- **Password-protected writes** — All mutating API endpoints require authentication via `TBC_PASSWORD`. Read-only access (viewing projects, logs, reports) does not require auth.
+- **CORS** — API only accepts requests from the dashboard origin (`localhost:<port>`).
+
+### Custom Provider
+
+The custom provider feature allows connecting to any OpenAI-compatible or Anthropic-compatible API endpoint. This introduces a server-side request forwarding (SSRF) surface since TBC's server makes HTTP requests to the user-specified `baseUrl`.
+
+**Built-in protections:**
+
+- **Private IP blocklist** — `baseUrl` is validated and rejected if it points to:
+  - Localhost (`127.0.0.1`, `::1`, `localhost`)
+  - RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
+  - Link-local addresses (`169.254.0.0/16`)
+  - Cloud metadata endpoints (`169.254.169.254`, `metadata.google.internal`)
+- **Protocol restriction** — Only `http://` and `https://` URLs are accepted.
+- **Auth-gated** — Creating or editing custom credentials requires write authentication.
+
+The custom provider is **disabled by default**. To enable it:
+
+```bash
+# In your .env or environment
+TBC_ALLOW_CUSTOM_PROVIDER=true
+```
+
+When disabled, custom credential creation is blocked at the API level and the option is hidden from the UI.
+
+> **Note:** The hostname blocklist does not protect against DNS rebinding attacks (where an external hostname resolves to a private IP). For maximum security on public instances, use `TBC_ALLOW_CUSTOM_PROVIDER=false`.
+
 ## Development
 
 ```bash

@@ -13,6 +13,7 @@ import { streamSimple } from '@mariozechner/pi-ai';
 import {
   resolveModel,
   formatTools,
+  callModel,
   buildUserMessage,
   buildToolResultMessages,
 } from './providers/index.js';
@@ -284,11 +285,12 @@ function getChatToolDefinitions() {
  * @param {string} opts.model        - Model name (e.g. 'claude-sonnet-4-6')
  * @param {string} opts.token        - API key/token
  * @param {string} opts.provider     - Provider hint
+ * @param {object|null} [opts.customConfig] - Custom provider config
  * @param {object} opts.res          - HTTP response for SSE
  * @param {string} [opts.reasoningEffort] - Optional reasoning effort
  */
 export async function streamChatMessage(opts) {
-  const { agentDir, projectPath, chatId, userMessage, images, model, token, provider, res, reasoningEffort } = opts;
+  const { agentDir, projectPath, chatId, userMessage, images = [], model, token, provider, customConfig = null, res, reasoningEffort } = opts;
 
   // Initialize active stream tracking
   const stream = { text: '', toolCalls: [], clients: new Set() };
@@ -323,7 +325,7 @@ export async function streamChatMessage(opts) {
   }
 
   // Build pi-ai context
-  const { piModel } = resolveModel(model);
+  const { piModel } = resolveModel(model, provider);
   const canonicalTools = getChatToolDefinitions();
   const piTools = formatTools(canonicalTools);
 
@@ -405,57 +407,79 @@ export async function streamChatMessage(opts) {
         tools: piTools,
       };
 
-      // Stream the response
-      const eventStream = streamSimple(piModel, context, piOpts);
       let assistantText = '';
       let toolCalls = [];
       let finalMessage = null;
+      if (provider === 'custom') {
+        const response = await callModel(piModel, systemPrompt, context.messages, context.tools, {
+          token,
+          provider,
+          customConfig,
+          reasoningEffort,
+        });
+        assistantText = response.content || '';
+        finalMessage = response._piMessage || null;
+        for (let i = 0; i < assistantText.length; i += 80) {
+          const delta = assistantText.slice(i, i + 80);
+          stream.text += delta;
+          sseWrite({ type: 'text', content: delta });
+        }
+        toolCalls = response.toolCalls || [];
+        for (const tc of toolCalls) {
+          stream.toolCalls.push(tc);
+          sseWrite({
+            type: 'tool_call',
+            id: tc.id,
+            name: tc.name,
+            input: tc.input,
+          });
+        }
+      } else {
+        const eventStream = streamSimple(piModel, context, piOpts);
+        for await (const event of eventStream) {
+          switch (event.type) {
+            case 'text_delta':
+              assistantText += event.delta;
+              stream.text += event.delta;
+              sseWrite({ type: 'text', content: event.delta });
+              break;
 
-      for await (const event of eventStream) {
-        switch (event.type) {
-          case 'text_delta':
-            assistantText += event.delta;
-            stream.text += event.delta;
-            sseWrite({ type: 'text', content: event.delta });
-            break;
+            case 'toolcall_end':
+              const tc = {
+                id: event.toolCall.id,
+                name: event.toolCall.name,
+                input: event.toolCall.arguments,
+              };
+              toolCalls.push(tc);
+              stream.toolCalls.push(tc);
+              sseWrite({
+                type: 'tool_call',
+                id: tc.id,
+                name: tc.name,
+                input: tc.input,
+              });
+              break;
 
-          case 'toolcall_end':
-            const tc = {
-              id: event.toolCall.id,
-              name: event.toolCall.name,
-              input: event.toolCall.arguments,
-            };
-            toolCalls.push(tc);
-            stream.toolCalls.push(tc);
-            sseWrite({
-              type: 'tool_call',
-              id: tc.id,
-              name: tc.name,
-              input: tc.input,
-            });
-            break;
+            case 'done':
+              finalMessage = event.message;
+              break;
 
-          case 'done':
-            finalMessage = event.message;
-            break;
-
-          case 'error':
-            const errMsg = event.error?.errorMessage || 'Stream error';
-            console.error(`[Chat] Stream error (session ${chatId}): ${errMsg}`);
-            // Throw on rate-limit errors so caller can retry with fallback key
-            if (/rate.limit|usage.limit|quota|429/i.test(errMsg)) {
-              throw new Error(errMsg);
-            }
-            // Save partial progress before stopping
-            if (fullAssistantText || assistantText) {
-              saveMessage(agentDir, chatId, 'assistant',
-                (fullAssistantText + assistantText).trim() + `\n\n⚠️ Error: ${errMsg}`,
-                allToolCalls.length > 0 ? allToolCalls : null);
-            }
-            sseWrite({ type: 'error', content: errMsg });
-            sseWrite({ type: 'done' });
-            activeStreams.delete(chatId);
-            return;
+            case 'error':
+              const errMsg = event.error?.errorMessage || 'Stream error';
+              console.error(`[Chat] Stream error (session ${chatId}): ${errMsg}`);
+              if (/rate.limit|usage.limit|quota|429/i.test(errMsg)) {
+                throw new Error(errMsg);
+              }
+              if (fullAssistantText || assistantText) {
+                saveMessage(agentDir, chatId, 'assistant',
+                  (fullAssistantText + assistantText).trim() + `\n\n⚠️ Error: ${errMsg}`,
+                  allToolCalls.length > 0 ? allToolCalls : null);
+              }
+              sseWrite({ type: 'error', content: errMsg });
+              sseWrite({ type: 'done' });
+              activeStreams.delete(chatId);
+              return;
+          }
         }
       }
 
