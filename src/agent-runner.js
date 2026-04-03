@@ -584,6 +584,9 @@ export async function runAgentWithAPI(opts) {
     }, timeoutMs);
   }
 
+  // Track all key IDs used during this run
+  const keysUsed = initialKeyId ? [initialKeyId] : [];
+
   // Helper to build result object
   function makeResult(success, resultText, extra = {}) {
     return {
@@ -592,6 +595,8 @@ export async function runAgentWithAPI(opts) {
       usage: totalUsage,
       cost: totalCost,
       durationMs: Date.now() - startTime,
+      keyId,
+      keysUsed,
       ...extra,
     };
   }
@@ -730,6 +735,7 @@ export async function runAgentWithAPI(opts) {
                 if (newKey?.token && newKey.token !== token) {
                   token = newKey.token;
                   keyId = newKey.keyId;
+                  if (keyId && !keysUsed.includes(keyId)) keysUsed.push(keyId);
                   isOAuth = newKey.type === 'oauth';
                   customConfig = newKey.customConfig || null;
                   // If the fallback key resolved a different model (provider change), update

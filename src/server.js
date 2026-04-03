@@ -327,7 +327,7 @@ class ProjectRunner {
     this.completionMessage = null;
     this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
     this.currentAgentLog = [];
-    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
+    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
     this._repo = null;
   }
 
@@ -858,6 +858,7 @@ class ProjectRunner {
       epochCount: this.epochCount,
       currentAgent: this.currentAgent,
       currentAgentModel: this.currentAgentModel,
+      currentAgentKeyId: this.currentAgentKeyId || null,
       currentAgentRuntime: this.currentAgentStartTime
         ? Math.floor((Date.now() - this.currentAgentStartTime) / 1000)
         : null,
@@ -903,7 +904,7 @@ class ProjectRunner {
       this.currentAgent = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
     }
     this.isPaused = true;
     this.pauseReason = 'Bootstrapping';
@@ -1763,12 +1764,14 @@ class ProjectRunner {
         try { db.exec('ALTER TABLE reports ADD COLUMN success INTEGER'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN model TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN timed_out INTEGER'); } catch {}
-        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
+        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           this.cycleCount, agent.name, reportBody, new Date().toISOString(),
           cost ?? null, durationMs ?? null,
           usage?.inputTokens ?? null, usage?.outputTokens ?? null, usage?.cacheReadTokens ?? null,
-          success ? 1 : 0, this.currentAgentModel ?? null, killedByTimeout ? 1 : 0
+          success ? 1 : 0, this.currentAgentModel ?? null, killedByTimeout ? 1 : 0,
+          this.currentAgentKeyId ?? null
         );
         const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
         db.close();
@@ -1788,13 +1791,14 @@ class ProjectRunner {
     this.currentAgentStartTime = null;
     this.currentAgentLog = [];
     broadcastStatusUpdate(this.id);
-    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
+    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
 
     return { success, resultText, killedByTimeout: !!killedByTimeout };
   }
 
   async runAgent(agent, config, mode = null, task = null, visibility = null) {
     this.currentAgent = agent.name;
+    this.currentAgentKeyId = null;
     this.currentAgentStartTime = Date.now();
     broadcastStatusUpdate(this.id);
     const runAbortController = new AbortController();
@@ -1819,7 +1823,7 @@ class ProjectRunner {
       this.currentAgentProcess = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
       return { success: false, resultText: '' };
     }
 
@@ -1833,6 +1837,7 @@ class ProjectRunner {
     let resolvedToken = keyResult?.token || null;
     let resolvedKeyId = keyResult?.keyId || null;
     const resolvedKeyType = keyResult?.type || 'api';
+    this.currentAgentKeyId = resolvedKeyId;
 
     // Fallback: legacy setupToken (for un-migrated configs)
     if (!resolvedToken && config.setupToken) {
@@ -1867,7 +1872,7 @@ class ProjectRunner {
       this.currentAgentProcess = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
       broadcastStatusUpdate(this.id);
       return { error: 'no_token', message: 'No API key configured. Add one in Settings > Credentials.' };
     }
@@ -1912,6 +1917,7 @@ class ProjectRunner {
           newKey.reasoningEffort = newRuntimeSelection.reasoningEffort || null;
           newKey.customConfig = newRuntimeSelection.customConfig || null;
         }
+        if (newKey?.keyId) this.currentAgentKeyId = newKey.keyId;
         return newKey;
       },
       log: (msg) => {
@@ -2835,10 +2841,18 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && subPath === 'agent-log') {
       const running = runner.currentAgent !== null;
       res.writeHead(200, { 'Content-Type': 'application/json' });
+      // Resolve key label from pool
+      let keyLabel = null;
+      if (runner.currentAgentKeyId) {
+        const pool = getKeyPoolSafe();
+        keyLabel = (pool.keys || []).find(k => k.id === runner.currentAgentKeyId)?.label || null;
+      }
       res.end(JSON.stringify({
         running,
         agent: runner.currentAgent,
         model: runner.currentAgentModel,
+        keyId: runner.currentAgentKeyId || null,
+        keyLabel,
         startTime: runner.currentAgentStartTime,
         cost: runner.currentAgentCost || 0,
         usage: runner.currentAgentUsage || null,
@@ -3147,6 +3161,12 @@ const server = http.createServer(async (req, res) => {
         const reports = db.prepare(query).all(...params);
         const total = db.prepare(`SELECT COUNT(*) as count FROM reports${agent ? ' WHERE agent = ?' : ''}`).get(...(agent ? [agent] : [])).count;
         db.close();
+        // Enrich reports with key labels from key pool
+        const keyPool = getKeyPoolSafe();
+        const keyMap = new Map((keyPool.keys || []).map(k => [k.id, k.label]));
+        for (const r of reports) {
+          if (r.key_id) r.key_label = keyMap.get(r.key_id) || null;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ reports, total, page, perPage }));
       } catch (e) {

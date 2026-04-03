@@ -86,6 +86,7 @@ export function ReportCardHeader({ report }) {
       {(report.model || report.input_tokens > 0 || report.output_tokens > 0) && (
         <div className="flex items-center gap-1.5 pl-7 mt-0.5 flex-wrap">
           {report.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shrink-0">{report.model}</Badge>}
+          {report.key_id && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0 text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</Badge>}
           {(report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
             <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
               {report.input_tokens > 0 && <span>{formatTokens(report.input_tokens)} new</span>}
@@ -135,6 +136,7 @@ export default function AgentReportsCard({
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                     <LiveDuration startTime={liveAgentLog.startTime} />
                     {liveAgentLog.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">{liveAgentLog.model}</Badge>}
+                    {liveAgentLog.keyId && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 text-neutral-400" title={liveAgentLog.keyId}>🔑 {liveAgentLog.keyLabel || liveAgentLog.keyId.slice(0, 8)}</Badge>}
                   </span>
                 </div>
                 <div className="text-xs text-neutral-500 dark:text-neutral-400 break-words leading-relaxed pl-7 italic">
