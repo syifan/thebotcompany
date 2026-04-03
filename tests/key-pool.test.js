@@ -240,4 +240,54 @@ describe('Key Pool', () => {
       assert.strictEqual(detectTokenProvider(null), null);
     });
   });
+
+  describe('resolveKeyForProject — disabled/missing pinned key', () => {
+    it('returns null when pinned key is disabled and fallback is false', async () => {
+      const primary = addKey({ label: 'Primary', token: 'sk-ant-primary', provider: 'anthropic' });
+      addKey({ label: 'Backup', token: 'sk-ant-backup', provider: 'anthropic' });
+      updateKey(primary.id, { enabled: false });
+      const result = await resolveKeyForProject(
+        { keySelection: { keyId: primary.id, fallback: false } },
+        'anthropic',
+        null
+      );
+      assert.strictEqual(result, null);
+    });
+
+    it('falls back when pinned key is disabled and fallback is true', async () => {
+      const primary = addKey({ label: 'Primary', token: 'sk-ant-primary', provider: 'anthropic' });
+      const backup = addKey({ label: 'Backup', token: 'sk-ant-backup', provider: 'anthropic' });
+      updateKey(primary.id, { enabled: false });
+      const result = await resolveKeyForProject(
+        { keySelection: { keyId: primary.id, fallback: true } },
+        'anthropic',
+        null
+      );
+      assert.ok(result);
+      assert.strictEqual(result.keyId, backup.id);
+      assert.strictEqual(result.token, 'sk-ant-backup');
+    });
+
+    it('returns null when pinned key does not exist and fallback is false', async () => {
+      addKey({ label: 'Available', token: 'sk-ant-available', provider: 'anthropic' });
+      const result = await resolveKeyForProject(
+        { keySelection: { keyId: 'non-existent-id', fallback: false } },
+        'anthropic',
+        null
+      );
+      assert.strictEqual(result, null);
+    });
+
+    it('falls back when pinned key does not exist and fallback is true', async () => {
+      const available = addKey({ label: 'Available', token: 'sk-ant-available', provider: 'anthropic' });
+      const result = await resolveKeyForProject(
+        { keySelection: { keyId: 'non-existent-id', fallback: true } },
+        'anthropic',
+        null
+      );
+      assert.ok(result);
+      assert.strictEqual(result.keyId, available.id);
+      assert.strictEqual(result.token, 'sk-ant-available');
+    });
+  });
 });
