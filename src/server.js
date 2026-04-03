@@ -1424,6 +1424,7 @@ class ProjectRunner {
           // Execute schedule steps (delays + workers)
           if (schedule) {
             this.currentSchedule = schedule;
+            this.saveState(); // Persist schedule before execution so it survives reboot
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
@@ -1487,6 +1488,7 @@ class ProjectRunner {
           // Execute schedule steps (delays + workers)
           if (schedule) {
             this.completedAgents = [];
+            this.saveState(); // Persist schedule before execution so it survives reboot
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
@@ -1554,6 +1556,7 @@ class ProjectRunner {
           if (schedule) {
             this.currentSchedule = schedule;
             this.completedAgents = [];
+            this.saveState(); // Persist schedule before execution so it survives reboot
             const { total, failures } = await this.executeSchedule(schedule, config);
             cycleTotal += total;
             cycleFailures += failures;
