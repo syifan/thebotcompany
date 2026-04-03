@@ -7,9 +7,12 @@ Human-free software development with self-organizing AI agent teams.
 - **Human-free execution** — Agents plan, discuss, research, and implement autonomously across full development cycles
 - **Self-organizing teams** — AI managers (Athena, Ares, Apollo) plan, implement, and verify milestones without human intervention
 - **Multi-project** — Manage multiple repos from one central orchestrator with independent cycles
-- **Full observability** — Watch agents work through GitHub PRs and issues; every decision, discussion, and code change is visible
-- **Async human intervention** — Agents escalate via GitHub issues when they need human input; step in at your convenience
-- **Budget controls** — 24-hour rolling budget limiter with per-agent cost tracking
+- **Multi-provider** — Anthropic, OpenAI, Google, Groq, Mistral, xAI, Amazon Bedrock, Azure OpenAI, Cerebras, HuggingFace, MiniMax, OpenRouter, GitHub Copilot, Kimi Coding, and custom endpoints
+- **Key pool** — Multiple API keys with priority ordering, automatic cross-provider fallback, and rate limit cooldowns
+- **Full observability** — Every decision, discussion, and code change is visible through the dashboard and GitHub PRs
+- **Chat** — Talk to agents directly through the dashboard with streaming responses and image support
+- **Async human intervention** — Agents escalate via issues when they need human input; step in at your convenience
+- **Budget controls** — 24-hour rolling budget limiter with per-agent cost tracking and computed sleep intervals
 - **Unified dashboard** — Monitor all projects, agents, issues, and PRs in one place (mobile-friendly, dark mode, push notifications)
 
 ![TheBotCompany Dashboard](screenshot.png)
@@ -18,8 +21,8 @@ Human-free software development with self-organizing AI agent teams.
 ## Prerequisites
 
 - **Node.js** ≥ 20
-- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** (`claude`) — installed and authenticated
 - **[GitHub CLI](https://cli.github.com/)** (`gh`) — installed and authenticated
+- An API key from any supported provider (Anthropic, OpenAI, Google, etc.)
 
 ## Quick Start
 
@@ -31,7 +34,7 @@ npm install -g thebotcompany
 tbc start
 ```
 
-Add projects through the dashboard UI, then start the orchestrator.
+Add your API key in Settings, create a project through the dashboard UI, then start the orchestrator.
 
 ## CLI Reference
 
@@ -47,18 +50,67 @@ tbc logs [n]                # Show last n lines of logs (default 50)
 
 The dashboard provides:
 
-- **Project overview** — Status, phase, milestone progress, cycle count
-- **Agent reports** — Full history of agent outputs with markdown rendering
-- **Issue tracker** — SQLite-backed issues (agents communicate via issues, not GitHub issues for internal coordination)
-- **PR monitoring** — Live GitHub PR status
-- **Cost tracking** — Per-agent and per-project cost breakdown (last call, average, 24h, total)
-- **Controls** — Pause/resume, skip agent, bootstrap, configure settings
+- **Project overview** — Status, phase, milestone progress, epoch/cycle count
+- **Agent reports** — Full history of agent outputs with markdown rendering and auto-summarization
+- **Agent issues** — SQLite-backed issue tracker for agent-to-agent coordination
+- **Human intervention** — Separate panel for human↔agent escalation issues
+- **Chat** — Direct conversation with agents per project, with streaming and image uploads
+- **PR monitoring** — Live GitHub PR status per project
+- **Cost tracking** — Per-agent and per-project cost breakdown (last cycle, average, 24h, total)
+- **Controls** — Pause/resume, skip sleep, kill run/cycle/epoch, bootstrap
+- **Key pool management** — Add/remove/reorder API keys, OAuth sign-in, per-project key selection with fallback control
+- **Model tier overrides** — Customize which model runs at each tier (high/mid/low/xlow) per project
 - **Notifications** — Browser push notifications for milestones, verifications, and errors
-- **Settings** — Theme (light/dark/system), auth token management, notification preferences
+- **Settings** — Theme (light/dark/system), credential management, notification preferences
 
 ### Authentication
 
 The dashboard has read-only mode by default. Enter the password (set during first-run setup) via the login button to enable write operations (pause, resume, config changes, etc.).
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TBC_PASSWORD` | *(set on first run)* | Password for write access to the dashboard |
+| `TBC_PORT` | `3100` | Server port |
+| `TBC_HOME` | `~/.thebotcompany` | Data directory (keys, DB, logs) |
+| `TBC_SERVE_STATIC` | `true` | Serve the built dashboard frontend |
+| `TBC_ALLOW_CUSTOM_PROVIDER` | `false` | Enable custom provider support (see [Security](#custom-provider)) |
+
+### API Keys
+
+API keys can be added through the dashboard Settings panel. Alternatively, set environment variables for auto-detection on first run:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...
+```
+
+The key pool supports multiple keys per provider with automatic fallback when a key hits rate limits.
+
+### Supported Providers
+
+| Provider | Auth Methods |
+|----------|-------------|
+| Anthropic | API key, OAuth |
+| OpenAI | API key, OAuth |
+| Google (Gemini) | API key, OAuth |
+| GitHub Copilot | OAuth |
+| Amazon Bedrock | API key |
+| Azure OpenAI | API key |
+| Cerebras | API key |
+| Google Vertex | API key |
+| Groq | API key |
+| Hugging Face | API key |
+| Kimi Coding | API key |
+| MiniMax | API key |
+| Mistral | API key |
+| OpenRouter | API key |
+| xAI | API key |
+| Custom | API key (OpenAI or Anthropic compatible) |
 
 ## Security
 
@@ -90,7 +142,7 @@ TBC_ALLOW_CUSTOM_PROVIDER=true
 
 When disabled, custom credential creation is blocked at the API level and the option is hidden from the UI.
 
-> **Note:** The hostname blocklist does not protect against DNS rebinding attacks (where an external hostname resolves to a private IP). For maximum security on public instances, use `TBC_ALLOW_CUSTOM_PROVIDER=false`.
+> **Note:** The hostname blocklist does not protect against DNS rebinding attacks (where an external hostname resolves to a private IP). For maximum security on shared instances, keep `TBC_ALLOW_CUSTOM_PROVIDER` disabled (the default).
 
 ## Development
 
@@ -112,6 +164,9 @@ cd monitor && npm run dev         # Dashboard only (proxies API to :3100)
 
 # Build dashboard for production
 cd monitor && npm run build
+
+# Run tests
+npm test
 ```
 
 ## License
