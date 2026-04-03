@@ -136,6 +136,7 @@ export default function AgentReportsCard({
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                     <LiveDuration startTime={liveAgentLog.startTime} />
                     {liveAgentLog.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">{liveAgentLog.model}</Badge>}
+                    {liveAgentLog.keyId && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 text-neutral-400" title={liveAgentLog.keyId}>🔑 {liveAgentLog.keyLabel || liveAgentLog.keyId.slice(0, 8)}</Badge>}
                   </span>
                 </div>
                 <div className="text-xs text-neutral-500 dark:text-neutral-400 break-words leading-relaxed pl-7 italic">

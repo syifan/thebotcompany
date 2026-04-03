@@ -2841,10 +2841,18 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && subPath === 'agent-log') {
       const running = runner.currentAgent !== null;
       res.writeHead(200, { 'Content-Type': 'application/json' });
+      // Resolve key label from pool
+      let keyLabel = null;
+      if (runner.currentAgentKeyId) {
+        const pool = getKeyPoolSafe();
+        keyLabel = (pool.keys || []).find(k => k.id === runner.currentAgentKeyId)?.label || null;
+      }
       res.end(JSON.stringify({
         running,
         agent: runner.currentAgent,
         model: runner.currentAgentModel,
+        keyId: runner.currentAgentKeyId || null,
+        keyLabel,
         startTime: runner.currentAgentStartTime,
         cost: runner.currentAgentCost || 0,
         usage: runner.currentAgentUsage || null,
