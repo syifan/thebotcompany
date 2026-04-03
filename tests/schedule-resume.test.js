@@ -50,6 +50,20 @@ describe('Schedule resume after reboot', () => {
       // Must still check for currentSchedule
       assert.ok(condition.includes('currentSchedule'), 'Resume condition must check currentSchedule');
     });
+
+    it('cycle-start guard should not wipe schedule when no agents completed', () => {
+      // There's a second resume check at cycle start that gates whether to
+      // increment cycle count and clear state. It must also not require
+      // completedAgents.length > 0.
+      const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'server.js'), 'utf-8');
+      const match = src.match(/const resuming\s*=\s*([^;]+);/);
+      assert.ok(match, 'Could not find cycle-start resuming check in server.js');
+      const expr = match[1].trim();
+      assert.ok(
+        !expr.includes('completedAgents.length > 0'),
+        `Cycle-start resuming check should not require completedAgents.length > 0, got: "${expr}"`
+      );
+    });
   });
 
   describe('executeSchedule skips completed agents', () => {

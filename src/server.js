@@ -1332,11 +1332,10 @@ class ProjectRunner {
       const { managers, workers } = this.loadAgents();
 
       // Start new cycle — preserve schedule state if resuming from reboot
-      const resuming = this.currentSchedule && this.completedAgents.length > 0;
+      const resuming = !!this.currentSchedule;
       if (!resuming) {
         this.cycleCount++;
         this.completedAgents = [];
-        this.currentSchedule = null;
         this.saveState();
       }
       log(`===== CYCLE ${this.cycleCount} (phase: ${this.phase})${resuming ? ' [RESUMING]' : ''} =====`, this.id);
