@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setupMocks, PROJECT_REPO } from './helpers.js'
+import { setupMocks, PROJECT_REPO, PROJECT_ID } from './helpers.js'
 
 /**
  * Bug: When a project is pinned to a disabled API key, the Project Settings
@@ -45,8 +45,13 @@ test.describe('Project pinned to disabled key', () => {
       route.fulfill({ json: { keys: [DISABLED_KEY, ENABLED_KEY], allowCustomProvider: false } })
     )
 
-    // Mock project config: pinned to the disabled key with fallback=false
+    // Mock project routes not covered by setupMocks
     const projBase = `**/api/projects/${PROJECT_REPO}`
+    await page.route(`${projBase}/chats`, route =>
+      route.fulfill({ json: { sessions: [] } })
+    )
+
+    // Mock project config: pinned to the disabled key with fallback=false
     await page.route(`${projBase}/config`, route =>
       route.fulfill({
         json: {
@@ -61,19 +66,21 @@ test.describe('Project pinned to disabled key', () => {
       })
     )
 
-    await page.goto('/')
+    await page.goto(`/github.com/${PROJECT_ID}`)
     await page.waitForLoadState('networkidle')
 
     // Open project settings
     const settingsButton = page.locator('button[title="Project Settings"]')
-    await expect(settingsButton).toBeVisible({ timeout: 10000 })
+    await settingsButton.waitFor({ timeout: 10000 })
     await settingsButton.click()
 
-    // The dropdown should NOT show "Use global default" — it should indicate the key is disabled
-    const dropdown = page.locator('select').filter({ hasText: 'Use global default' })
-    // The select value should not silently show "Use global default" when pinned to a disabled key
+    // Wait for panel to open (desktop portal)
+    const panelHeading = page.getByRole('heading', { name: 'Project Settings' })
+    await expect(panelHeading).toBeVisible({ timeout: 5000 })
+
     // There should be a warning visible about the disabled key
-    const warning = page.getByText(/disabled|unavailable|invalid/i)
+    // Use .last() to get the desktop portal copy (mobile overlay is first but hidden)
+    const warning = page.getByText('Selected key is disabled').last()
     await expect(warning).toBeVisible({ timeout: 5000 })
   })
 
@@ -85,6 +92,9 @@ test.describe('Project pinned to disabled key', () => {
     )
 
     const projBase = `**/api/projects/${PROJECT_REPO}`
+    await page.route(`${projBase}/chats`, route =>
+      route.fulfill({ json: { sessions: [] } })
+    )
     await page.route(`${projBase}/config`, route =>
       route.fulfill({
         json: {
@@ -105,15 +115,15 @@ test.describe('Project pinned to disabled key', () => {
       })
     )
 
-    await page.goto('/')
+    await page.goto(`/github.com/${PROJECT_ID}`)
     await page.waitForLoadState('networkidle')
 
     const settingsButton = page.locator('button[title="Project Settings"]')
-    await expect(settingsButton).toBeVisible({ timeout: 10000 })
+    await settingsButton.waitFor({ timeout: 10000 })
     await settingsButton.click()
 
     // Model overrides should NOT be visible when pinned to a disabled key
-    const modelOverridesHeading = page.getByText('Model Overrides')
+    const modelOverridesHeading = page.getByRole('heading', { name: 'Model Overrides' })
     const highTier = page.getByText('HIGH')
 
     // Either the Model Overrides section should be hidden, or it should show the
@@ -130,6 +140,9 @@ test.describe('Project pinned to disabled key', () => {
     )
 
     const projBase = `**/api/projects/${PROJECT_REPO}`
+    await page.route(`${projBase}/chats`, route =>
+      route.fulfill({ json: { sessions: [] } })
+    )
     await page.route(`${projBase}/config`, route =>
       route.fulfill({
         json: {
@@ -144,16 +157,18 @@ test.describe('Project pinned to disabled key', () => {
       })
     )
 
-    await page.goto('/')
+    await page.goto(`/github.com/${PROJECT_ID}`)
     await page.waitForLoadState('networkidle')
 
     const settingsButton = page.locator('button[title="Project Settings"]')
-    await expect(settingsButton).toBeVisible({ timeout: 10000 })
+    await settingsButton.waitFor({ timeout: 10000 })
     await settingsButton.click()
 
-    // The select should show the disabled key is selected (with a warning),
-    // not silently show "Use global default"
-    const select = page.locator('select').first()
+    // Wait for panel to open
+    await expect(page.getByRole('heading', { name: 'Project Settings' })).toBeVisible({ timeout: 5000 })
+
+    // Find the select that has the DisabledKey option (use .last() for desktop portal)
+    const select = page.locator('select').filter({ has: page.locator('option', { hasText: 'DisabledKey' }) }).last()
     await expect(select).toBeVisible({ timeout: 5000 })
 
     // The selected option text should reference the disabled key, not "Use global default"
