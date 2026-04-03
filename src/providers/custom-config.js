@@ -1,4 +1,21 @@
-export function normalizeBaseUrl(baseUrl) {
+function isPrivateHostname(hostname) {
+  // Localhost variants
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]') return true;
+  // Cloud metadata endpoints
+  if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return true;
+  // RFC1918 private ranges
+  const parts = hostname.split('.').map(Number);
+  if (parts.length === 4 && parts.every(p => p >= 0 && p <= 255)) {
+    if (parts[0] === 10) return true; // 10.0.0.0/8
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12
+    if (parts[0] === 192 && parts[1] === 168) return true; // 192.168.0.0/16
+    if (parts[0] === 169 && parts[1] === 254) return true; // link-local
+    if (parts[0] === 0) return true; // 0.0.0.0
+  }
+  return false;
+}
+
+export function normalizeBaseUrl(baseUrl, { allowPrivate = false } = {}) {
   const value = String(baseUrl || '').trim();
   if (!value) throw new Error('customConfig.baseUrl is required');
   let parsed;
@@ -9,6 +26,9 @@ export function normalizeBaseUrl(baseUrl) {
   }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error('customConfig.baseUrl must use http or https');
+  }
+  if (!allowPrivate && isPrivateHostname(parsed.hostname)) {
+    throw new Error('customConfig.baseUrl must not point to private/internal addresses');
   }
   return parsed.toString().replace(/\/$/, '');
 }

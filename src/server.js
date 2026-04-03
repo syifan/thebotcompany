@@ -171,6 +171,7 @@ const pushSubscriptions = new Map(); // endpoint -> subscription
 // --- Configuration ---
 const PORT = process.env.TBC_PORT || 3100;
 const SERVE_STATIC = process.env.TBC_SERVE_STATIC !== 'false';
+const ALLOW_CUSTOM_PROVIDER = process.env.TBC_ALLOW_CUSTOM_PROVIDER !== 'false';
 
 // Ensure TBC_HOME exists
 if (!fs.existsSync(TBC_HOME)) {
@@ -2242,12 +2243,13 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && url.pathname === '/api/keys') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(getKeyPoolSafe()));
+    res.end(JSON.stringify({ ...getKeyPoolSafe(), allowCustomProvider: ALLOW_CUSTOM_PROVIDER }));
     return;
   }
 
   const keyGetMatch = url.pathname.match(/^\/api\/keys\/([^/]+)$/);
   if (req.method === 'GET' && keyGetMatch) {
+    if (!requireWrite(req, res)) return;
     const key = getKeyPoolSafe().keys.find(k => k.id === keyGetMatch[1]);
     if (!key) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -2266,6 +2268,11 @@ const server = http.createServer(async (req, res) => {
     req.on('end', () => {
       try {
         const { label, token, provider, type, authFile, customConfig } = JSON.parse(body);
+        if (provider === 'custom' && !ALLOW_CUSTOM_PROVIDER) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Custom provider is disabled on this instance (set TBC_ALLOW_CUSTOM_PROVIDER=true to enable)' }));
+          return;
+        }
         if (type === 'oauth' && authFile) {
           // OAuth credential (browser sign-in) — no token, has authFile
           addOAuthKey({ label, provider, authFile });
@@ -2295,6 +2302,11 @@ const server = http.createServer(async (req, res) => {
     req.on('end', () => {
       try {
         const patch = JSON.parse(body);
+        if (patch.customConfig && !ALLOW_CUSTOM_PROVIDER) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Custom provider is disabled on this instance' }));
+          return;
+        }
         const updated = updateKey(keysPutMatch[1], patch);
         if (!updated) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -2987,6 +2999,7 @@ const server = http.createServer(async (req, res) => {
         availableModels,
         keyPool,
         keySelection,
+        allowCustomProvider: ALLOW_CUSTOM_PROVIDER,
       }));
       return;
     }

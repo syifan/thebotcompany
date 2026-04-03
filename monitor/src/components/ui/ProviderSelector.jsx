@@ -47,10 +47,11 @@ export function ProviderBadge({ provider }) {
  * @param {(provider: { id: string, label: string, methods: string[] }) => void} props.onSelect
  * @param {string[]} [props.filterMethods] - Only show providers that support these methods (e.g., ['oauth'])
  */
-export default function ProviderSelector({ onSelect, filterMethods }) {
-  const filtered = filterMethods
+export default function ProviderSelector({ onSelect, filterMethods, exclude }) {
+  let filtered = filterMethods
     ? PROVIDERS.filter(p => filterMethods.some(m => p.methods.includes(m)))
     : PROVIDERS
+  if (exclude) filtered = filtered.filter(p => !exclude.includes(p.id))
 
   return (
     <div className="grid grid-cols-2 gap-1.5">

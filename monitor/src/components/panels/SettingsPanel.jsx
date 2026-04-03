@@ -168,7 +168,7 @@ function EditCustomCredentialCard({ credential, authFetch, onComplete, onCancel 
   )
 }
 
-function AddCredentialWizard({ onComplete, onCancel, authFetch }) {
+function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders }) {
   const [step, setStep] = useState('provider') // provider → method → action → label
   const [selectedProvider, setSelectedProvider] = useState(null)
   const [selectedMethod, setSelectedMethod] = useState(null) // 'api_key' | 'oauth'
@@ -196,7 +196,7 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch }) {
           <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Step 1: Select Provider</h4>
           <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><X className="w-4 h-4" /></button>
         </div>
-        <ProviderSelector onSelect={(p) => {
+        <ProviderSelector exclude={excludeProviders} onSelect={(p) => {
           setSelectedProvider(p.id)
           if (p.methods.length === 1) {
             setSelectedMethod(p.methods[0])
@@ -615,6 +615,7 @@ export default function SettingsPanel({
   const { showToast } = useToast()
 
   const [keys, setKeys] = useState([])
+  const [allowCustomProvider, setAllowCustomProvider] = useState(true)
   const [showWizard, setShowWizard] = useState(false)
   const [editingCustomKey, setEditingCustomKey] = useState(null)
   const [editingLabel, setEditingLabel] = useState(null)
@@ -623,6 +624,7 @@ export default function SettingsPanel({
   const fetchKeys = () => {
     fetch('/api/keys').then(r => r.json()).then(d => {
       setKeys(d.keys || [])
+      if (d.allowCustomProvider !== undefined) setAllowCustomProvider(d.allowCustomProvider)
     }).catch(() => {})
   }
 
@@ -783,6 +785,7 @@ export default function SettingsPanel({
             <div className="mb-4">
               <AddCredentialWizard
                 authFetch={authFetch}
+                excludeProviders={!allowCustomProvider ? ['custom'] : []}
                 onComplete={() => {
                   setShowWizard(false)
                   fetchKeys()
