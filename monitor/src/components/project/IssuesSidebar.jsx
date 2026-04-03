@@ -1,24 +1,25 @@
 import React from 'react'
 import { CircleDot, User, UserCheck, MessageSquare } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 
 export default function IssuesSidebar({
   issues,
   issueFilter,
   setIssueFilter,
   openIssueModal,
-  setCreateIssueModal,
-  isWriteMode,
 }) {
-  const filteredIssues = issueFilter === 'all' ? issues : issues.filter(i => i.status === issueFilter)
+  // Only non-human issues: neither creator nor assignee is human
+  const agentIssues = issues.filter(i =>
+    i.creator !== 'human' && i.creator !== 'chat' && i.assignee !== 'human'
+  )
+  const filteredIssues = issueFilter === 'all' ? agentIssues : agentIssues.filter(i => i.status === issueFilter)
 
   return (
-    <Card className="flex flex-col h-[500px]">
-      <CardHeader className="shrink-0">
-        <CardTitle className="flex items-center gap-2"><CircleDot className="w-4 h-4" />Issues ({filteredIssues.length})</CardTitle>
+    <DashboardWidget
+      icon={CircleDot}
+      title={`Agent Issues (${filteredIssues.length})`}
+      headerExtra={
         <div className="flex gap-1 mt-1">
           {['open', 'closed', 'all'].map(f => (
             <button key={f} onClick={() => setIssueFilter(f)}
@@ -27,8 +28,8 @@ export default function IssuesSidebar({
             </button>
           ))}
         </div>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col overflow-hidden">
+      }
+    >
         <div className="space-y-2 flex-1 overflow-y-auto">
           {filteredIssues.map((issue) => (
             <div key={issue.id}
@@ -49,18 +50,8 @@ export default function IssuesSidebar({
               </div>
             </div>
           ))}
-          {issues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No issues</p>}
+          {filteredIssues.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No agent issues</p>}
         </div>
-        <Separator className="my-3 shrink-0" />
-        {isWriteMode && <div className="shrink-0">
-          <Button 
-            onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}
-            className="w-full dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100"
-          >
-            Human Intervention (Create Issue)
-          </Button>
-        </div>}
-      </CardContent>
-    </Card>
+    </DashboardWidget>
   )
 }
