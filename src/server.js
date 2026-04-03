@@ -1443,8 +1443,9 @@ class ProjectRunner {
         }
 
         // Resume interrupted schedule from previous cycle (e.g. after reboot)
-        if (this.currentSchedule && this.completedAgents.length > 0) {
-          log(`Resuming interrupted schedule (${this.completedAgents.length} agents already completed: [${this.completedAgents.join(', ')}])`, this.id);
+        // Note: don't require completedAgents — schedule may start with a delay step
+        if (this.currentSchedule) {
+          log(`Resuming interrupted schedule (${this.completedAgents.length} agents already completed${this.completedAgents.length ? ': [' + this.completedAgents.join(', ') + ']' : ''})`, this.id);
           const { total, failures } = await this.executeSchedule(this.currentSchedule, config);
           cycleTotal += total;
           cycleFailures += failures;

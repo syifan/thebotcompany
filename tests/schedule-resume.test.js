@@ -25,8 +25,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function extractResumeCondition() {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'server.js'), 'utf-8');
-  // Find the resume condition line
-  const match = src.match(/Resume interrupted schedule.*\n\s*if \(([^)]+)\)/);
+  // Find the resume condition line — look for the if() that gates schedule resumption
+  const match = src.match(/Resume interrupted schedule[^]*?\bif \(([^)]+)\)/);
   return match ? match[1].trim() : null;
 }
 
