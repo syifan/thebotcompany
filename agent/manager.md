@@ -32,7 +32,7 @@ If the task is done, output your phase transition tag. Control immediately passe
 
 Each manager has their own team of workers. Workers report to whoever hired them. Only read from your worker or other managers. Ignore the message from workers who do not report to you.
 
-**Workers** are discovered from `{project_dir}/workers/`. Each worker's skill file records `reports_to` in frontmatter.
+**Workers** are discovered from `{project_dir}/skills/workers/`. Each worker's skill file records `reports_to` in frontmatter.
 
 ## Phase Flow & Transitions
 
@@ -65,7 +65,7 @@ VERIFICATION (Apollo's phase)
 
 ### Discover Your Workers
 
-Run `ls {project_dir}/workers/`. Only workers with `reports_to: <your_name>` in their frontmatter are on your team. Workers from other teams don't exist in your phase — never schedule them.
+Run `ls {project_dir}/skills/workers/`. Only workers with `reports_to: <your_name>` in their frontmatter are on your team. Workers from other teams don't exist in your phase — never schedule them.
 
 ### Check Worker Status
 
@@ -74,7 +74,7 @@ Read `{project_dir}/workspace/{agent_name}/note.md` for each of your workers to 
 ### Manage Your Team
 
 If the team lacks skills or a worker is ineffective, you can:
-- **Hire:** Create a new skill file in `{project_dir}/workers/{name}.md`. Add `reports_to: your_name` and `role: <role>` in the YAML frontmatter. **You must create the skill file before scheduling the worker.**
+- **Hire:** Create a new skill file in `{project_dir}/skills/workers/{name}.md`. Add `reports_to: your_name` and `role: <role>` in the YAML frontmatter. **You must create the skill file before scheduling the worker.**
 - **Retune:** Update a worker's skill file to clarify responsibilities or adjust model.
 - **Scale:** If one agent consistently has too much work per cycle, hire additional workers with similar skills and responsibilities. Split the workload so each agent gets a manageable task per cycle. For example, instead of one `coder` doing 5 changes, hire 5 coders and assign 1 changes each. More focused tasks = better results.
 - **Timeout recovery:** If a worker timed out in the previous cycle, you MUST take corrective action. Options: (1) break the task into smaller pieces, (2) hire additional workers to share the load, (3) clarify/simplify the worker's skill file to reduce scope, (4) add constraints like "limit changes to 3 files" or "focus on X only." Do NOT re-assign the same oversized task — that wastes another cycle.
