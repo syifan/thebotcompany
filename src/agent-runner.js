@@ -150,6 +150,40 @@ function isPathAllowed(targetPath, allowedPaths = null, access = 'read') {
   return false;
 }
 
+function extractPathCandidates(command) {
+  const candidates = new Set();
+  if (!command) return [];
+
+  const quoted = [...command.matchAll(/(["'])(.*?)\1/g)];
+  for (const match of quoted) {
+    const value = match[2]?.trim();
+    if (value && /^(\/|\.\.?\/)/.test(value)) candidates.add(value);
+  }
+
+  const bare = command.match(/(?:^|\s)(\/[^\s|;&]+|\.\.?\/[^\s|;&]+)/g) || [];
+  for (const token of bare) {
+    const value = token.trim();
+    if (value) candidates.add(value);
+  }
+
+  return [...candidates];
+}
+
+function checkPathAccessInCommand(command, cwd, allowedPaths = null) {
+  if (!allowedPaths) return null;
+  for (const candidate of extractPathCandidates(command)) {
+    const resolved = resolveToolPath(candidate, cwd);
+    if (!resolved) continue;
+    if (isRawDbPath(resolved, allowedPaths)) {
+      return 'Blocked: raw project database access is not allowed. Use tbc-db CLI for project database operations.';
+    }
+    if (!isPathAllowed(resolved, allowedPaths, 'read') && !isPathAllowed(resolved, allowedPaths, 'write')) {
+      return `Blocked: access denied for ${resolved}`;
+    }
+  }
+  return null;
+}
+
 function buildSandboxProfile(allowedPaths) {
   const lines = [
     '(version 1)',
@@ -390,6 +424,11 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     const dbBlock = checkSensitiveDbAccess(command);
     if (dbBlock) {
       resolve(dbBlock);
+      return;
+    }
+    const pathBlock = checkPathAccessInCommand(command, cwd, allowedPaths);
+    if (pathBlock) {
+      resolve(pathBlock);
       return;
     }
 
