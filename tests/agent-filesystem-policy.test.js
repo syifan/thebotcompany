@@ -70,6 +70,15 @@ describe('agent filesystem allowlist', () => {
     assert.match(bashResult, /Operation not permitted|Blocked|access denied|Exit code: 1/i);
   });
 
+  it('blocks path traversal into another agent workspace', async () => {
+    const p = mkProject();
+    const traversal = path.join(p.own, '..', 'nora', 'secret.txt');
+    assert.match(executeRead({ file_path: traversal }, p.repo, p.allowedWorker), /access denied/i);
+
+    const bashResult = await executeTool('Bash', { command: `cat ${JSON.stringify(traversal)}` }, p.repo, 0, {}, null, null, p.allowedWorker);
+    assert.match(bashResult, /Operation not permitted|Blocked|access denied|Exit code: 1/i);
+  });
+
   it('allows managers to modify skills/workers while workers cannot', () => {
     const p = mkProject();
     const workerAttempt = executeWrite({ file_path: path.join(p.skills, 'eva.md'), content: 'role: test' }, p.repo, p.allowedWorker);
@@ -82,6 +91,14 @@ describe('agent filesystem allowlist', () => {
     assert.match(managerEdit, /Successfully edited/i);
   });
 
+  it('blocks managers from reading worker private workspace', async () => {
+    const p = mkProject();
+    assert.match(executeRead({ file_path: path.join(p.other, 'secret.txt') }, p.repo, p.allowedManager), /access denied/i);
+
+    const bashResult = await executeTool('Bash', { command: `cat ${JSON.stringify(path.join(p.other, 'secret.txt'))}` }, p.repo, 0, {}, null, null, p.allowedManager);
+    assert.match(bashResult, /Operation not permitted|Blocked|access denied|Exit code: 1/i);
+  });
+
   it('blocks raw project.db access from file tools and bash', async () => {
     const p = mkProject();
     assert.match(executeRead({ file_path: path.join(p.workspaceRoot, 'project.db') }, p.repo, p.allowedWorker), /project database access is not allowed/i);
@@ -91,6 +108,17 @@ describe('agent filesystem allowlist', () => {
 
     const bashByEnv = await executeTool('Bash', { command: 'cat "$TBC_DB"' }, p.repo, 0, { TBC_DB: path.join(p.workspaceRoot, 'project.db') }, null, null, p.allowedWorker);
     assert.match(bashByEnv, /project database access is not allowed/i);
+  });
+
+  it('allows glob/grep inside own workspace and repo', async () => {
+    const p = mkProject();
+    const globOwn = await executeTool('Glob', { pattern: '*.txt', path: p.own }, p.repo, 0, null, null, null, p.allowedWorker);
+    const grepOwn = await executeTool('Grep', { pattern: 'own', path: p.own }, p.repo, 0, null, null, null, p.allowedWorker);
+    const globRepo = await executeTool('Glob', { pattern: '*.txt', path: p.repo }, p.repo, 0, null, null, null, p.allowedWorker);
+
+    assert.match(globOwn, /note\.txt/);
+    assert.match(grepOwn, /note\.txt:1: own ok/);
+    assert.match(globRepo, /repo\.txt/);
   });
 
   it('blocks glob/grep over denied workspace roots', () => {
