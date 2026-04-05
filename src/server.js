@@ -375,6 +375,20 @@ class ProjectRunner {
     return path.join(this.projectDir, 'workspace');
   }
 
+  get skillsDir() {
+    return path.join(this.agentDir, 'skills');
+  }
+
+  get workerSkillsDir() {
+    const dir = path.join(this.skillsDir, 'workers');
+    const legacyDir = path.join(this.agentDir, 'workers');
+    if (!fs.existsSync(dir) && fs.existsSync(legacyDir)) {
+      fs.mkdirSync(this.skillsDir, { recursive: true });
+      fs.renameSync(legacyDir, dir);
+    }
+    return dir;
+  }
+
   get repo() {
     if (this._repo === null) {
       try {
@@ -424,7 +438,7 @@ class ProjectRunner {
     const workers = [];
     
     const managersDir = path.join(ROOT, 'agent', 'managers');
-    const workersDir = path.join(this.agentDir, 'workers');
+    const workersDir = this.workerSkillsDir;
     
     const parseRole = (content) => {
       // Prefer frontmatter role: field
@@ -501,7 +515,7 @@ class ProjectRunner {
   }
 
   getAgentDetails(agentName) {
-    const workersDir = path.join(this.agentDir, 'workers');
+    const workersDir = this.workerSkillsDir;
     const managersDir = path.join(ROOT, 'agent', 'managers');
     const workspaceDir = path.join(this.agentDir, 'workspace', agentName);
     
@@ -985,10 +999,13 @@ class ProjectRunner {
       return;
     }
 
-    // Ensure project workspace directories exist
-    for (const sub of ['', 'responses', 'workers']) {
+    // Ensure project workspace/control-plane directories exist
+    for (const sub of ['', 'responses', 'workspace', 'skills', path.join('skills', 'workers')]) {
       fs.mkdirSync(path.join(this.agentDir, sub), { recursive: true });
     }
+    // Migrate legacy worker skills dir (<project>/workspace/workers) to
+    // the new control-plane location (<project>/workspace/skills/workers).
+    this.workerSkillsDir;
     
     // Load persisted state
     this.loadState();
@@ -1640,7 +1657,7 @@ class ProjectRunner {
   _buildAgentPrompt(agent, task, visibility) {
     const skillPath = agent.isManager
       ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
-      : path.join(this.agentDir, 'workers', `${agent.name}.md`);
+      : path.join(this.workerSkillsDir, `${agent.name}.md`);
 
     if (!fs.existsSync(skillPath)) {
       return null;
@@ -1820,7 +1837,7 @@ class ProjectRunner {
     if (!skillContent) {
       const skillPath = agent.isManager
         ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
-        : path.join(this.agentDir, 'workers', `${agent.name}.md`);
+        : path.join(this.workerSkillsDir, `${agent.name}.md`);
       log(`Skill file not found: ${skillPath}, skipping ${agent.name}`, this.id);
       this.currentAgent = null;
       this.currentAgentProcess = null;
@@ -2897,7 +2914,7 @@ const server = http.createServer(async (req, res) => {
           
           // Check if this is a manager or worker
           const managersDir = path.join(ROOT, 'agent', 'managers');
-          const workersDir = path.join(runner.agentDir, 'workers');
+          const workersDir = runner.workerSkillsDir;
           const isManager = fs.existsSync(path.join(managersDir, `${agentName}.md`));
           const isWorker = fs.existsSync(path.join(workersDir, `${agentName}.md`));
           

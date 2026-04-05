@@ -12,7 +12,7 @@
 
 **Do NOT modify anything in the `{project_dir}/` folder**, except:
 - Your own workspace (`{project_dir}/workspace/{your_name}/`)
-- Managers can modify worker skills in `{project_dir}/workers/`
+- Managers can modify worker skills in `{project_dir}/skills/workers/`
 
 ## Your Workspace
 
