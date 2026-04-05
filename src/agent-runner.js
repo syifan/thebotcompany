@@ -7,6 +7,7 @@
 
 import { spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import {
   resolveModel,
@@ -92,6 +93,90 @@ function checkGitCommand(command, allowedRepo) {
   }
 
   return null; // allowed
+}
+
+function checkSensitiveDbAccess(command) {
+  if (!command) return null;
+  if (/\bsqlite3\b/.test(command)) {
+    return 'Blocked: raw SQLite access is not allowed. Use tbc-db CLI for project database operations.';
+  }
+  if (/project\.db\b/.test(command) || /\$\{?TBC_DB\}?/.test(command) || /process\.env\.TBC_DB|os\.environ\[['"]TBC_DB['"]\]/.test(command)) {
+    return 'Blocked: raw project database access is not allowed. Use tbc-db CLI for project database operations.';
+  }
+  return null;
+}
+
+function normalizePath(targetPath) {
+  const resolved = path.resolve(targetPath);
+  try {
+    return fs.realpathSync.native ? fs.realpathSync.native(resolved) : fs.realpathSync(resolved);
+  } catch {
+    const dir = path.dirname(resolved);
+    if (dir && dir !== resolved) {
+      try {
+        const realDir = fs.realpathSync.native ? fs.realpathSync.native(dir) : fs.realpathSync(dir);
+        return path.join(realDir, path.basename(resolved));
+      } catch {}
+    }
+    return resolved;
+  }
+}
+
+function isSubpath(targetPath, basePath) {
+  const target = normalizePath(targetPath);
+  const base = normalizePath(basePath);
+  return target === base || target.startsWith(base + path.sep);
+}
+
+function resolveToolPath(inputPath, cwd) {
+  if (!inputPath || typeof inputPath !== 'string') return null;
+  return path.isAbsolute(inputPath) ? normalizePath(inputPath) : normalizePath(path.join(cwd, inputPath));
+}
+
+function isRawDbPath(targetPath, allowedPaths = null) {
+  if (!allowedPaths?.dbPath) return false;
+  return normalizePath(targetPath) === normalizePath(allowedPaths.dbPath);
+}
+
+function isPathAllowed(targetPath, allowedPaths = null, access = 'read') {
+  if (!allowedPaths) return true;
+  const resolved = normalizePath(targetPath);
+  const allowed = access === 'write' ? (allowedPaths.write || []) : (allowedPaths.read || []);
+  if (allowed.some(base => isSubpath(resolved, base))) return true;
+  const denied = allowedPaths.denied || [];
+  for (const denyPath of denied) {
+    if (isSubpath(resolved, denyPath)) return false;
+  }
+  return false;
+}
+
+function buildSandboxProfile(allowedPaths) {
+  const lines = [
+    '(version 1)',
+    '(allow default)',
+  ];
+  for (const denyPath of (allowedPaths?.denied || [])) {
+    const p = normalizePath(denyPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    lines.push(`(deny file-read-data (subpath "${p}"))`);
+    lines.push(`(deny file-read-metadata (subpath "${p}"))`);
+    lines.push(`(deny file-write* (subpath "${p}"))`);
+  }
+  for (const allowPath of (allowedPaths?.read || [])) {
+    const p = normalizePath(allowPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    lines.push(`(allow file-read-data (subpath "${p}"))`);
+    lines.push(`(allow file-read-metadata (subpath "${p}"))`);
+  }
+  for (const allowPath of (allowedPaths?.write || [])) {
+    const p = normalizePath(allowPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    lines.push(`(allow file-write* (subpath "${p}"))`);
+  }
+  if (allowedPaths?.dbPath) {
+    const p = normalizePath(allowedPaths.dbPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    lines.push(`(allow file-read-data (literal "${p}"))`);
+    lines.push(`(allow file-read-metadata (literal "${p}"))`);
+    lines.push(`(allow file-write* (literal "${p}"))`);
+  }
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +367,7 @@ function getToolDefinitions() {
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
-function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null) {
+function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null) {
   let timeout = Math.min(input.timeout || 120000, 600000);
   if (remainingMs > 0) {
     timeout = Math.min(timeout, remainingMs);
@@ -302,8 +387,23 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       resolve(gitBlock);
       return;
     }
+    const dbBlock = checkSensitiveDbAccess(command);
+    if (dbBlock) {
+      resolve(dbBlock);
+      return;
+    }
 
-    const proc = spawn('bash', ['-c', command], {
+    let spawnCmd = 'bash';
+    let spawnArgs = ['-c', command];
+    let sandboxProfilePath = null;
+    if (allowedPaths && os.platform() === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) {
+      sandboxProfilePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-sb-')), 'profile.sb');
+      fs.writeFileSync(sandboxProfilePath, buildSandboxProfile(allowedPaths));
+      spawnCmd = '/usr/bin/sandbox-exec';
+      spawnArgs = ['-f', sandboxProfilePath, 'bash', '-c', command];
+    }
+
+    const proc = spawn(spawnCmd, spawnArgs, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,  // new process group so grandchildren can be killed too
@@ -349,6 +449,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (result.length > 100000) {
         result = result.slice(0, 50000) + '\n\n... (output truncated) ...\n\n' + result.slice(-50000);
       }
+      if (sandboxProfilePath) {
+        try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
+      }
       resolve(result || '(no output)');
     });
 
@@ -358,6 +461,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       clearTimeout(timer);
       runtime?.signal?.removeEventListener('abort', onAbort);
       runtime?.unregisterProcess?.(proc);
+      if (sandboxProfilePath) {
+        try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
+      }
       resolve(`Error executing command: ${err.message}`);
     });
 
@@ -377,10 +483,12 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
   });
 }
 
-function executeRead(input, cwd) {
+function executeRead(input, cwd, allowedPaths = null) {
   let filePath = input.file_path;
   if (!filePath || typeof filePath !== 'string') return 'Error: file_path is required and must be a string';
-  if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
+  filePath = resolveToolPath(filePath, cwd);
+  if (isRawDbPath(filePath, allowedPaths)) return 'Error: raw project database access is not allowed. Use tbc-db CLI.';
+  if (!isPathAllowed(filePath, allowedPaths, 'read')) return `Error: access denied for ${filePath}`;
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
@@ -393,10 +501,12 @@ function executeRead(input, cwd) {
   }
 }
 
-function executeWrite(input, cwd) {
+function executeWrite(input, cwd, allowedPaths = null) {
   let filePath = input.file_path;
   if (!filePath || typeof filePath !== 'string') return 'Error: file_path is required and must be a string';
-  if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
+  filePath = resolveToolPath(filePath, cwd);
+  if (isRawDbPath(filePath, allowedPaths)) return 'Error: raw project database access is not allowed. Use tbc-db CLI.';
+  if (!isPathAllowed(filePath, allowedPaths, 'write')) return `Error: access denied for ${filePath}`;
   try {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -407,10 +517,12 @@ function executeWrite(input, cwd) {
   }
 }
 
-function executeEdit(input, cwd) {
+function executeEdit(input, cwd, allowedPaths = null) {
   let filePath = input.file_path;
   if (!filePath || typeof filePath !== 'string') return 'Error: file_path is required and must be a string';
-  if (!path.isAbsolute(filePath)) filePath = path.join(cwd, filePath);
+  filePath = resolveToolPath(filePath, cwd);
+  if (isRawDbPath(filePath, allowedPaths)) return 'Error: raw project database access is not allowed. Use tbc-db CLI.';
+  if (!isPathAllowed(filePath, allowedPaths, 'write')) return `Error: access denied for ${filePath}`;
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const oldStr = input.old_string;
@@ -435,9 +547,10 @@ function executeEdit(input, cwd) {
   }
 }
 
-function executeGlob(input, cwd) {
+function executeGlob(input, cwd, allowedPaths = null) {
   const searchPath = input.path || cwd;
-  const resolvedPath = path.isAbsolute(searchPath) ? searchPath : path.join(cwd, searchPath);
+  const resolvedPath = path.isAbsolute(searchPath) ? normalizePath(searchPath) : normalizePath(path.join(cwd, searchPath));
+  if (!isPathAllowed(resolvedPath, allowedPaths, 'read')) return `Error: access denied for ${resolvedPath}`;
   try {
     const files = globFiles(input.pattern, resolvedPath);
     if (files.length === 0) return 'No files matched the pattern.';
@@ -447,9 +560,10 @@ function executeGlob(input, cwd) {
   }
 }
 
-function executeGrep(input, cwd) {
+function executeGrep(input, cwd, allowedPaths = null) {
   const searchPath = input.path || cwd;
-  const resolvedPath = path.isAbsolute(searchPath) ? searchPath : path.join(cwd, searchPath);
+  const resolvedPath = path.isAbsolute(searchPath) ? normalizePath(searchPath) : normalizePath(path.join(cwd, searchPath));
+  if (!isPathAllowed(resolvedPath, allowedPaths, 'read')) return `Error: access denied for ${resolvedPath}`;
   try {
     const matches = grepFiles(input.pattern, resolvedPath, {
       caseInsensitive: input.case_insensitive,
@@ -467,14 +581,14 @@ function executeGrep(input, cwd) {
   }
 }
 
-async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null) {
+async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null) {
   switch (toolName) {
-    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo);
-    case 'Read':  return executeRead(toolInput, cwd);
-    case 'Write': return executeWrite(toolInput, cwd);
-    case 'Edit':  return executeEdit(toolInput, cwd);
-    case 'Glob':  return executeGlob(toolInput, cwd);
-    case 'Grep':  return executeGrep(toolInput, cwd);
+    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths);
+    case 'Read':  return executeRead(toolInput, cwd, allowedPaths);
+    case 'Write': return executeWrite(toolInput, cwd, allowedPaths);
+    case 'Edit':  return executeEdit(toolInput, cwd, allowedPaths);
+    case 'Glob':  return executeGlob(toolInput, cwd, allowedPaths);
+    case 'Grep':  return executeGrep(toolInput, cwd, allowedPaths);
     default:      return `Unknown tool: ${toolName}`;
   }
 }
@@ -514,6 +628,7 @@ export async function runAgentWithAPI(opts) {
     abortSignal = null,
     log = () => {},
     allowedRepo = null,
+    allowedPaths = null,
     keyId: initialKeyId = null,
     onRateLimited = null,
     resolveNewToken = null,
@@ -878,7 +993,7 @@ export async function runAgentWithAPI(opts) {
           log(`Tool: ${tc.name}${tc.name === 'Bash' ? ` → ${(tc.input.command || '').slice(0, 300)}` : ''}`);
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
-          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo);
+          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths);
           toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: result });
         }
 
