@@ -327,7 +327,7 @@ class ProjectRunner {
     this.completionMessage = null;
     this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
     this.currentAgentLog = [];
-    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
+    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null; this.currentAgentVisibility = null;
     this._repo = null;
   }
 
@@ -873,6 +873,7 @@ class ProjectRunner {
       currentAgent: this.currentAgent,
       currentAgentModel: this.currentAgentModel,
       currentAgentKeyId: this.currentAgentKeyId || null,
+      currentAgentVisibility: this.currentAgentVisibility || { mode: 'full', issues: [] },
       currentAgentRuntime: this.currentAgentStartTime
         ? Math.floor((Date.now() - this.currentAgentStartTime) / 1000)
         : null,
@@ -918,7 +919,7 @@ class ProjectRunner {
       this.currentAgent = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null; this.currentAgentVisibility = null;
     }
     this.isPaused = true;
     this.pauseReason = 'Bootstrapping';
@@ -1806,13 +1807,16 @@ class ProjectRunner {
         try { db.exec('ALTER TABLE reports ADD COLUMN model TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN timed_out INTEGER'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
-        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
+        try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
+        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           this.cycleCount, agent.name, reportBody, new Date().toISOString(),
           cost ?? null, durationMs ?? null,
           usage?.inputTokens ?? null, usage?.outputTokens ?? null, usage?.cacheReadTokens ?? null,
           success ? 1 : 0, this.currentAgentModel ?? null, killedByTimeout ? 1 : 0,
-          this.currentAgentKeyId ?? null
+          this.currentAgentKeyId ?? null,
+          this.currentAgentVisibility?.mode || 'full', JSON.stringify(this.currentAgentVisibility?.issues || [])
         );
         const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
         db.close();
@@ -1832,7 +1836,7 @@ class ProjectRunner {
     this.currentAgentStartTime = null;
     this.currentAgentLog = [];
     broadcastStatusUpdate(this.id);
-    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
+    this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null; this.currentAgentVisibility = null;
 
     return { success, resultText, killedByTimeout: !!killedByTimeout };
   }
@@ -1840,6 +1844,7 @@ class ProjectRunner {
   async runAgent(agent, config, mode = null, task = null, visibility = null) {
     this.currentAgent = agent.name;
     this.currentAgentKeyId = null;
+    this.currentAgentVisibility = visibility || { mode: 'full', issues: [] };
     this.currentAgentStartTime = Date.now();
     broadcastStatusUpdate(this.id);
     const runAbortController = new AbortController();
@@ -1864,7 +1869,7 @@ class ProjectRunner {
       this.currentAgentProcess = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null; this.currentAgentVisibility = null;
       return { success: false, resultText: '' };
     }
 
@@ -1913,7 +1918,7 @@ class ProjectRunner {
       this.currentAgentProcess = null;
       this.currentAgentStartTime = null;
       this.currentAgentLog = [];
-      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null;
+      this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null; this.currentAgentVisibility = null;
       broadcastStatusUpdate(this.id);
       return { error: 'no_token', message: 'No API key configured. Add one in Settings > Credentials.' };
     }
@@ -2895,6 +2900,7 @@ const server = http.createServer(async (req, res) => {
         model: runner.currentAgentModel,
         keyId: runner.currentAgentKeyId || null,
         keyLabel,
+        visibility: runner.currentAgentVisibility || { mode: 'full', issues: [] },
         startTime: runner.currentAgentStartTime,
         cost: runner.currentAgentCost || 0,
         usage: runner.currentAgentUsage || null,
@@ -3190,8 +3196,10 @@ const server = http.createServer(async (req, res) => {
           body TEXT NOT NULL,
           created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         )`);
-        // Migrate: add summary column if missing
+        // Migrate: add summary/visibility columns if missing
         try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
+        try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
+        try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
         const agent = url.searchParams.get('agent');
         const page = parseInt(url.searchParams.get('page')) || 1;
         const perPage = parseInt(url.searchParams.get('per_page')) || 20;
@@ -3208,6 +3216,8 @@ const server = http.createServer(async (req, res) => {
         const keyMap = new Map((keyPool.keys || []).map(k => [k.id, k.label]));
         for (const r of reports) {
           if (r.key_id) r.key_label = keyMap.get(r.key_id) || null;
+          try { r.visibility_issues = r.visibility_issues ? JSON.parse(r.visibility_issues) : []; } catch { r.visibility_issues = []; }
+          if (!r.visibility_mode) r.visibility_mode = 'full';
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ reports, total, page, perPage }));

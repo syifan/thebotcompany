@@ -100,6 +100,7 @@ export default function ReportsPanel({
                   model: liveAgentLog.model,
                   key_id: liveAgentLog.keyId || null,
                   key_label: liveAgentLog.keyLabel || null,
+                  visibility: liveAgentLog.visibility || { mode: 'full', issues: [] },
                   duration_ms: liveAgentLog.startTime ? Date.now() - new Date(liveAgentLog.startTime).getTime() : null,
                   cost: liveAgentLog.cost || null,
                   input_tokens: liveAgentLog.usage?.inputTokens || null,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { MessageSquare, XCircle, Timer } from 'lucide-react'
+import { MessageSquare, XCircle, Timer, Eye, EyeOff, Focus } from 'lucide-react'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -55,8 +55,38 @@ function formatTokens(n) {
   return `${n}`
 }
 
+const visibilityConfig = {
+  full: {
+    icon: Eye,
+    label: 'Full',
+    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300',
+  },
+  focused: {
+    icon: Focus,
+    label: 'Focused',
+    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300',
+  },
+  blind: {
+    icon: EyeOff,
+    label: 'Blind',
+    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-red-300 text-red-700 dark:border-red-700 dark:text-red-300',
+  },
+  'write-only': {
+    icon: EyeOff,
+    label: 'Write-only',
+    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-cyan-300 text-cyan-700 dark:border-cyan-700 dark:text-cyan-300',
+  },
+}
+
 export function ReportCardHeader({ report }) {
   const agent = report.agent || report.author
+  const visibilityMode = (report.visibility_mode || report.visibility?.mode || 'full').toLowerCase()
+  const visibilityIssues = report.visibility_issues || report.visibility?.issues || []
+  const visibilityMeta = visibilityConfig[visibilityMode] || visibilityConfig.full
+  const VisibilityIcon = visibilityMeta.icon
+  const visibilityTitle = visibilityMode === 'focused' && visibilityIssues.length
+    ? `Visibility: focused (#${visibilityIssues.join(', #')})`
+    : `Visibility: ${visibilityMode}`
 
   return (
     <div className="mb-0.5">
@@ -86,16 +116,30 @@ export function ReportCardHeader({ report }) {
           )}
         </span>
       </div>
-      {(report.model || report.input_tokens > 0 || report.output_tokens > 0) && (
-        <div className="flex items-center gap-1.5 pl-7 mt-0.5 flex-wrap">
-          {report.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shrink-0">{report.model}</Badge>}
-          {report.key_id && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0 text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</Badge>}
+      {(report.model || visibilityMode !== 'full' || report.key_id || report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
+        <div className="pl-7 mt-0.5 space-y-1">
+          {report.model && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shrink-0">{report.model}</Badge>
+            </div>
+          )}
+          {(visibilityMode !== 'full' || report.key_id) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {visibilityMode !== 'full' && (
+                <Badge variant="outline" className={visibilityMeta.className} title={visibilityTitle}>
+                  <VisibilityIcon className="w-2.5 h-2.5 mr-0.5" />
+                  {visibilityMeta.label}
+                </Badge>
+              )}
+              {report.key_id && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0 text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</Badge>}
+            </div>
+          )}
           {(report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
-            <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
+            <div className="text-[10px] text-neutral-400 dark:text-neutral-500 leading-relaxed">
               {report.input_tokens > 0 && <span>{formatTokens(report.input_tokens)} new</span>}
               {report.cache_read_tokens > 0 && <span className="ml-1">{formatTokens(report.cache_read_tokens)} cached</span>}
               {report.output_tokens > 0 && <span className="ml-1">{formatTokens(report.output_tokens)} out</span>}
-            </span>
+            </div>
           )}
         </div>
       )}
@@ -133,6 +177,7 @@ export default function AgentReportsCard({
                   model: liveAgentLog.model,
                   key_id: liveAgentLog.keyId || null,
                   key_label: liveAgentLog.keyLabel || null,
+                  visibility: liveAgentLog.visibility || { mode: 'full', issues: [] },
                   duration_ms: liveAgentLog.startTime || null,
                   _startTime: liveAgentLog.startTime || null,
                   cost: liveAgentLog.cost || null,
