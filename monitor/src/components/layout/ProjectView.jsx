@@ -283,7 +283,7 @@ export default function ProjectView({
         if (!res.ok) return
         const data = await res.json()
         if (data.running) {
-          setLiveAgentLog({ agent: data.agent, model: data.model, keyId: data.keyId, keyLabel: data.keyLabel, startTime: data.startTime, cost: data.cost, usage: data.usage, log: data.log })
+          setLiveAgentLog({ agent: data.agent, model: data.model, keyId: data.keyId, keyLabel: data.keyLabel, visibility: data.visibility, startTime: data.startTime, cost: data.cost, usage: data.usage, log: data.log })
         } else {
           setLiveAgentLog(null)
         }

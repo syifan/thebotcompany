@@ -55,8 +55,35 @@ function formatTokens(n) {
   return `${n}`
 }
 
+function formatVisibilityLabel(mode) {
+  switch ((mode || 'full').toLowerCase()) {
+    case 'focused': return 'FOCUSED'
+    case 'blind': return 'BLIND'
+    case 'write-only': return 'WRITE-ONLY'
+    default: return 'FULL'
+  }
+}
+
+function visibilityBadgeClass(mode) {
+  switch ((mode || 'full').toLowerCase()) {
+    case 'focused':
+      return 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300'
+    case 'blind':
+      return 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-violet-300 text-violet-700 dark:border-violet-700 dark:text-violet-300'
+    case 'write-only':
+      return 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-cyan-300 text-cyan-700 dark:border-cyan-700 dark:text-cyan-300'
+    default:
+      return 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-neutral-300 text-neutral-500 dark:border-neutral-700 dark:text-neutral-400'
+  }
+}
+
 export function ReportCardHeader({ report }) {
   const agent = report.agent || report.author
+  const visibilityMode = report.visibility_mode || report.visibility?.mode || 'full'
+  const visibilityIssues = report.visibility_issues || report.visibility?.issues || []
+  const visibilityTitle = visibilityMode === 'focused' && visibilityIssues.length
+    ? `Visibility: focused (#${visibilityIssues.join(', #')})`
+    : `Visibility: ${visibilityMode}`
 
   return (
     <div className="mb-0.5">
@@ -89,6 +116,7 @@ export function ReportCardHeader({ report }) {
       {(report.model || report.input_tokens > 0 || report.output_tokens > 0) && (
         <div className="flex items-center gap-1.5 pl-7 mt-0.5 flex-wrap">
           {report.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shrink-0">{report.model}</Badge>}
+          <Badge variant="outline" className={visibilityBadgeClass(visibilityMode)} title={visibilityTitle}>{formatVisibilityLabel(visibilityMode)}</Badge>
           {report.key_id && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0 text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</Badge>}
           {(report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
             <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
@@ -133,6 +161,7 @@ export default function AgentReportsCard({
                   model: liveAgentLog.model,
                   key_id: liveAgentLog.keyId || null,
                   key_label: liveAgentLog.keyLabel || null,
+                  visibility: liveAgentLog.visibility || { mode: 'full', issues: [] },
                   duration_ms: liveAgentLog.startTime || null,
                   _startTime: liveAgentLog.startTime || null,
                   cost: liveAgentLog.cost || null,

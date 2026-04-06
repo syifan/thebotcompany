@@ -21,7 +21,7 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-report-meta-'));
  * Simulate what server.js _postProcessAgentRun does when saving a report.
  * This mirrors the ACTUAL code at src/server.js line ~1800.
  */
-function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, inputTokens, outputTokens, cacheReadTokens, success, model, timedOut }) {
+function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, inputTokens, outputTokens, cacheReadTokens, success, model, timedOut, visibilityMode, visibilityIssues }) {
   const db = new Database(dbPath);
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS reports (
@@ -41,16 +41,19 @@ function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, in
     try { db.exec('ALTER TABLE reports ADD COLUMN success INTEGER'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN model TEXT'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN timed_out INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
 
     // THIS IS THE LINE THAT MATTERS — currently server.js only writes 4 fields:
     // db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(...)
     //
     // After the fix, it should write all metadata fields:
-    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, visibility_mode, visibility_issues)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       cycle, agent, body, new Date().toISOString(),
       cost ?? null, durationMs ?? null, inputTokens ?? null, outputTokens ?? null,
-      cacheReadTokens ?? null, success ? 1 : 0, model ?? null, timedOut ? 1 : 0
+      cacheReadTokens ?? null, success ? 1 : 0, model ?? null, timedOut ? 1 : 0,
+      visibilityMode ?? 'full', JSON.stringify(visibilityIssues ?? [])
     );
   } finally {
     db.close();
@@ -72,7 +75,7 @@ function getServerInsertColumns() {
 
 describe('Report metadata in SQLite', () => {
   describe('server.js INSERT includes metadata columns', () => {
-    const requiredColumns = ['cost', 'duration_ms', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'success', 'model', 'timed_out'];
+    const requiredColumns = ['cost', 'duration_ms', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'success', 'model', 'timed_out', 'visibility_mode', 'visibility_issues'];
 
     it('server.js INSERT INTO reports should include cost', () => {
       const cols = getServerInsertColumns();
@@ -116,6 +119,18 @@ describe('Report metadata in SQLite', () => {
       assert.ok(cols.includes('timed_out'),
         `server.js INSERT only has [${cols.join(', ')}] — missing 'timed_out'`);
     });
+
+    it('server.js INSERT INTO reports should include visibility_mode', () => {
+      const cols = getServerInsertColumns();
+      assert.ok(cols.includes('visibility_mode'),
+        `server.js INSERT only has [${cols.join(', ')}] — missing 'visibility_mode'`);
+    });
+
+    it('server.js INSERT INTO reports should include visibility_issues', () => {
+      const cols = getServerInsertColumns();
+      assert.ok(cols.includes('visibility_issues'),
+        `server.js INSERT only has [${cols.join(', ')}] — missing 'visibility_issues'`);
+    });
   });
 
   describe('getCostSummary reads from SQLite (not cost.csv)', () => {
@@ -154,6 +169,7 @@ describe('Report metadata in SQLite', () => {
         cost: 0.5432, durationMs: 120000,
         inputTokens: 50000, outputTokens: 2000, cacheReadTokens: 10000,
         success: true, model: 'claude-opus-4-6', timedOut: false,
+        visibilityMode: 'focused', visibilityIssues: ['123', '456'],
       });
 
       const db = new Database(dbPath);
@@ -168,6 +184,8 @@ describe('Report metadata in SQLite', () => {
       assert.strictEqual(row.success, 1);
       assert.strictEqual(row.model, 'claude-opus-4-6');
       assert.strictEqual(row.timed_out, 0);
+      assert.strictEqual(row.visibility_mode, 'focused');
+      assert.strictEqual(row.visibility_issues, JSON.stringify(['123', '456']));
     });
 
     it('old reports without metadata have null columns (backward compat)', () => {
@@ -181,11 +199,15 @@ describe('Report metadata in SQLite', () => {
       // Migrate
       try { db.exec('ALTER TABLE reports ADD COLUMN cost REAL'); } catch {}
       try { db.exec('ALTER TABLE reports ADD COLUMN model TEXT'); } catch {}
+      try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
+      try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
 
-      const row = db.prepare('SELECT cost, model FROM reports WHERE cycle = 1').get();
+      const row = db.prepare('SELECT cost, model, visibility_mode, visibility_issues FROM reports WHERE cycle = 1').get();
       db.close();
       assert.strictEqual(row.cost, null);
       assert.strictEqual(row.model, null);
+      assert.strictEqual(row.visibility_mode, null);
+      assert.strictEqual(row.visibility_issues, null);
     });
 
     it('cost summary queries work on reports table', () => {
