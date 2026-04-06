@@ -1703,7 +1703,7 @@ class ProjectRunner {
           sharedRules += dbContent + '\n\n---\n\n';
         } catch {}
       } else {
-        sharedRules += '\n> **You are in blind mode.** You cannot access the issue tracker (tbc-db). Focus only on the task described above and the repository code.\n\n---\n\n';
+        sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker (tbc-db), but you may still create new issues to report blockers or findings. Focus on the task described above and the repository code.\n\n---\n\n';
       }
       const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
@@ -1948,6 +1948,7 @@ class ProjectRunner {
       env: agentEnv,
       allowedRepo: this.repo || null,
       allowedPaths: this._getAgentFilesystemPolicy(agent),
+      issuePolicy: visibility || { mode: 'full', issues: [] },
       abortSignal: runAbortController.signal,
       keyId: resolvedKeyId,
       onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),

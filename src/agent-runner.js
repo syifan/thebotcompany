@@ -106,6 +106,68 @@ function checkSensitiveDbAccess(command) {
   return null;
 }
 
+function extractTbcDbCommand(command) {
+  if (!command || !/(?:^|[;&|`\s])tbc-db\b/.test(` ${command}`)) return null;
+  const trimmed = command.trim();
+  const match = trimmed.match(/(?:^|.*?[;&|`]\s*)tbc-db\s+(.+)$/);
+  const args = (match ? match[1] : trimmed.replace(/^tbc-db\s+/, '')).trim();
+  if (!args) return { kind: 'unknown' };
+
+  const issueFlagMatch = args.match(/--issue\s+(\d+)/);
+  const positionalIssueMatch = args.match(/^(?:issue-view|issue-edit|issue-close|comments)\s+(\d+)\b/);
+  const issueId = issueFlagMatch?.[1] || positionalIssueMatch?.[1] || null;
+
+  if (/^issue-create\b/.test(args)) return { kind: 'issue-create' };
+  if (/^issue-list\b/.test(args)) return { kind: 'issue-list' };
+  if (/^issue-view\b/.test(args)) return { kind: 'issue-view', issueId };
+  if (/^comments\b/.test(args)) return { kind: 'comments', issueId };
+  if (/^comment\b/.test(args)) return { kind: 'comment', issueId };
+  if (/^issue-edit\b/.test(args)) return { kind: 'issue-edit', issueId };
+  if (/^issue-close\b/.test(args)) return { kind: 'issue-close', issueId };
+  if (/^query\b/.test(args)) return { kind: 'query' };
+  return { kind: 'unknown' };
+}
+
+function isIssueAllowed(issueId, issuePolicy) {
+  if (!issuePolicy) return true;
+  if (issuePolicy.mode !== 'focused') return true;
+  return !!issueId && (issuePolicy.issues || []).map(String).includes(String(issueId));
+}
+
+function checkIssueAccessInCommand(command, issuePolicy = null) {
+  if (!issuePolicy) return null;
+  const parsed = extractTbcDbCommand(command);
+  if (!parsed) return null;
+
+  const mode = issuePolicy.mode || 'full';
+  if (mode === 'full') return null;
+
+  if (parsed.kind === 'issue-create') return null;
+
+  if (mode === 'blind') {
+    return 'Blocked: blind mode cannot read the issue tracker. You may only create new issues with tbc-db issue-create.';
+  }
+
+  if (mode === 'focused') {
+    switch (parsed.kind) {
+      case 'issue-view':
+      case 'comments':
+      case 'comment':
+      case 'issue-edit':
+      case 'issue-close':
+        if (isIssueAllowed(parsed.issueId, issuePolicy)) return null;
+        return `Blocked: focused issues access denied${parsed.issueId ? ` for issue #${parsed.issueId}` : ''}. Allowed issues: ${(issuePolicy.issues || []).join(', ') || 'none'}.`;
+      case 'issue-list':
+      case 'query':
+      case 'unknown':
+      default:
+        return `Blocked: focused issues mode only allows access to issues ${(issuePolicy.issues || []).join(', ') || 'none'} and issue creation.`;
+    }
+  }
+
+  return null;
+}
+
 function normalizePath(targetPath) {
   const resolved = path.resolve(targetPath);
   try {
@@ -401,7 +463,7 @@ function getToolDefinitions() {
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
-function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null) {
+function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
   let timeout = Math.min(input.timeout || 120000, 600000);
   if (remainingMs > 0) {
     timeout = Math.min(timeout, remainingMs);
@@ -424,6 +486,11 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     const dbBlock = checkSensitiveDbAccess(command);
     if (dbBlock) {
       resolve(dbBlock);
+      return;
+    }
+    const issueBlock = checkIssueAccessInCommand(command, issuePolicy);
+    if (issueBlock) {
+      resolve(issueBlock);
       return;
     }
     const pathBlock = checkPathAccessInCommand(command, cwd, allowedPaths);
@@ -620,9 +687,9 @@ function executeGrep(input, cwd, allowedPaths = null) {
   }
 }
 
-async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null) {
+async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
   switch (toolName) {
-    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths);
+    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
     case 'Read':  return executeRead(toolInput, cwd, allowedPaths);
     case 'Write': return executeWrite(toolInput, cwd, allowedPaths);
     case 'Edit':  return executeEdit(toolInput, cwd, allowedPaths);
@@ -668,6 +735,7 @@ export async function runAgentWithAPI(opts) {
     log = () => {},
     allowedRepo = null,
     allowedPaths = null,
+    issuePolicy = null,
     keyId: initialKeyId = null,
     onRateLimited = null,
     resolveNewToken = null,
@@ -1032,7 +1100,7 @@ export async function runAgentWithAPI(opts) {
           log(`Tool: ${tc.name}${tc.name === 'Bash' ? ` → ${(tc.input.command || '').slice(0, 300)}` : ''}`);
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
-          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths);
+          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
           toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: result });
         }
 
