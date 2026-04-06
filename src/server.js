@@ -1654,6 +1654,27 @@ class ProjectRunner {
   }
 
   // Build the full prompt for an agent (shared across CLI and API paths)
+  _getAgentFilesystemPolicy(agent) {
+    const repoDir = this.path;
+    const ownWorkspaceDir = path.join(this.agentDir, 'workspace', agent.name);
+    const read = [repoDir, ownWorkspaceDir];
+    const write = [repoDir, ownWorkspaceDir];
+    if (agent.isManager) {
+      read.push(this.workerSkillsDir);
+      write.push(this.workerSkillsDir);
+    }
+    const denied = [
+      path.join(this.agentDir, 'workspace'),
+      path.join(this.agentDir, 'responses'),
+      path.join(this.agentDir, 'uploads'),
+      path.join(this.agentDir, 'skills'),
+      path.join(this.agentDir, 'state.json'),
+      path.join(this.agentDir, 'orchestrator.log'),
+      path.join(this.agentDir, 'project.db'),
+    ];
+    return { read, write, denied, dbPath: path.join(this.agentDir, 'project.db') };
+  }
+
   _buildAgentPrompt(agent, task, visibility) {
     const skillPath = agent.isManager
       ? path.join(ROOT, 'agent', 'managers', `${agent.name}.md`)
@@ -1921,6 +1942,7 @@ class ProjectRunner {
       timeoutMs: config.agentTimeoutMs || 0,
       env: agentEnv,
       allowedRepo: this.repo || null,
+      allowedPaths: this._getAgentFilesystemPolicy(agent),
       abortSignal: runAbortController.signal,
       keyId: resolvedKeyId,
       onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),
