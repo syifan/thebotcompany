@@ -116,20 +116,30 @@ export function ReportCardHeader({ report }) {
           )}
         </span>
       </div>
-      {(report.model || report.input_tokens > 0 || report.output_tokens > 0) && (
-        <div className="flex items-center gap-1.5 pl-7 mt-0.5 flex-wrap">
-          {report.model && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shrink-0">{report.model}</Badge>}
-          <Badge variant="outline" className={visibilityMeta.className} title={visibilityTitle}>
-            <VisibilityIcon className="w-2.5 h-2.5 mr-0.5" />
-            {visibilityMeta.label}
-          </Badge>
-          {report.key_id && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0 text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</Badge>}
+      {(report.model || visibilityMode !== 'full' || report.key_id || report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
+        <div className="pl-7 mt-0.5 space-y-1">
+          {report.model && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shrink-0">{report.model}</Badge>
+            </div>
+          )}
+          {(visibilityMode !== 'full' || report.key_id) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {visibilityMode !== 'full' && (
+                <Badge variant="outline" className={visibilityMeta.className} title={visibilityTitle}>
+                  <VisibilityIcon className="w-2.5 h-2.5 mr-0.5" />
+                  {visibilityMeta.label}
+                </Badge>
+              )}
+              {report.key_id && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0 text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</Badge>}
+            </div>
+          )}
           {(report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
-            <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
+            <div className="text-[10px] text-neutral-400 dark:text-neutral-500 leading-relaxed">
               {report.input_tokens > 0 && <span>{formatTokens(report.input_tokens)} new</span>}
               {report.cache_read_tokens > 0 && <span className="ml-1">{formatTokens(report.cache_read_tokens)} cached</span>}
               {report.output_tokens > 0 && <span className="ml-1">{formatTokens(report.output_tokens)} out</span>}
-            </span>
+            </div>
           )}
         </div>
       )}
