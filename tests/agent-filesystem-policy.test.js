@@ -42,6 +42,20 @@ function mkProject() {
       ],
       dbPath: path.join(workspaceRoot, 'project.db'),
     },
+    allowedBlind: {
+      read: [repo],
+      write: [repo],
+      denied: [
+        path.join(workspaceRoot, 'workspace'),
+        path.join(workspaceRoot, 'responses'),
+        path.join(workspaceRoot, 'uploads'),
+        path.join(workspaceRoot, 'skills'),
+        path.join(workspaceRoot, 'state.json'),
+        path.join(workspaceRoot, 'orchestrator.log'),
+        path.join(workspaceRoot, 'project.db'),
+      ],
+      dbPath: path.join(workspaceRoot, 'project.db'),
+    },
     allowedManager: {
       read: [repo, own, skills],
       write: [repo, own, skills],
@@ -91,6 +105,14 @@ describe('agent filesystem allowlist', () => {
     assert.match(managerEdit, /Successfully edited/i);
   });
 
+  it('blind mode cannot read its own workspace notes', async () => {
+    const p = mkProject();
+    assert.match(executeRead({ file_path: path.join(p.own, 'note.txt') }, p.repo, p.allowedBlind), /access denied/i);
+
+    const bashResult = await executeTool('Bash', { command: `cat ${JSON.stringify(path.join(p.own, 'note.txt'))}` }, p.repo, 0, {}, null, null, p.allowedBlind);
+    assert.match(bashResult, /Operation not permitted|Blocked|access denied|Exit code: 1/i);
+  });
+
   it('blocks managers from reading worker private workspace', async () => {
     const p = mkProject();
     assert.match(executeRead({ file_path: path.join(p.other, 'secret.txt') }, p.repo, p.allowedManager), /access denied/i);
@@ -106,7 +128,8 @@ describe('agent filesystem allowlist', () => {
     const bashByPath = await executeTool('Bash', { command: `cat ${JSON.stringify(path.join(p.workspaceRoot, 'project.db'))}` }, p.repo, 0, { TBC_DB: path.join(p.workspaceRoot, 'project.db') }, null, null, p.allowedWorker);
     assert.match(bashByPath, /project database access is not allowed/i);
 
-    const bashByEnv = await executeTool('Bash', { command: 'cat "$TBC_DB"' }, p.repo, 0, { TBC_DB: path.join(p.workspaceRoot, 'project.db') }, null, null, p.allowedWorker);
+    const envCommand = 'cat "$' + 'TBC_DB"'
+    const bashByEnv = await executeTool('Bash', { command: envCommand }, p.repo, 0, { TBC_DB: path.join(p.workspaceRoot, 'project.db') }, null, null, p.allowedWorker);
     assert.match(bashByEnv, /project database access is not allowed/i);
   });
 

@@ -128,12 +128,6 @@ function extractTbcDbCommand(command) {
   return { kind: 'unknown' };
 }
 
-function isIssueAllowed(issueId, issuePolicy) {
-  if (!issuePolicy) return true;
-  if (issuePolicy.mode !== 'focused') return true;
-  return !!issueId && (issuePolicy.issues || []).map(String).includes(String(issueId));
-}
-
 function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (!issuePolicy) return null;
   const parsed = extractTbcDbCommand(command);
@@ -142,27 +136,13 @@ function checkIssueAccessInCommand(command, issuePolicy = null) {
   const mode = issuePolicy.mode || 'full';
   if (mode === 'full') return null;
 
-  if (parsed.kind === 'issue-create') return null;
-
   if (mode === 'blind') {
-    return 'Blocked: blind mode cannot read the issue tracker. You may only create new issues with tbc-db issue-create.';
+    return 'Blocked: blind mode cannot access the issue tracker. Work only from the task and repository.';
   }
 
   if (mode === 'focused') {
-    switch (parsed.kind) {
-      case 'issue-view':
-      case 'comments':
-      case 'comment':
-      case 'issue-edit':
-      case 'issue-close':
-        if (isIssueAllowed(parsed.issueId, issuePolicy)) return null;
-        return `Blocked: focused issues access denied${parsed.issueId ? ` for issue #${parsed.issueId}` : ''}. Allowed issues: ${(issuePolicy.issues || []).join(', ') || 'none'}.`;
-      case 'issue-list':
-      case 'query':
-      case 'unknown':
-      default:
-        return `Blocked: focused issues mode only allows access to issues ${(issuePolicy.issues || []).join(', ') || 'none'} and issue creation.`;
-    }
+    if (parsed.kind === 'issue-create') return null;
+    return 'Blocked: focused mode cannot read the issue tracker. Work from the task, repository, and your own notes; use issue-create only for new blockers/findings.';
   }
 
   return null;

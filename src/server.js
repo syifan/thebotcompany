@@ -1766,12 +1766,17 @@ class ProjectRunner {
   }
 
   // Build the full prompt for an agent (shared across CLI and API paths)
-  _getAgentFilesystemPolicy(agent) {
+  _getAgentFilesystemPolicy(agent, visibility = null) {
+    const visMode = visibility?.mode || 'full';
     const repoDir = this.path;
     const ownWorkspaceDir = path.join(this.agentDir, 'workspace', agent.name);
-    const read = [repoDir, ownWorkspaceDir];
-    const write = [repoDir, ownWorkspaceDir];
-    if (agent.isManager && agent.name !== 'themis') {
+    const read = [repoDir];
+    const write = [repoDir];
+    if (visMode !== 'blind') {
+      read.push(ownWorkspaceDir);
+      write.push(ownWorkspaceDir);
+    }
+    if (agent.isManager && agent.name !== 'themis' && visMode !== 'blind') {
       read.push(this.workerSkillsDir);
       write.push(this.workerSkillsDir);
     }
@@ -1805,20 +1810,19 @@ class ProjectRunner {
       sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
       const visMode = visibility?.mode || 'full';
       if (agent.name !== 'themis') {
-        if (visMode !== 'blind') {
+        if (visMode === 'full') {
           const dbPath = path.join(ROOT, 'agent', 'db.md');
           try {
-            let dbContent = fs.readFileSync(dbPath, 'utf-8');
-            if (visMode === 'focused') {
-              dbContent += `\n\n> **Visibility: Focused** — You can only access issues: ${visibility?.issues?.join(', ') || 'none specified'}. Other issues are restricted.\n`;
-            }
+            const dbContent = fs.readFileSync(dbPath, 'utf-8');
             sharedRules += dbContent + '\n\n---\n\n';
           } catch {}
+        } else if (visMode === 'focused') {
+          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker. Work only from the task, the repository, and your own workspace notes. If needed, you may create a new issue to report a blocker or finding.\n\n---\n\n';
         } else {
-          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker (tbc-db), but you may still create new issues to report blockers or findings. Focus on the task described above and the repository code.\n\n---\n\n';
+          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker and you cannot rely on any workspace notes, including your own prior notes. Work only from the task and the repository.\n\n---\n\n';
         }
       } else {
-        sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or other agents\' private workspaces. Evaluate only the repository, tests, artifacts, and your own inspection.\n\n---\n\n';
+        sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or any workspace notes, including your own. Evaluate only the repository, tests, artifacts, and your own fresh inspection.\n\n---\n\n';
       }
       const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
@@ -2062,7 +2066,7 @@ class ProjectRunner {
       timeoutMs: config.agentTimeoutMs || 0,
       env: agentEnv,
       allowedRepo: this.repo || null,
-      allowedPaths: this._getAgentFilesystemPolicy(agent),
+      allowedPaths: this._getAgentFilesystemPolicy(agent, visibility),
       issuePolicy: visibility || { mode: 'full', issues: [] },
       abortSignal: runAbortController.signal,
       keyId: resolvedKeyId,
