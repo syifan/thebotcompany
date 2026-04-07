@@ -136,8 +136,8 @@ function detectProviderFromToken(token) {
 function stripMetaBlocks(text) {
   if (!text) return text;
   return text
-    .replace(/<!--\s*(SCHEDULE|MILESTONE|CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
-    .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')
+    .replace(/<!--\s*(SCHEDULE|MILESTONE|CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|EXAM_PASS|EXAM_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|EXAM_PASS|EXAM_FAIL)\s*-->/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -315,13 +315,15 @@ class ProjectRunner {
     this.lastComputedSleepMs = null; // Cached sleep interval
     this.currentSchedule = null;
     this.abortCurrentCycle = false;
-    // Phase state machine: athena | implementation | verification
+    // Phase state machine: athena | implementation | verification | examination
     this.phase = 'athena'; // Start by asking Athena for first milestone
     this.milestoneTitle = null;
     this.milestoneDescription = null;
     this.milestoneCyclesBudget = 0;
     this.milestoneCyclesUsed = 0;
     this.verificationFeedback = null;
+    this.examinationFeedback = null;
+    this.pendingCompletionMessage = null;
     this.isFixRound = false; // true when returning from failed verification
     this.isComplete = false;
     this.completionSuccess = false;
@@ -945,6 +947,8 @@ class ProjectRunner {
       milestoneCyclesBudget: 0,
       milestoneCyclesUsed: 0,
       verificationFeedback: null,
+      examinationFeedback: null,
+      pendingCompletionMessage: null,
       isFixRound: false,
       isComplete: false,
       completionSuccess: false,
@@ -1035,6 +1039,8 @@ class ProjectRunner {
         this.milestoneCyclesBudget = state.milestoneCyclesBudget || 0;
         this.milestoneCyclesUsed = state.milestoneCyclesUsed || 0;
         this.verificationFeedback = state.verificationFeedback || null;
+        this.examinationFeedback = state.examinationFeedback || null;
+        this.pendingCompletionMessage = state.pendingCompletionMessage || null;
         this.isFixRound = state.isFixRound || false;
         this.isComplete = state.isComplete || false;
         this.completionSuccess = state.completionSuccess || false;
@@ -1071,6 +1077,8 @@ class ProjectRunner {
         milestoneCyclesBudget: this.milestoneCyclesBudget,
         milestoneCyclesUsed: this.milestoneCyclesUsed,
         verificationFeedback: this.verificationFeedback,
+        examinationFeedback: this.examinationFeedback,
+        pendingCompletionMessage: this.pendingCompletionMessage,
         isFixRound: this.isFixRound,
         isComplete: this.isComplete || false,
         completionSuccess: this.completionSuccess || false,
@@ -1373,7 +1381,9 @@ class ProjectRunner {
         if (athena) {
           // Build situation context for Athena
           let situation = '';
-          if (!this.milestoneDescription) {
+          if (this.examinationFeedback) {
+            situation = `> **Situation: Project Completion Rejected by Themis**\n> ${this.examinationFeedback}\n\n`;
+          } else if (!this.milestoneDescription) {
             situation = '> **Situation: Project Just Started**\n\n';
           } else if (this.verificationFeedback === '__passed__') {
             situation = '> **Situation: Milestone Verified Complete**\n> Previous milestone was verified by Apollo\'s team.\n\n';
@@ -1403,6 +1413,8 @@ class ProjectRunner {
                   milestoneCyclesBudget: milestone.cycles || 20,
                   milestoneCyclesUsed: 0,
                   verificationFeedback: null,
+                  examinationFeedback: null,
+                  pendingCompletionMessage: null,
                   isFixRound: false,
                   phase: 'implementation',
                 });
@@ -1421,15 +1433,30 @@ class ProjectRunner {
                 const completion = JSON.parse(completeMatch[1]);
                 const success = !!completion.success;
                 const message = completion.message || 'Project completed';
-                this.setState({
-                  isComplete: true,
-                  completionSuccess: success,
-                  completionMessage: message,
-                  isPaused: true,
-                  pauseReason: `Project ${success ? 'completed successfully' : 'ended'}: ${message}`,
-                });
-                log(`🏁 PROJECT COMPLETE (success: ${success}): ${message}`, this.id);
-                broadcastEvent({ type: 'project-complete', project: this.id, success, message });
+                if (success) {
+                  this.setState({
+                    phase: 'examination',
+                    pendingCompletionMessage: message,
+                    examinationFeedback: null,
+                    completionSuccess: false,
+                    completionMessage: null,
+                    isComplete: false,
+                    isPaused: false,
+                    pauseReason: null,
+                  });
+                  log(`🧪 PROJECT COMPLETE claimed — routing to Themis examination: ${message}`, this.id);
+                  broadcastEvent({ type: 'phase', project: this.id, phase: 'examination', title: this.milestoneTitle || 'Project examination' });
+                } else {
+                  this.setState({
+                    isComplete: true,
+                    completionSuccess: success,
+                    completionMessage: message,
+                    isPaused: true,
+                    pauseReason: `Project ${success ? 'completed successfully' : 'ended'}: ${message}`,
+                  });
+                  log(`🏁 PROJECT COMPLETE (success: ${success}): ${message}`, this.id);
+                  broadcastEvent({ type: 'project-complete', project: this.id, success, message });
+                }
                 continue;
               } catch (e) {
                 log(`Failed to parse PROJECT_COMPLETE: ${e.message}`, this.id);
@@ -1619,6 +1646,81 @@ class ProjectRunner {
         } // end else (no interrupted verification schedule)
       }
 
+      // ===== PHASE: EXAMINATION (Themis final audit) =====
+      else if (this.phase === 'examination') {
+        const themis = managers.find(m => m.name === 'themis');
+        if (themis) {
+          const themisContext = `> **Final completion claim:** ${this.pendingCompletionMessage || 'Project claimed complete'}\n> **Evaluate the entire project, not just the human\'s explicit goal.** Audit correctness, completeness, maintainability, artifacts, tests, docs, and obvious risks.\n\n`;
+          const result = await this.runAgent(themis, config, null, themisContext, { mode: 'blind', issues: [] });
+          cycleTotal++;
+          if (!result || !result.success) cycleFailures++;
+
+          let decision = null;
+          let failData = null;
+          if (result && result.resultText) {
+            if (result.resultText.includes('<!-- EXAM_PASS -->')) {
+              decision = 'pass';
+            }
+            const failMatch = result.resultText.match(/<!-- EXAM_FAIL -->\s*([\s\S]*?)\s*<!-- \/EXAM_FAIL -->/);
+            if (failMatch) {
+              try {
+                failData = JSON.parse(failMatch[1]);
+                decision = 'fail';
+              } catch {
+                decision = 'fail';
+                failData = { feedback: 'Themis rejected project completion, but the response could not be parsed.' };
+              }
+            }
+          }
+
+          if (decision === 'pass') {
+            const message = this.pendingCompletionMessage || 'Project completed';
+            this.setState({
+              isComplete: true,
+              completionSuccess: true,
+              completionMessage: message,
+              pendingCompletionMessage: null,
+              examinationFeedback: null,
+              isPaused: true,
+              pauseReason: `Project completed successfully: ${message}`,
+            });
+            log(`🏁 PROJECT COMPLETE (validated by Themis): ${message}`, this.id);
+            broadcastEvent({ type: 'project-complete', project: this.id, success: true, message });
+          } else if (decision === 'fail') {
+            const issues = Array.isArray(failData?.issues) ? failData.issues : [];
+            const createdIssueIds = [];
+            for (const issue of issues) {
+              if (!issue?.title) continue;
+              try {
+                const created = await this.createIssue(issue.title, issue.body || '', 'themis');
+                createdIssueIds.push(created.issueId);
+              } catch (e) {
+                log(`Themis issue creation failed: ${e.message}`, this.id);
+              }
+            }
+            const feedback = failData?.feedback || failData?.summary || 'Themis rejected the project completion claim.';
+            this.setState({
+              phase: 'athena',
+              examinationFeedback: createdIssueIds.length
+                ? `${feedback} New issues: ${createdIssueIds.map(id => `#${id}`).join(', ')}`
+                : feedback,
+              pendingCompletionMessage: null,
+              currentSchedule: null,
+              completedAgents: [],
+              isComplete: false,
+              completionSuccess: false,
+              completionMessage: null,
+              isPaused: false,
+              pauseReason: null,
+            });
+            log(`❌ Themis rejected project completion — returning to Athena`, this.id);
+            broadcastEvent({ type: 'phase', project: this.id, phase: 'athena', title: this.milestoneTitle || 'Replanning after Themis rejection' });
+          } else {
+            this.saveState();
+          }
+        }
+      }
+
       // If no agent succeeded, don't count this cycle
       if (cycleTotal > 0 && cycleFailures === cycleTotal) {
         this.cycleCount--;
@@ -1666,7 +1768,7 @@ class ProjectRunner {
     const ownWorkspaceDir = path.join(this.agentDir, 'workspace', agent.name);
     const read = [repoDir, ownWorkspaceDir];
     const write = [repoDir, ownWorkspaceDir];
-    if (agent.isManager) {
+    if (agent.isManager && agent.name !== 'themis') {
       read.push(this.workerSkillsDir);
       write.push(this.workerSkillsDir);
     }
@@ -1699,19 +1801,23 @@ class ProjectRunner {
       const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
       sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
       const visMode = visibility?.mode || 'full';
-      if (visMode !== 'blind') {
-        const dbPath = path.join(ROOT, 'agent', 'db.md');
-        try {
-          let dbContent = fs.readFileSync(dbPath, 'utf-8');
-          if (visMode === 'focused') {
-            dbContent += `\n\n> **Visibility: Focused** — You can only access issues: ${visibility?.issues?.join(', ') || 'none specified'}. Other issues are restricted.\n`;
-          }
-          sharedRules += dbContent + '\n\n---\n\n';
-        } catch {}
+      if (agent.name !== 'themis') {
+        if (visMode !== 'blind') {
+          const dbPath = path.join(ROOT, 'agent', 'db.md');
+          try {
+            let dbContent = fs.readFileSync(dbPath, 'utf-8');
+            if (visMode === 'focused') {
+              dbContent += `\n\n> **Visibility: Focused** — You can only access issues: ${visibility?.issues?.join(', ') || 'none specified'}. Other issues are restricted.\n`;
+            }
+            sharedRules += dbContent + '\n\n---\n\n';
+          } catch {}
+        } else {
+          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker (tbc-db), but you may still create new issues to report blockers or findings. Focus on the task described above and the repository code.\n\n---\n\n';
+        }
       } else {
-        sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker (tbc-db), but you may still create new issues to report blockers or findings. Focus on the task described above and the repository code.\n\n---\n\n';
+        sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or other agents\' private workspaces. Evaluate only the repository, tests, artifacts, and your own inspection.\n\n---\n\n';
       }
-      const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
+      const rolePath = path.join(ROOT, 'agent', agent.name === 'themis' ? 'examiner.md' : (agent.isManager ? 'manager.md' : 'worker.md'));
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
     } catch {}
 
