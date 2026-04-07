@@ -1820,7 +1820,7 @@ class ProjectRunner {
       } else {
         sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or other agents\' private workspaces. Evaluate only the repository, tests, artifacts, and your own inspection.\n\n---\n\n';
       }
-      const rolePath = path.join(ROOT, 'agent', agent.name === 'themis' ? 'examiner.md' : (agent.isManager ? 'manager.md' : 'worker.md'));
+      const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
     } catch {}
 
