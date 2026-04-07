@@ -58,18 +58,28 @@ describe('Themis examination phase', () => {
       'Expected EXAM_PASS to finalize the project');
   });
 
-  it('returns to athena and creates issues on EXAM_FAIL', () => {
+  it('returns to athena and creates issues when Themis does not emit EXAM_PASS', () => {
     const src = readServer();
     const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
     assert.ok(examBlock, 'Could not find examination phase block');
     const block = examBlock[1];
 
-    assert.match(block, /EXAM_FAIL/,
-      'Expected EXAM_FAIL handling');
+    assert.match(block, /let decision = 'fail'/,
+      'Expected examination phase to default to failure');
     assert.match(block, /phase:\s*'athena'/,
-      'Expected EXAM_FAIL to return control to Athena');
-    assert.match(block, /issue-create|createIssue|db\.prepare\(`INSERT INTO issues/i,
-      'Expected EXAM_FAIL to create issues');
+      'Expected non-pass examination result to return control to Athena');
+    assert.match(block, /issue-create|createIssue|INSERT INTO issues/i,
+      'Expected non-pass examination result to create issues');
+  });
+
+  it('treats EXAM_FAIL as optional, not required', () => {
+    const src = readServer();
+    const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
+    assert.ok(examBlock, 'Could not find examination phase block');
+    const block = examBlock[1];
+
+    assert.match(block, /rawFeedback/,
+      'Expected examination failure path to fall back to raw Themis output when EXAM_FAIL is absent');
   });
 
   it('gives Athena context when Themis rejects project completion', () => {

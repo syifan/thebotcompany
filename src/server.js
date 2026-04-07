@@ -1655,7 +1655,7 @@ class ProjectRunner {
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
-          let decision = null;
+          let decision = 'fail';
           let failData = null;
           if (result && result.resultText) {
             if (result.resultText.includes('<!-- EXAM_PASS -->')) {
@@ -1665,9 +1665,7 @@ class ProjectRunner {
             if (failMatch) {
               try {
                 failData = JSON.parse(failMatch[1]);
-                decision = 'fail';
               } catch {
-                decision = 'fail';
                 failData = { feedback: 'Themis rejected project completion, but the response could not be parsed.' };
               }
             }
@@ -1686,8 +1684,15 @@ class ProjectRunner {
             });
             log(`🏁 PROJECT COMPLETE (validated by Themis): ${message}`, this.id);
             broadcastEvent({ type: 'project-complete', project: this.id, success: true, message });
-          } else if (decision === 'fail') {
-            const issues = Array.isArray(failData?.issues) ? failData.issues : [];
+          } else {
+            let issues = Array.isArray(failData?.issues) ? failData.issues : [];
+            const rawFeedback = (result?.resultText || '').trim();
+            if (issues.length === 0) {
+              issues = [{
+                title: 'Themis rejected project completion',
+                body: rawFeedback || failData?.feedback || failData?.summary || 'Themis did not issue EXAM_PASS, so the completion claim was rejected.',
+              }];
+            }
             const createdIssueIds = [];
             for (const issue of issues) {
               if (!issue?.title) continue;
@@ -1698,7 +1703,7 @@ class ProjectRunner {
                 log(`Themis issue creation failed: ${e.message}`, this.id);
               }
             }
-            const feedback = failData?.feedback || failData?.summary || 'Themis rejected the project completion claim.';
+            const feedback = failData?.feedback || failData?.summary || rawFeedback || 'Themis rejected the project completion claim.';
             this.setState({
               phase: 'athena',
               examinationFeedback: createdIssueIds.length
@@ -1715,8 +1720,6 @@ class ProjectRunner {
             });
             log(`❌ Themis rejected project completion — returning to Athena`, this.id);
             broadcastEvent({ type: 'phase', project: this.id, phase: 'athena', title: this.milestoneTitle || 'Replanning after Themis rejection' });
-          } else {
-            this.saveState();
           }
         }
       }

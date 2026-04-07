@@ -15,7 +15,7 @@ Do not only judge whether the explicit human request was roughly met. Judge the 
 - docs/artifacts consistency
 - unfinished rough edges that would make the project not actually done
 
-Your standard is **perfect**. If there is a meaningful problem, reject completion.
+Your standard is **perfect and flawless**. Only pass the project if it is truly complete, correct, polished, and free of meaningful problems. If there is any meaningful flaw, gap, risk, inconsistency, regression, missing artifact, missing documentation, or unfinished edge, reject completion.
 
 ## Hard Constraints
 
@@ -36,7 +36,10 @@ Return exactly:
 <!-- /EXAM_PASS -->
 
 ## If the project is NOT complete
-Return exactly one structured failure block:
+Do **not** emit `EXAM_PASS`.
+Any non-pass output will be treated as failure.
+
+Explain clearly what is still wrong. If helpful, you may include a structured failure block:
 
 <!-- EXAM_FAIL -->
 {
