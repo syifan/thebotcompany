@@ -314,6 +314,7 @@ class ProjectRunner {
     this.running = false;
     this.lastComputedSleepMs = null; // Cached sleep interval
     this.currentSchedule = null;
+    this.abortCurrentCycle = false;
     // Phase state machine: athena | implementation | verification
     this.phase = 'athena'; // Start by asking Athena for first milestone
     this.milestoneTitle = null;
@@ -1138,6 +1139,7 @@ class ProjectRunner {
   // Kill Epoch: terminate everything + force back to Athena
   killEpoch() {
     log(`🔴 Kill Epoch: terminating agent, clearing schedule, returning to Athena`, this.id);
+    this.abortCurrentCycle = true;
     if (this.currentAgentProcess) {
       this.currentAgentProcess.kill('SIGTERM');
     }
@@ -1184,10 +1186,10 @@ class ProjectRunner {
     log(`⏳ Waiting ${Math.round(ms / 60000)}m after ${label}...`, this.id);
     this.sleepUntil = Date.now() + ms;
     let slept = 0;
-    while (slept < ms && !this.wakeNow && this.running) {
+    while (slept < ms && !this.wakeNow && this.running && !this.abortCurrentCycle) {
       await sleep(5000);
       slept += 5000;
-      while (this.isPaused && !this.wakeNow && this.running) { await sleep(1000); }
+      while (this.isPaused && !this.wakeNow && this.running && !this.abortCurrentCycle) { await sleep(1000); }
     }
     this.sleepUntil = null;
   }
@@ -1260,11 +1262,12 @@ class ProjectRunner {
     const freshWorkers = this.loadAgents().workers;
     
     for (const step of schedule._steps) {
-      if (!this.running) break;
+      if (!this.running || this.abortCurrentCycle) break;
       
       // Delay step
       if (step.delay !== undefined) {
         await this.sleepDelay(step.delay, 'schedule');
+        if (this.abortCurrentCycle) break;
         continue;
       }
       
@@ -1285,7 +1288,8 @@ class ProjectRunner {
         continue;
       }
       
-      while (this.isPaused && this.running) { await sleep(1000); }
+      while (this.isPaused && this.running && !this.abortCurrentCycle) { await sleep(1000); }
+      if (this.abortCurrentCycle) break;
       
       const task = typeof value === 'string' ? value : value.task || null;
       const vis = this._parseVisibility(value, task);
@@ -1294,11 +1298,12 @@ class ProjectRunner {
       const maxRetries = 2;
       let attempt = 0;
       let succeeded = false;
-      while (attempt <= maxRetries && !succeeded && this.running) {
+      while (attempt <= maxRetries && !succeeded && this.running && !this.abortCurrentCycle) {
         if (attempt > 0) {
           log(`Retrying ${worker.name} (attempt ${attempt + 1}/${maxRetries + 1})`, this.id);
         }
         const wResult = await this.runAgent(worker, config, null, task, vis);
+        if (this.abortCurrentCycle) break;
         total++;
         if (wResult && wResult.success) {
           succeeded = true;
@@ -1350,6 +1355,7 @@ class ProjectRunner {
       const { managers, workers } = this.loadAgents();
 
       // Start new cycle — preserve schedule state if resuming from reboot
+      this.abortCurrentCycle = false;
       const resuming = !!this.currentSchedule;
       if (!resuming) {
         this.cycleCount++;
