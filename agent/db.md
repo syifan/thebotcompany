@@ -70,7 +70,7 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 
 Your access to the tracker may be restricted by your manager:
 - **Full**: You can access everything
-- **Focused**: You can only access specific issues assigned to you
-- **Blind**: You cannot access the tracker — focus on the repo code and your task
+- **Focused**: You can only read/write specific allowed issues assigned to you, plus create new issues
+- **Blind**: You cannot read the tracker, but you can still create new issues to raise blockers or findings
 
 If you get "Access denied", respect the restriction and work with what you have.

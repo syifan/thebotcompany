@@ -146,8 +146,8 @@ You can control what each worker sees by adding `visibility` to your SCHEDULE:
 
 **Three levels:**
 - **`full`** (default): Worker can see all issues, comments, and reports via `tbc-db`
-- **`focused`**: Worker can only see issues mentioned in the task (e.g., `#42`). All other issues are hidden. Good for keeping workers on-task without distractions.
-- **`blind`**: Worker cannot access the tracker at all. They only see the task description and the repo code. Good for independent verification — the worker must evaluate on their own without seeing prior discussion.
+- **`focused`**: Worker can only read/write issues mentioned in the task (e.g., `#42`). All other issues are hidden. They may still create new issues if needed.
+- **`blind`**: Worker cannot read the tracker. They only see the task description and the repo code, but may still create new issues to report blockers or findings. Good for independent verification — the worker must evaluate on their own without seeing prior discussion.
 
 ## Escalate to Human
 
