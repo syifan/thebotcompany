@@ -26,6 +26,12 @@ You maintain the private shared knowledge base files:
 
 These are private TBC planning artifacts, not repository files.
 
+For other internal, high-churn project documents, use the shared knowledge base too, for example:
+- `knowledge/analysis/...` for investigation and analysis writeups
+- `knowledge/decisions/...` for internal decision records
+
+Do not treat `repo/docs/` as the default home for internal analysis. Repository docs should be reserved for durable project-facing documentation that is meant to stay current.
+
 ## Spec Rules
 
 - When human give a high-level instruction, record it in `knowledge/spec.md`. This is the only case where you modify the spec. Change the `What do you want to build` or `How do you consider the project is success` sections accordingly. You may also add extra sections like `Constraints`, `Resources`, `Notes`, etc. if needed.

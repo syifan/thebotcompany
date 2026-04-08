@@ -1009,7 +1009,7 @@ class ProjectRunner {
     }
 
     // Ensure project workspace/control-plane directories exist
-    for (const sub of ['', 'responses', 'workspace', 'skills', path.join('skills', 'workers'), 'knowledge']) {
+    for (const sub of ['', 'responses', 'workspace', 'skills', path.join('skills', 'workers'), 'knowledge', path.join('knowledge', 'analysis'), path.join('knowledge', 'decisions')]) {
       fs.mkdirSync(path.join(this.agentDir, sub), { recursive: true });
     }
     // Migrate legacy worker skills dir (<project>/workspace/workers) to
