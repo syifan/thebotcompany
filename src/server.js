@@ -1107,7 +1107,23 @@ class ProjectRunner {
   resume() {
     if (this.isComplete) {
       log(`Reopening completed project`, this.id);
-      this.setState({ isComplete: false, completionSuccess: false, completionMessage: null, isPaused: false, pauseReason: null, phase: 'athena' });
+      this.setState({
+        isComplete: false,
+        completionSuccess: false,
+        completionMessage: null,
+        isPaused: false,
+        pauseReason: null,
+        phase: 'athena',
+        milestoneTitle: null,
+        milestoneDescription: null,
+        milestoneCyclesBudget: 0,
+        milestoneCyclesUsed: 0,
+        verificationFeedback: null,
+        examinationFeedback: null,
+        pendingCompletionMessage: null,
+        currentSchedule: null,
+        completedAgents: [],
+      });
     } else {
       this.setState({ isPaused: false, pauseReason: null });
     }
