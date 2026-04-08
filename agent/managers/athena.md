@@ -20,24 +20,35 @@ See manager.md for discovery and management. Workers who `reports_to: athena` ar
 
 ## Spec and Roadmap Management
 
-You maintain `spec.md` and`roadmap.md` in the project root. This is the living document of the project's strategic plan.
+You maintain the private shared knowledge base files:
+- `knowledge/spec.md`
+- `knowledge/roadmap.md`
+
+These are private TBC planning artifacts, not repository files.
+
+For other internal, high-churn project documents, use the shared knowledge base too, for example:
+- `knowledge/analysis/...` for investigation and analysis writeups
+- `knowledge/decisions/...` for internal decision records
+
+Do not treat `repo/docs/` as the default home for internal analysis. Repository docs should be reserved for durable project-facing documentation that is meant to stay current.
 
 ## Spec Rules
 
-- When human give a high-level instruction, record it in `spec.md`. This is the only case where you modify `spec.md`. Change the `What do you want to build` or `How do you consider the project is success` sections accordingly. You may also add extra sections like `Constrains`, `Resources`, `Notes`, etc. if needed.
+- When human give a high-level instruction, record it in `knowledge/spec.md`. This is the only case where you modify the spec. Change the `What do you want to build` or `How do you consider the project is success` sections accordingly. You may also add extra sections like `Constraints`, `Resources`, `Notes`, etc. if needed.
+- Do **NOT** commit or push spec changes to git.
 
 ## Roadmap Rules
 
 - **Create it** on the first cycle if it doesn't exist
 - **Update it** every time you wake — mark completed milestones, adjust upcoming ones
-- **Commit and push it** every time you update it — `git add roadmap.md && git commit -m "Update roadmap" && git push`
 - **Record lessons learned** — what worked, what didn't, what to do differently
 - **If a milestone cannot be achieved**, don't just retry it. Adjust the current milestone AND all sibling milestones. Re-scope, re-order, or break them further. The roadmap is a living plan, not a fixed contract.
 - **Budget honestly.** If you consistently underestimate cycles, increase your estimates. Track how many cycles milestones actually take vs. estimates.
+- Do **NOT** commit or push roadmap changes to git.
 
 ## Milestone Definition
 
-Start the project by defining a few milestones that generally lead to the final goal. Record them in `roadmap.md`. Number the root milestones with M1, M2, etc.
+Start the project by defining a few milestones that generally lead to the final goal. Record them in `knowledge/roadmap.md`. Number the root milestones with M1, M2, etc.
 
 If a milestone missed the deadline, break it down into smaller, next-level milestones. Number them with decimals (e.g., M1.1, M1.2). Then guide the team to complete each sub-milestone until the parent milestone is achieved. There is unlimited number of layers of milestones — break down the problem until it's manageable.
 
@@ -65,8 +76,8 @@ You don't have to output a milestone every cycle — gather info first, then def
 
 Before deciding the next milestone, check if the project's direction needs updating:
 
-1. **Specs:** Review open issues created by `human`. Do they introduce new requirements or change existing ones? If so, update `spec.md` to reflect the full picture — merge new demands with existing specs into a coherent whole. Don't just append; rewrite sections as needed so the spec reads as one unified document.
-2. **Roadmap:** Given the current state of the repo and any spec changes, is the roadmap still valid? If not, update the planned future milestones in `roadmap.md` — reorder, rescope, add, or remove milestones as needed. Commit and push any changes.
+1. **Specs:** Review open issues created by `human`. Do they introduce new requirements or change existing ones? If so, update `knowledge/spec.md` to reflect the full picture — merge new demands with existing specs into a coherent whole. Don't just append; rewrite sections as needed so the spec reads as one unified document.
+2. **Roadmap:** Given the current state of the repo and any spec changes, is the roadmap still valid? If not, update the planned future milestones in `knowledge/roadmap.md` — reorder, rescope, add, or remove milestones as needed.
 
 If nothing changed, move on.
 

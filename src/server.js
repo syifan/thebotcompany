@@ -382,6 +382,10 @@ class ProjectRunner {
     return path.join(this.agentDir, 'skills');
   }
 
+  get knowledgeDir() {
+    return path.join(this.agentDir, 'knowledge');
+  }
+
   get workerSkillsDir() {
     const dir = path.join(this.skillsDir, 'workers');
     const legacyDir = path.join(this.agentDir, 'workers');
@@ -905,11 +909,11 @@ class ProjectRunner {
     if (workspaceExists) {
       workspaceContents = fs.readdirSync(this.agentDir);
     }
-    // Read spec.md and check roadmap.md from project repo
+    // Read spec.md and check roadmap.md from private knowledge base
     let specContent = null;
-    const specPath = path.join(this.path, 'spec.md');
+    const specPath = path.join(this.knowledgeDir, 'spec.md');
     try { specContent = fs.readFileSync(specPath, 'utf-8'); } catch {}
-    const hasRoadmap = fs.existsSync(path.join(this.path, 'roadmap.md'));
+    const hasRoadmap = fs.existsSync(path.join(this.knowledgeDir, 'roadmap.md'));
     return { available: true, workspaceEmpty: workspaceContents.length === 0, repo: this.repo, specContent, hasRoadmap };
   }
 
@@ -958,23 +962,22 @@ class ProjectRunner {
     });
     log(`Reset cycle count, project paused`, this.id);
 
-    // 3. Remove roadmap.md if requested
+    // 3. Remove roadmap.md from private knowledge base if requested
     if (options.removeRoadmap) {
-      const roadmapPath = path.join(this.path, 'roadmap.md');
+      const roadmapPath = path.join(this.knowledgeDir, 'roadmap.md');
       if (fs.existsSync(roadmapPath)) {
         try {
           fs.unlinkSync(roadmapPath);
-          execSync('git add roadmap.md && git commit -m "chore: remove roadmap.md (bootstrap)" && git push', { cwd: this.path, stdio: 'pipe' });
-          log(`Removed roadmap.md and pushed`, this.id);
+          log(`Removed private roadmap.md`, this.id);
         } catch (e) {
-          log(`Warning: failed to remove roadmap.md: ${e.message}`, this.id);
+          log(`Warning: failed to remove private roadmap.md: ${e.message}`, this.id);
         }
       }
     }
 
-    // 4. Update spec.md if requested
+    // 4. Update private spec.md if requested
     if (options.spec && options.spec.mode !== 'keep') {
-      const specPath = path.join(this.path, 'spec.md');
+      const specPath = path.join(this.knowledgeDir, 'spec.md');
       let newContent = '';
       if (options.spec.mode === 'edit') {
         newContent = options.spec.content || '';
@@ -1006,7 +1009,7 @@ class ProjectRunner {
     }
 
     // Ensure project workspace/control-plane directories exist
-    for (const sub of ['', 'responses', 'workspace', 'skills', path.join('skills', 'workers')]) {
+    for (const sub of ['', 'responses', 'workspace', 'skills', path.join('skills', 'workers'), 'knowledge', path.join('knowledge', 'analysis'), path.join('knowledge', 'decisions')]) {
       fs.mkdirSync(path.join(this.agentDir, sub), { recursive: true });
     }
     // Migrate legacy worker skills dir (<project>/workspace/workers) to

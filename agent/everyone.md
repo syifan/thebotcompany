@@ -4,6 +4,18 @@
 
 **Complete the project with passing standard quality, with minimum human involvement.** Work autonomously. Make decisions. Solve problems. 
 
+## Shared Knowledge Base
+
+There is a private shared knowledge base under `knowledge/`.
+
+Use it for stable internal project knowledge such as:
+- `knowledge/spec.md`
+- `knowledge/roadmap.md`
+- `knowledge/analysis/...`
+- `knowledge/decisions/...`
+
+Do not treat the repository itself as the default home for private planning or internal analysis documents.
+
 ## Safety
 
 **Before ANY action**, verify you are in the correct repository. If repo doesn't match, **ABORT immediately**.
