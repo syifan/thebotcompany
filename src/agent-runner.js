@@ -76,8 +76,11 @@ function checkGitCommand(command, allowedRepo) {
   // --- gh CLI checks ---
   const hasGh = /(?:^|[;&|`\s])gh\s/.test(command) || command.trimStart().startsWith('gh ');
   if (hasGh) {
-    // Block: gh pr create / gh pr merge targeting a different repo
-    // gh pr create [--repo owner/repo] or gh pr create (uses cwd repo — allowed)
+    if (/(?:^|[;&|`\s])gh\s+pr\s+create\b/.test(command)) {
+      return 'Blocked: gh pr create is not allowed. Create a local TBC PR instead with tbc-db pr-create.';
+    }
+
+    // Block: gh operations targeting a different repo
     const ghRepoMatch = command.match(/(?:^|[;&|`\s])gh\s+.*--repo\s+([^\s]+)/);
     if (ghRepoMatch) {
       const targetRepo = ghRepoMatch[1].replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
@@ -116,6 +119,9 @@ function extractTbcDbCommand(command) {
   const issueFlagMatch = args.match(/--issue\s+(\d+)/);
   const positionalIssueMatch = args.match(/^(?:issue-view|issue-edit|issue-close|comments)\s+(\d+)\b/);
   const issueId = issueFlagMatch?.[1] || positionalIssueMatch?.[1] || null;
+  const prFlagMatch = args.match(/--pr\s+(\d+)/);
+  const positionalPrMatch = args.match(/^(?:pr-view|pr-edit)\s+(\d+)\b/);
+  const prId = prFlagMatch?.[1] || positionalPrMatch?.[1] || null;
 
   if (/^issue-create\b/.test(args)) return { kind: 'issue-create' };
   if (/^issue-list\b/.test(args)) return { kind: 'issue-list' };
@@ -124,6 +130,10 @@ function extractTbcDbCommand(command) {
   if (/^comment\b/.test(args)) return { kind: 'comment', issueId };
   if (/^issue-edit\b/.test(args)) return { kind: 'issue-edit', issueId };
   if (/^issue-close\b/.test(args)) return { kind: 'issue-close', issueId };
+  if (/^pr-create\b/.test(args)) return { kind: 'pr-create' };
+  if (/^pr-list\b/.test(args)) return { kind: 'pr-list' };
+  if (/^pr-view\b/.test(args)) return { kind: 'pr-view', prId };
+  if (/^pr-edit\b/.test(args)) return { kind: 'pr-edit', prId };
   if (/^query\b/.test(args)) return { kind: 'query' };
   return { kind: 'unknown' };
 }
@@ -137,11 +147,13 @@ function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (mode === 'full') return null;
 
   if (mode === 'blind') {
+    if (parsed.kind === 'pr-create' || parsed.kind === 'pr-edit') return null;
     return 'Blocked: blind mode cannot access the issue tracker. Work only from the task and repository.';
   }
 
   if (mode === 'focused') {
     if (parsed.kind === 'issue-create') return null;
+    if (parsed.kind?.startsWith('pr-')) return null;
     return 'Blocked: focused mode cannot read the issue tracker. Work from the task, repository, and your own notes; use issue-create only for new blockers/findings.';
   }
 

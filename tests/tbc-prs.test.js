@@ -30,6 +30,20 @@ function createDbWithTbcPrsSchema(dbPath) {
 }
 
 describe('TBC local PR staging model', () => {
+  it('tbc-db CLI should expose TBC PR commands', () => {
+    const cliCode = fs.readFileSync(path.join(process.cwd(), 'bin', 'tbc-db.js'), 'utf-8');
+    assert.match(cliCode, /'pr-create'\(\)/, 'Expected tbc-db to support pr-create');
+    assert.match(cliCode, /'pr-list'\(\)/, 'Expected tbc-db to support pr-list');
+    assert.match(cliCode, /'pr-view'\(\)/, 'Expected tbc-db to support pr-view');
+    assert.match(cliCode, /'pr-edit'\(\)/, 'Expected tbc-db to support pr-edit');
+  });
+
+  it('agent shared rules should instruct workers to use TBC PRs', () => {
+    const everyone = fs.readFileSync(path.join(process.cwd(), 'agent', 'everyone.md'), 'utf-8');
+    const worker = fs.readFileSync(path.join(process.cwd(), 'agent', 'worker.md'), 'utf-8');
+    assert.match(everyone, /Use TBC PRs, not GitHub PRs/i);
+    assert.match(worker, /tbc-db pr-create/i);
+  });
   it('server should create a tbc_prs table in project.db schema', () => {
     const serverCode = fs.readFileSync(path.join(process.cwd(), 'src', 'server.js'), 'utf-8');
     assert.match(serverCode, /CREATE TABLE IF NOT EXISTS tbc_prs/,

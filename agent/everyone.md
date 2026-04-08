@@ -37,9 +37,11 @@ At the end of each cycle, write a brief `note.md` with context for your next cyc
 **Use `tbc-db` for all task tracking and communication.** See `db.md` for the full CLI reference.
 
 **Use GitHub only for:**
-- Pull requests and code review
 - Commits (prefix with `[AgentName] message`)
 - Branch names (`agentname/description`)
+- Optional read-only inspection of remote CI/code review state when explicitly needed
+
+**Use TBC PRs, not GitHub PRs, for normal agent workflow.** Create and update local PR records with `tbc-db pr-create` and `tbc-db pr-edit`.
 
 **Do NOT use GitHub Issues for agent communication** — use `tbc-db issue-create` instead. GitHub Issues are reserved for human escalation only.
 

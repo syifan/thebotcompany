@@ -91,6 +91,16 @@ describe('issue visibility policy', () => {
     assert.doesNotMatch(commentResult, /access denied|issue tracker/i);
   });
 
+  it('allows TBC PR writes outside full visibility', async () => {
+    const p = mkProject();
+
+    const blindCreate = await executeTool('Bash', { command: 'tbc-db pr-create --title "Draft" --head leo/draft' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.blind);
+    assert.doesNotMatch(blindCreate, /access denied|blind mode|issue tracker/i);
+
+    const focusedEdit = await executeTool('Bash', { command: 'tbc-db pr-edit 1 --status ready_for_review' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
+    assert.doesNotMatch(focusedEdit, /access denied|focused mode|issue tracker/i);
+  });
+
   it('blocks raw SQL query for non-full visibility', async () => {
     const p = mkProject();
 
@@ -99,5 +109,11 @@ describe('issue visibility policy', () => {
 
     const blindQuery = await executeTool('Bash', { command: 'tbc-db query "SELECT * FROM issues"' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.blind);
     assert.match(blindQuery, /access denied|query|blind mode|issue tracker/i);
+  });
+
+  it('blocks gh pr create in favor of TBC PRs', async () => {
+    const p = mkProject();
+    const result = await executeTool('Bash', { command: 'gh pr create --title "x" --body "y"' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, 'syifan/thebotcompany', p.allowedPaths, p.issuePolicies.full);
+    assert.match(result, /gh pr create is not allowed|tbc-db pr-create/i);
   });
 });
