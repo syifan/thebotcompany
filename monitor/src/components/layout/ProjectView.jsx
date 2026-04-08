@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Users, User, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
+import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
 import { PanelSlot, closeAllPanels } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
@@ -778,22 +778,32 @@ export default function ProjectView({
                   </div>
               </DashboardWidget>
 
-              <DashboardWidget icon={GitPullRequest} title={`Open PRs (${prs.length})`}>
+              <DashboardWidget icon={GitPullRequest} title={`TBC PRs (${prs.length})`}>
                   <div className="space-y-2">
-                    {prs.map((pr) => (
-                      <a key={pr.number} href={`${repoUrl}/pull/${pr.number}`} target="_blank" rel="noopener noreferrer"
-                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-neutral-400 dark:text-neutral-500">#{pr.number}</span>
-                          <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{pr.shortTitle || pr.title}</span>
+                    {prs.map((pr) => {
+                      const content = (
+                        <div className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-neutral-400 dark:text-neutral-500">#{pr.number}</span>
+                            <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{pr.shortTitle || pr.title}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500 dark:text-neutral-400 flex-wrap">
+                            <span className="truncate">{pr.baseRefName} ← {pr.headRefName}</span>
+                            {pr.status && <span className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800">{pr.status}</span>}
+                            {pr.test_status && <span className="px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-800">tests: {pr.test_status}</span>}
+                            {pr.issueIds?.length > 0 && <span>{pr.issueIds.map(id => `#${id}`).join(', ')}</span>}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                          {pr.agent && <span className="flex items-center gap-1"><User className="w-3 h-3" />{pr.agent}</span>}
-                          <span className="truncate">{pr.headRefName}</span>
-                        </div>
-                      </a>
-                    ))}
-                    {prs.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open PRs</p>}
+                      )
+                      return pr.github_pr_url ? (
+                        <a key={pr.number} href={pr.github_pr_url} target="_blank" rel="noopener noreferrer" className="block cursor-pointer">
+                          {content}
+                        </a>
+                      ) : (
+                        <div key={pr.number}>{content}</div>
+                      )
+                    })}
+                    {prs.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open TBC PRs</p>}
                   </div>
               </DashboardWidget>
 

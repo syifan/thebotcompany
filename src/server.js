@@ -786,6 +786,7 @@ class ProjectRunner {
       CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), closed_at TEXT);
       CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
       CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
+      CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
     `);
     return db;
   }
@@ -819,18 +820,24 @@ class ProjectRunner {
   }
 
   async getPRs() {
-    if (!this.repo) return [];
     try {
-      const output = execSync(
-        'gh pr list --state open --json number,title,createdAt,headRefName --limit 50',
-        { cwd: this.path, encoding: 'utf-8', timeout: 30000 }
-      );
-      return JSON.parse(output).map(pr => {
-        const match = pr.title.match(/^\[([^\]]+)\]\s*(.*)$/);
-        return match 
-          ? { ...pr, agent: match[1], shortTitle: match[2] }
-          : { ...pr, agent: null, shortTitle: pr.title };
-      });
+      const db = this.getDb();
+      const prs = db.prepare(`
+        SELECT id, title, summary, base_branch, head_branch, status, issue_ids, test_status, github_pr_number, github_pr_url, created_at, updated_at
+        FROM tbc_prs
+        WHERE status != 'completed'
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 50
+      `).all();
+      db.close();
+      return prs.map(pr => ({
+        ...pr,
+        number: pr.id,
+        headRefName: pr.head_branch,
+        baseRefName: pr.base_branch,
+        shortTitle: pr.title,
+        issueIds: (() => { try { return JSON.parse(pr.issue_ids || '[]'); } catch { return []; } })(),
+      }));
     } catch {
       return [];
     }
