@@ -13,13 +13,14 @@
 import { spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { createInterface } from 'readline';
 import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
-const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
+const TBC_HOME = process.env.TBC_HOME || path.join(os.homedir(), '.thebotcompany');
 const MONITOR_DIR = path.join(ROOT, 'monitor');
 const PROJECTS_PATH = path.join(TBC_HOME, 'projects.yaml');
 

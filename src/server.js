@@ -9,6 +9,7 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
@@ -30,9 +31,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 
 // Load .env from TBC_HOME (~/.thebotcompany/.env)
-const TBC_HOME_EARLY = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
+const TBC_HOME_EARLY = process.env.TBC_HOME || path.join(os.homedir(), '.thebotcompany');
 loadDotenv({ path: path.join(TBC_HOME_EARLY, '.env') });
-const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
+const TBC_HOME = process.env.TBC_HOME || path.join(os.homedir(), '.thebotcompany');
 const MONITOR_DIST = path.join(ROOT, 'monitor', 'dist');
 
 function maskToken(token) {
@@ -300,7 +301,7 @@ const MIME_TYPES = {
 class ProjectRunner {
   constructor(id, config) {
     this.id = id;
-    this.path = config.path.replace(/^~/, process.env.HOME);
+    this.path = config.path.replace(/^~/, os.homedir());
     this.enabled = config.enabled !== false;
     this.archived = config.archived === true;
     this.cycleCount = 0;   // Cycles: manager + worker runs
@@ -2907,7 +2908,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        const resolvedPath = projectPath.replace(/^~/, process.env.HOME);
+        const resolvedPath = projectPath.replace(/^~/, os.homedir());
 
         // Write spec.md if spec data provided
         if (spec && (spec.whatToBuild || spec.successCriteria)) {

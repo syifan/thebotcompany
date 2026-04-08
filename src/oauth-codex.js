@@ -9,6 +9,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import http from 'http';
 import crypto from 'crypto';
 
@@ -20,7 +21,7 @@ const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}/auth/callback`;
 const SCOPE = 'openid profile email offline_access';
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
 
-const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
+const TBC_HOME = process.env.TBC_HOME || path.join(os.homedir(), '.thebotcompany');
 
 function authFilePath(projectId) {
   if (projectId) return path.join(TBC_HOME, `openai-codex-auth-${projectId.replace(/\//g, '_')}.json`);

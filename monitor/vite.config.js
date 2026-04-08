@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import os from 'os'
 import { config as loadDotenv } from 'dotenv'
 
 // Load .env from ~/.thebotcompany/
-loadDotenv({ path: path.join(process.env.HOME, '.thebotcompany', '.env') })
+loadDotenv({ path: path.join(os.homedir(), '.thebotcompany', '.env') })
 
 export default defineConfig({
   plugins: [react()],
