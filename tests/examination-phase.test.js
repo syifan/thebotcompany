@@ -56,6 +56,8 @@ describe('Themis examination phase', () => {
       'Expected EXAM_PASS handling');
     assert.match(block, /isComplete:\s*true/,
       'Expected EXAM_PASS to finalize the project');
+    assert.match(block, /phase:\s*'athena'/,
+      'Expected EXAM_PASS to exit examination phase cleanly');
   });
 
   it('returns to athena and creates issues when Themis does not emit EXAM_PASS', () => {

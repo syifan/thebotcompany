@@ -1674,11 +1674,14 @@ class ProjectRunner {
           if (decision === 'pass') {
             const message = this.pendingCompletionMessage || 'Project completed';
             this.setState({
+              phase: 'athena',
               isComplete: true,
               completionSuccess: true,
               completionMessage: message,
               pendingCompletionMessage: null,
               examinationFeedback: null,
+              currentSchedule: null,
+              completedAgents: [],
               isPaused: true,
               pauseReason: `Project completed successfully: ${message}`,
             });
