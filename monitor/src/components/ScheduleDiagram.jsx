@@ -219,8 +219,8 @@ export function stripAllMetaBlocks(text) {
   return text
     .replace(/^>\s*⏱\s*Started:.*$/m, '')
     .replace(/<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/g, '')
-    .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
-    .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL)\s*-->/g, '')
+    .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE|EXAM_PASS|EXAM_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|EXAM_PASS|EXAM_FAIL)\s*-->/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
@@ -239,12 +239,21 @@ export function parseProjectComplete(text) {
   try { return JSON.parse(match[1]) } catch { return null }
 }
 
+export function parseExamPass(text) {
+  if (!text) return null
+  const match = text.match(/<!--\s*EXAM_PASS\s*-->\s*([\s\S]*?)\s*<!--\s*\/EXAM_PASS\s*-->/)
+  if (!match) return null
+  try { return JSON.parse(match[1]) } catch { return { message: match[1].trim() } }
+}
+
 export function parseDirectives(text) {
-  if (!text) return { list: [], verifyFailFeedback: null }
+  if (!text) return { list: [], verifyFailFeedback: null, examFailFeedback: null }
   const list = []
   if (/<!--\s*CLAIM_COMPLETE\s*-->/.test(text)) list.push('claim_complete')
   if (/<!--\s*VERIFY_PASS\s*-->/.test(text)) list.push('verify_pass')
+  if (/<!--\s*EXAM_PASS\s*-->/.test(text)) list.push('exam_pass')
   let verifyFailFeedback = null
+  let examFailFeedback = null
   const vfMatch = text.match(/<!--\s*VERIFY_FAIL\s*-->\s*([\s\S]*?)\s*<!--\s*\/VERIFY_FAIL\s*-->/)
   if (vfMatch) {
     list.push('verify_fail')
@@ -252,15 +261,28 @@ export function parseDirectives(text) {
   } else if (/<!--\s*VERIFY_FAIL\s*-->/.test(text)) {
     list.push('verify_fail')
   }
-  return { list, verifyFailFeedback }
+  const efMatch = text.match(/<!--\s*EXAM_FAIL\s*-->\s*([\s\S]*?)\s*<!--\s*\/EXAM_FAIL\s*-->/)
+  if (efMatch) {
+    list.push('exam_fail')
+    try {
+      const parsed = JSON.parse(efMatch[1])
+      examFailFeedback = parsed.feedback || parsed.summary || efMatch[1].trim()
+    } catch {
+      examFailFeedback = efMatch[1].trim()
+    }
+  } else if (/<!--\s*EXAM_FAIL\s*-->/.test(text)) {
+    list.push('exam_fail')
+  }
+  return { list, verifyFailFeedback, examFailFeedback }
 }
 
 export function MetaBlockBadges({ text }) {
   const milestone = parseMilestoneBlock(text)
   const projectComplete = parseProjectComplete(text)
-  const { list: directives, verifyFailFeedback } = parseDirectives(text)
+  const examPass = parseExamPass(text)
+  const { list: directives, verifyFailFeedback, examFailFeedback } = parseDirectives(text)
 
-  if (!milestone && !projectComplete && directives.length === 0) return null
+  if (!milestone && !projectComplete && !examPass && directives.length === 0) return null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -284,6 +306,20 @@ export function MetaBlockBadges({ text }) {
         <MetaCard label="❌ Verification Failed" color="#ef4444">
           {verifyFailFeedback && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{verifyFailFeedback}</div>
+          )}
+        </MetaCard>
+      )}
+      {directives.includes('exam_pass') && (
+        <MetaCard label="⚖️ Themis Approved" color="#10b981">
+          {examPass?.message && (
+            <div style={{ whiteSpace: 'pre-wrap' }}>{examPass.message}</div>
+          )}
+        </MetaCard>
+      )}
+      {directives.includes('exam_fail') && (
+        <MetaCard label="⚖️ Themis Rejected" color="#ef4444">
+          {examFailFeedback && (
+            <div style={{ whiteSpace: 'pre-wrap' }}>{examFailFeedback}</div>
           )}
         </MetaCard>
       )}
