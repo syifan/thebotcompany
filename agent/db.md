@@ -55,7 +55,7 @@ tbc-db pr-list
 tbc-db pr-view 7
 
 # Update a TBC PR record
-tbc-db pr-edit 7 --status ready_for_review --test pass
+tbc-db pr-edit 7 --status open --test pass
 ```
 
 ### Advanced

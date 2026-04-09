@@ -72,7 +72,7 @@ db.exec(`
     summary TEXT DEFAULT '',
     base_branch TEXT NOT NULL,
     head_branch TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft',
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')),
     issue_ids TEXT DEFAULT '[]',
     test_status TEXT DEFAULT 'unknown',
     github_pr_number INTEGER,
@@ -80,6 +80,30 @@ db.exec(`
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
+
+  UPDATE tbc_prs
+  SET status = CASE
+    WHEN status = 'merged' THEN 'merged'
+    WHEN status IN ('closed', 'completed', 'superseded') THEN 'closed'
+    ELSE 'open'
+  END
+  WHERE status NOT IN ('open', 'merged', 'closed');
+
+  CREATE TRIGGER IF NOT EXISTS tbc_prs_status_insert_check
+  BEFORE INSERT ON tbc_prs
+  FOR EACH ROW
+  WHEN NEW.status NOT IN ('open', 'merged', 'closed')
+  BEGIN
+    SELECT RAISE(ABORT, 'invalid tbc_prs.status');
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS tbc_prs_status_update_check
+  BEFORE UPDATE OF status ON tbc_prs
+  FOR EACH ROW
+  WHEN NEW.status NOT IN ('open', 'merged', 'closed')
+  BEGIN
+    SELECT RAISE(ABORT, 'invalid tbc_prs.status');
+  END;
 `);
 
 const command = process.argv[2];
@@ -98,6 +122,16 @@ if (visibility === 'blind') {
 }
 
 // For focused mode, we filter after query execution (see below)
+
+const VALID_PR_STATUSES = new Set(['open', 'merged', 'closed']);
+
+function normalizePrStatus(status) {
+  if (!status) return 'open';
+  if (status === 'merged') return 'merged';
+  if (['closed', 'completed', 'superseded'].includes(status)) return 'closed';
+  if (['open', 'draft', 'ready_for_review', 'ready_for_ci', 'in_progress'].includes(status)) return 'open';
+  throw new Error(`Invalid PR status: ${status}. Allowed: open, merged, closed`);
+}
 
 function jsonOut(data) {
   console.log(JSON.stringify(data, null, 2));
@@ -304,7 +338,12 @@ const commands = {
       console.error('Usage: tbc-db pr-create --title "..." --head branch [--summary "..."] [--base main] [--status draft] [--issues "1,2"] [--test unknown]');
       process.exit(1);
     }
+    if ((values.base || 'main') === values.head) {
+      console.error('Error: base and head branches must differ for a TBC PR record.');
+      process.exit(1);
+    }
     const now = new Date().toISOString();
+    const normalizedStatus = normalizePrStatus(values.status);
     const issueIds = values.issues
       ? JSON.stringify(values.issues.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite))
       : '[]';
@@ -316,7 +355,7 @@ const commands = {
         values.summary || '',
         values.base || 'main',
         values.head,
-        values.status || 'draft',
+        normalizedStatus,
         issueIds,
         values.test || 'unknown',
         values.github_number ? Number(values.github_number) : null,
@@ -338,11 +377,10 @@ const commands = {
     });
     let query = 'SELECT * FROM tbc_prs';
     const params = [];
-    if (values.status === 'open') {
-      query += ` WHERE status != 'completed'`;
-    } else if (values.status && values.status !== 'all') {
+    if (values.status && values.status !== 'all') {
+      const normalizedStatus = normalizePrStatus(values.status);
       query += ' WHERE status = ?';
-      params.push(values.status);
+      params.push(normalizedStatus);
     }
     query += ' ORDER BY updated_at DESC, id DESC';
     const rows = db.prepare(query).all(...params).map(row => ({
@@ -399,8 +437,10 @@ const commands = {
     if (values.title !== undefined) { sets.push('title = ?'); params.push(values.title); }
     if (values.summary !== undefined) { sets.push('summary = ?'); params.push(values.summary); }
     if (values.base !== undefined) { sets.push('base_branch = ?'); params.push(values.base); }
+    const nextBase = values.base;
+    const nextHead = values.head;
     if (values.head !== undefined) { sets.push('head_branch = ?'); params.push(values.head); }
-    if (values.status !== undefined) { sets.push('status = ?'); params.push(values.status); }
+    if (values.status !== undefined) { sets.push('status = ?'); params.push(normalizePrStatus(values.status)); }
     if (values.issues !== undefined) {
       const issueIds = JSON.stringify(values.issues.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite));
       sets.push('issue_ids = ?'); params.push(issueIds);
@@ -409,6 +449,14 @@ const commands = {
     if (values.github_number !== undefined) { sets.push('github_pr_number = ?'); params.push(values.github_number ? Number(values.github_number) : null); }
     if (values.github_url !== undefined) { sets.push('github_pr_url = ?'); params.push(values.github_url || null); }
     if (sets.length === 0) { console.error('Nothing to update'); process.exit(1); }
+    const current = db.prepare('SELECT base_branch, head_branch FROM tbc_prs WHERE id = ?').get(id);
+    if (!current) { console.error(`TBC PR #${id} not found`); process.exit(1); }
+    const finalBase = nextBase !== undefined ? nextBase : current.base_branch;
+    const finalHead = nextHead !== undefined ? nextHead : current.head_branch;
+    if (finalBase === finalHead) {
+      console.error('Error: base and head branches must differ for a TBC PR record.');
+      process.exit(1);
+    }
     sets.push('updated_at = ?'); params.push(new Date().toISOString());
     params.push(id);
     db.prepare(`UPDATE tbc_prs SET ${sets.join(', ')} WHERE id = ?`).run(...params);
@@ -448,10 +496,10 @@ Comments:
   comments      <issue_id>
 
 TBC PRs:
-  pr-create     --title "..." --head branch [--summary "..."] [--base main] [--status draft] [--issues "1,2"] [--test unknown]
-  pr-list       [--status open|all|draft|ready_for_review|completed] [--json]
+  pr-create     --title "..." --head branch [--summary "..."] [--base main] [--status open|merged|closed] [--issues "1,2"] [--test unknown]
+  pr-list       [--status open|merged|closed|all] [--json]
   pr-view       <id>
-  pr-edit       <id> [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]
+  pr-edit       <id> [--title "..."] [--summary "..."] [--base main] [--head branch] [--status open|merged|closed] [--issues "1,2"] [--test pass]
 
 Advanced:
   query         "SQL statement"
