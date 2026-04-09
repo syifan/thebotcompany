@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch, Paperclip, X } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch, Paperclip, X, CheckCircle2, AlertCircle } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import { useAuth } from '@/hooks/useAuth'
 import ReactMarkdown from 'react-markdown'
@@ -17,12 +17,25 @@ const TOOL_ICONS = {
 function ToolCallBlock({ name, input, output }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = TOOL_ICONS[name] || Terminal
+  const isRunning = !output
+  const isError = typeof output === 'string' && output.trim().startsWith('Error:')
+  const StatusIcon = isRunning ? Loader2 : isError ? AlertCircle : CheckCircle2
+  const statusIconClass = isRunning
+    ? 'w-3.5 h-3.5 shrink-0 animate-spin text-neutral-400'
+    : isError
+      ? 'w-3.5 h-3.5 shrink-0 text-red-500'
+      : 'w-3.5 h-3.5 shrink-0 text-emerald-500'
+  const containerClass = isRunning
+    ? 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/50'
+    : isError
+      ? 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20'
+      : 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20'
 
   return (
-    <div className="my-1.5 rounded border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/50 text-xs overflow-hidden">
+    <div className={`my-1.5 rounded border text-xs overflow-hidden ${containerClass}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-1.5 px-2 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 transition-colors"
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
       >
         {expanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
         <Icon className="w-3 h-3 shrink-0 text-blue-500" />
@@ -33,6 +46,7 @@ function ToolCallBlock({ name, input, output }) {
           {name === 'Grep' && input?.pattern ? `/${input.pattern}/` : ''}
           {name === 'Glob' && input?.pattern ? input.pattern : ''}
         </span>
+        <StatusIcon className={statusIconClass} />
       </button>
       {expanded && (
         <div className="border-t border-neutral-200 dark:border-neutral-700">
