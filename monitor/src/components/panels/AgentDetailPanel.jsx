@@ -1,5 +1,6 @@
 import React from 'react'
 import { Badge } from '@/components/ui/badge'
+import StatusPill from '@/components/ui/status-pill'
 import { RefreshCw } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
@@ -10,7 +11,7 @@ export default function AgentDetailPanel({ agentModal, setAgentModal }) {
     <Panel id="agent-detail" open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
       <PanelHeader onClose={() => setAgentModal({ ...agentModal, open: false })}>
         <span className="capitalize">{agentModal.agent}</span>
-        {agentModal.data?.isManager && <Badge variant="secondary" className="ml-2">Manager</Badge>}
+        {agentModal.data?.isManager && <StatusPill variant="meta" className="ml-2">Manager</StatusPill>}
       </PanelHeader>
       <PanelContent>
         {agentModal.loading ? (

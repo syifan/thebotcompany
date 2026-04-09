@@ -1,6 +1,7 @@
 import React from 'react'
 import { Settings, Filter, Info } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import StatusPill from '@/components/ui/status-pill'
 import { getAgentTask } from '@/components/ScheduleDiagram'
 
 export default function WorkerCard({
@@ -69,11 +70,11 @@ export default function WorkerCard({
       {task && <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5 italic">{task}</p>}
       {/* Pills */}
       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-        {agent.model && <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">{agent.model}</span>}
+        {agent.model && <StatusPill variant="meta" className="normal-case">{agent.model}</StatusPill>}
         {isActive && (
-          <Badge variant="success" className="flex items-center gap-1">
+          <StatusPill variant="success" className="gap-1 normal-case">
             Active{runtime !== null && <span className="font-mono">{formatRuntime(runtime)}</span>}
-          </Badge>
+          </StatusPill>
         )}
       </div>
       {/* Cost metrics */}

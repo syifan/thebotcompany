@@ -42,6 +42,22 @@ tbc-db comment --issue 42 --author leo --body "Fixed in commit abc123"
 tbc-db comments 42
 ```
 
+### TBC PRs
+
+```bash
+# Create a local TBC PR record
+tbc-db pr-create --title "Fix memory leak" --head leo/fix-memory-leak --summary "Ready for review" --issues "42"
+
+# List active TBC PRs
+tbc-db pr-list
+
+# View one TBC PR
+tbc-db pr-view 7
+
+# Update a TBC PR record
+tbc-db pr-edit 7 --status ready_for_review --test pass
+```
+
 ### Advanced
 
 ```bash
@@ -65,6 +81,7 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 | `comments` | id, issue_id, author, body, created_at |
 | `agents` | id, name, role, reports_to, model, disabled |
 | `milestones` | id, description, cycles_budget, cycles_used, phase, status |
+| `tbc_prs` | id, title, summary, base_branch, head_branch, status, issue_ids, test_status |
 
 ## Visibility
 
@@ -74,3 +91,10 @@ Your access to the tracker may be restricted by your manager:
 - **Blind**: You cannot read the tracker, but you can still create new issues to raise blockers or findings
 
 If you get "Access denied", respect the restriction and work with what you have.
+
+## PR Workflow
+
+- For agent-delivered work, create a **TBC PR** with `tbc-db pr-create` instead of `gh pr create`
+- Update the record as work progresses with `tbc-db pr-edit`
+- Use `pr-list` and `pr-view` to inspect active TBC PRs
+- GitHub PRs are optional mirrors, not the default workflow

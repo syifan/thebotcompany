@@ -541,15 +541,16 @@ class ProjectRunner {
     
     let workspaceFiles = [];
     if (fs.existsSync(workspaceDir)) {
-      workspaceFiles = fs.readdirSync(workspaceDir).map(f => {
+      workspaceFiles = fs.readdirSync(workspaceDir).flatMap(f => {
         const filePath = path.join(workspaceDir, f);
         const stat = fs.statSync(filePath);
-        return {
+        if (!stat.isFile()) return [];
+        return [{
           name: f,
           size: stat.size,
           modified: stat.mtime,
           content: stat.size < 50000 ? fs.readFileSync(filePath, 'utf-8') : null
-        };
+        }];
       });
     }
     
@@ -786,6 +787,30 @@ class ProjectRunner {
       CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), closed_at TEXT);
       CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
       CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
+      CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')), issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
+    `);
+    db.exec(`
+      UPDATE tbc_prs
+      SET status = CASE
+        WHEN status = 'merged' THEN 'merged'
+        WHEN status IN ('closed', 'completed', 'superseded') THEN 'closed'
+        ELSE 'open'
+      END
+      WHERE status NOT IN ('open', 'merged', 'closed');
+      CREATE TRIGGER IF NOT EXISTS tbc_prs_status_insert_check
+      BEFORE INSERT ON tbc_prs
+      FOR EACH ROW
+      WHEN NEW.status NOT IN ('open', 'merged', 'closed')
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid tbc_prs.status');
+      END;
+      CREATE TRIGGER IF NOT EXISTS tbc_prs_status_update_check
+      BEFORE UPDATE OF status ON tbc_prs
+      FOR EACH ROW
+      WHEN NEW.status NOT IN ('open', 'merged', 'closed')
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid tbc_prs.status');
+      END;
     `);
     return db;
   }
@@ -818,21 +843,57 @@ class ProjectRunner {
     }
   }
 
-  async getPRs() {
-    if (!this.repo) return [];
+  async getPRs(status = 'open') {
     try {
-      const output = execSync(
-        'gh pr list --state open --json number,title,createdAt,headRefName --limit 50',
-        { cwd: this.path, encoding: 'utf-8', timeout: 30000 }
-      );
-      return JSON.parse(output).map(pr => {
-        const match = pr.title.match(/^\[([^\]]+)\]\s*(.*)$/);
-        return match 
-          ? { ...pr, agent: match[1], shortTitle: match[2] }
-          : { ...pr, agent: null, shortTitle: pr.title };
-      });
+      const db = this.getDb();
+      let query = `
+        SELECT id, title, summary, base_branch, head_branch, status, issue_ids, test_status, github_pr_number, github_pr_url, created_at, updated_at
+        FROM tbc_prs
+      `;
+      const params = [];
+      if (status === 'open' || status === 'merged' || status === 'closed') {
+        query += ` WHERE status = ?`;
+        params.push(status);
+      }
+      query += `
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 50
+      `;
+      const prs = db.prepare(query).all(...params);
+      db.close();
+      return prs.map(pr => ({
+        ...pr,
+        number: pr.id,
+        headRefName: pr.head_branch,
+        baseRefName: pr.base_branch,
+        shortTitle: pr.title,
+        issueIds: (() => { try { return JSON.parse(pr.issue_ids || '[]'); } catch { return []; } })(),
+      }));
     } catch {
       return [];
+    }
+  }
+
+  async getPR(prId) {
+    try {
+      const db = this.getDb();
+      const pr = db.prepare(`
+        SELECT id, title, summary, base_branch, head_branch, status, issue_ids, test_status, github_pr_number, github_pr_url, created_at, updated_at
+        FROM tbc_prs
+        WHERE id = ?
+      `).get(prId);
+      db.close();
+      if (!pr) return null;
+      return {
+        ...pr,
+        number: pr.id,
+        headRefName: pr.head_branch,
+        baseRefName: pr.base_branch,
+        shortTitle: pr.title,
+        issueIds: (() => { try { return JSON.parse(pr.issue_ids || '[]'); } catch { return []; } })(),
+      };
+    } catch {
+      return null;
     }
   }
 
@@ -3321,9 +3382,32 @@ const server = http.createServer(async (req, res) => {
 
     // GET /api/projects/:id/prs
     if (req.method === 'GET' && subPath === 'prs') {
-      const prs = await runner.getPRs();
+      const status = ['open', 'merged', 'closed', 'all'].includes(url.searchParams.get('status'))
+        ? url.searchParams.get('status')
+        : 'open';
+      const prs = await runner.getPRs(status);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ prs }));
+      return;
+    }
+
+    // GET /api/projects/:id/prs/:prId — single PR
+    const prDetailMatch = req.method === 'GET' && subPath.match(/^prs\/(\d+)$/);
+    if (prDetailMatch) {
+      try {
+        const prId = parseInt(prDetailMatch[1], 10);
+        const pr = await runner.getPR(prId);
+        if (!pr) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'PR not found' }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ pr }));
+        }
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 

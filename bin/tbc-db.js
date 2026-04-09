@@ -65,6 +65,21 @@ db.exec(`
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     completed_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS tbc_prs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    summary TEXT DEFAULT '',
+    base_branch TEXT NOT NULL,
+    head_branch TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    issue_ids TEXT DEFAULT '[]',
+    test_status TEXT DEFAULT 'unknown',
+    github_pr_number INTEGER,
+    github_pr_url TEXT,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  );
 `);
 
 const command = process.argv[2];
@@ -268,6 +283,138 @@ const commands = {
     if (comments.length === 0) console.log('(no comments)');
   },
 
+  // ===== TBC PRS =====
+  'pr-create'() {
+    const { values } = parseArgs({
+      args,
+      options: {
+        title: { type: 'string', short: 't' },
+        summary: { type: 'string', short: 's', default: '' },
+        base: { type: 'string', default: 'main' },
+        head: { type: 'string' },
+        status: { type: 'string', default: 'draft' },
+        issues: { type: 'string', default: '' },
+        test: { type: 'string', default: 'unknown' },
+        github_number: { type: 'string' },
+        github_url: { type: 'string' },
+      },
+      strict: false,
+    });
+    if (!values.title || !values.head) {
+      console.error('Usage: tbc-db pr-create --title "..." --head branch [--summary "..."] [--base main] [--status draft] [--issues "1,2"] [--test unknown]');
+      process.exit(1);
+    }
+    const now = new Date().toISOString();
+    const issueIds = values.issues
+      ? JSON.stringify(values.issues.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite))
+      : '[]';
+    const result = db.prepare(`INSERT INTO tbc_prs
+      (title, summary, base_branch, head_branch, status, issue_ids, test_status, github_pr_number, github_pr_url, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(
+        values.title,
+        values.summary || '',
+        values.base || 'main',
+        values.head,
+        values.status || 'draft',
+        issueIds,
+        values.test || 'unknown',
+        values.github_number ? Number(values.github_number) : null,
+        values.github_url || null,
+        now,
+        now,
+      );
+    console.log(`Created TBC PR #${result.lastInsertRowid}`);
+  },
+
+  'pr-list'() {
+    const { values } = parseArgs({
+      args,
+      options: {
+        status: { type: 'string', default: 'open' },
+        json: { type: 'boolean', default: false },
+      },
+      strict: false,
+    });
+    let query = 'SELECT * FROM tbc_prs';
+    const params = [];
+    if (values.status === 'open') {
+      query += ` WHERE status != 'completed'`;
+    } else if (values.status && values.status !== 'all') {
+      query += ' WHERE status = ?';
+      params.push(values.status);
+    }
+    query += ' ORDER BY updated_at DESC, id DESC';
+    const rows = db.prepare(query).all(...params).map(row => ({
+      ...row,
+      issue_ids: (() => { try { return JSON.parse(row.issue_ids || '[]'); } catch { return []; } })(),
+    }));
+    if (values.json) {
+      jsonOut(rows);
+    } else {
+      for (const row of rows) {
+        const issues = row.issue_ids.length ? ` issues=${row.issue_ids.join(',')}` : '';
+        console.log(`#${row.id} [${row.status}] ${row.title} (${row.head_branch} -> ${row.base_branch}) test=${row.test_status}${issues}`);
+      }
+      if (rows.length === 0) console.log('(no TBC PRs)');
+    }
+  },
+
+  'pr-view'() {
+    const id = args[0];
+    if (!id) { console.error('Usage: tbc-db pr-view <id>'); process.exit(1); }
+    const pr = db.prepare('SELECT * FROM tbc_prs WHERE id = ?').get(id);
+    if (!pr) { console.error(`TBC PR #${id} not found`); process.exit(1); }
+    console.log(`# TBC PR #${pr.id}: ${pr.title}`);
+    console.log(`Status: ${pr.status} | Base: ${pr.base_branch} | Head: ${pr.head_branch} | Test: ${pr.test_status}`);
+    console.log(`Created: ${pr.created_at} | Updated: ${pr.updated_at}`);
+    const issueIds = (() => { try { return JSON.parse(pr.issue_ids || '[]'); } catch { return []; } })();
+    if (issueIds.length) console.log(`Issues: ${issueIds.join(', ')}`);
+    if (pr.github_pr_number || pr.github_pr_url) {
+      console.log(`GitHub mirror: #${pr.github_pr_number || '?'} ${pr.github_pr_url || ''}`.trim());
+    }
+    if (pr.summary) console.log(`\n${pr.summary}`);
+  },
+
+  'pr-edit'() {
+    const id = args[0];
+    if (!id) { console.error('Usage: tbc-db pr-edit <id> [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: {
+        title: { type: 'string', short: 't' },
+        summary: { type: 'string', short: 's' },
+        base: { type: 'string' },
+        head: { type: 'string' },
+        status: { type: 'string' },
+        issues: { type: 'string' },
+        test: { type: 'string' },
+        github_number: { type: 'string' },
+        github_url: { type: 'string' },
+      },
+      strict: false,
+    });
+    const sets = [];
+    const params = [];
+    if (values.title !== undefined) { sets.push('title = ?'); params.push(values.title); }
+    if (values.summary !== undefined) { sets.push('summary = ?'); params.push(values.summary); }
+    if (values.base !== undefined) { sets.push('base_branch = ?'); params.push(values.base); }
+    if (values.head !== undefined) { sets.push('head_branch = ?'); params.push(values.head); }
+    if (values.status !== undefined) { sets.push('status = ?'); params.push(values.status); }
+    if (values.issues !== undefined) {
+      const issueIds = JSON.stringify(values.issues.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite));
+      sets.push('issue_ids = ?'); params.push(issueIds);
+    }
+    if (values.test !== undefined) { sets.push('test_status = ?'); params.push(values.test); }
+    if (values.github_number !== undefined) { sets.push('github_pr_number = ?'); params.push(values.github_number ? Number(values.github_number) : null); }
+    if (values.github_url !== undefined) { sets.push('github_pr_url = ?'); params.push(values.github_url || null); }
+    if (sets.length === 0) { console.error('Nothing to update'); process.exit(1); }
+    sets.push('updated_at = ?'); params.push(new Date().toISOString());
+    params.push(id);
+    db.prepare(`UPDATE tbc_prs SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    console.log(`Updated TBC PR #${id}`);
+  },
+
   // ===== QUERY =====
   'query'() {
     const sql = args.join(' ');
@@ -299,6 +446,12 @@ Issues:
 Comments:
   comment       --issue <id> --author name --body "..."
   comments      <issue_id>
+
+TBC PRs:
+  pr-create     --title "..." --head branch [--summary "..."] [--base main] [--status draft] [--issues "1,2"] [--test unknown]
+  pr-list       [--status open|all|draft|ready_for_review|completed] [--json]
+  pr-view       <id>
+  pr-edit       <id> [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]
 
 Advanced:
   query         "SQL statement"

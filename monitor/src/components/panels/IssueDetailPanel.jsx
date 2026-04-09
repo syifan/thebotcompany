@@ -1,6 +1,7 @@
 import React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import StatusPill from '@/components/ui/status-pill'
 import { RefreshCw, Clock, User, UserCheck } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
@@ -33,9 +34,9 @@ export default function IssueDetailPanel({
             {/* Header meta row */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2 min-w-0">
-                <Badge variant={issueModal.issue.status === 'open' ? 'success' : 'secondary'} className="text-xs">{issueModal.issue.status || 'open'}</Badge>
+                <StatusPill variant={issueModal.issue.status === 'open' ? 'open' : 'closed'}>{issueModal.issue.status || 'open'}</StatusPill>
                 {issueModal.issue.labels && issueModal.issue.labels.split(',').map(l => l.trim()).filter(Boolean).map(label => (
-                  <Badge key={label} variant="outline" className="text-[10px] text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-700">{label}</Badge>
+                  <StatusPill key={label} variant="meta">{label}</StatusPill>
                 ))}
               </div>
               {isWriteMode && (
@@ -98,7 +99,7 @@ export default function IssueDetailPanel({
                 <Separator />
                 <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-2">
                   <span>Comments</span>
-                  <Badge variant="outline" className="text-[10px] font-normal">{issueModal.comments.length}</Badge>
+                  <StatusPill variant="meta" className="font-normal normal-case">{issueModal.comments.length}</StatusPill>
                 </h3>
                 <div className="space-y-3">
                   {issueModal.comments.map((comment) => (

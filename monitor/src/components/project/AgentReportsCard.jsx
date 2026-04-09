@@ -3,7 +3,7 @@ import { MessageSquare, XCircle, Timer, Eye, EyeOff, Focus } from 'lucide-react'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
+import StatusPill from '@/components/ui/status-pill'
 import LiveDuration from '@/components/layout/LiveDuration'
 
 // Lazy report summary — triggers summarization on first render if missing
@@ -59,22 +59,22 @@ const visibilityConfig = {
   full: {
     icon: Eye,
     label: 'Full',
-    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300',
+    className: 'shrink-0 text-emerald-700 dark:text-emerald-300',
   },
   focused: {
     icon: Focus,
     label: 'Focused',
-    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300',
+    className: 'shrink-0 text-amber-700 dark:text-amber-300',
   },
   blind: {
     icon: EyeOff,
     label: 'Blind',
-    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-red-300 text-red-700 dark:border-red-700 dark:text-red-300',
+    className: 'shrink-0 text-red-700 dark:text-red-300',
   },
   'write-only': {
     icon: EyeOff,
     label: 'Write-only',
-    className: 'text-[9px] px-1 py-0 h-3.5 shrink-0 border-cyan-300 text-cyan-700 dark:border-cyan-700 dark:text-cyan-300',
+    className: 'shrink-0 text-cyan-700 dark:text-cyan-300',
   },
 }
 
@@ -111,7 +111,7 @@ export function ReportCardHeader({ report }) {
           {report.cost != null && (
             <>
               <span className="text-neutral-300 dark:text-neutral-600">·</span>
-              <span>${report.cost.toFixed(2)}</span>
+              <StatusPill variant="meta" className="font-mono normal-case">${report.cost.toFixed(2)}</StatusPill>
             </>
           )}
         </span>
@@ -120,18 +120,18 @@ export function ReportCardHeader({ report }) {
         <div className="pl-7 mt-0.5 space-y-1">
           {report.model && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 shrink-0">{report.model}</Badge>
+              <StatusPill variant="meta" className="shrink-0 normal-case">{report.model}</StatusPill>
             </div>
           )}
           {(visibilityMode !== 'full' || report.key_id) && (
             <div className="flex items-center gap-1.5 flex-wrap">
               {visibilityMode !== 'full' && (
-                <Badge variant="outline" className={visibilityMeta.className} title={visibilityTitle}>
+                <StatusPill variant="meta" className={`shrink-0 normal-case ${visibilityMeta.className || ''}`} title={visibilityTitle}>
                   <VisibilityIcon className="w-2.5 h-2.5 mr-0.5" />
                   {visibilityMeta.label}
-                </Badge>
+                </StatusPill>
               )}
-              {report.key_id && <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0 text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</Badge>}
+              {report.key_id && <StatusPill variant="meta" className="shrink-0 normal-case text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</StatusPill>}
             </div>
           )}
           {(report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (

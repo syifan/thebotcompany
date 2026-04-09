@@ -3,6 +3,7 @@ import { RefreshCw, X } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import StatusPill from '@/components/ui/status-pill'
 import { ReportCardHeader } from '@/components/project/AgentReportsCard'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -79,10 +80,10 @@ export default function ReportsPanel({
         <span className="flex items-center gap-2">
           Agent Reports
           {selectedAgent && (
-            <Badge variant="secondary" className="ml-2 capitalize">
+            <StatusPill variant="meta" className="ml-2 capitalize">
               {selectedAgent}
               <button onClick={clearAgentFilter} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
-            </Badge>
+            </StatusPill>
           )}
           <span className="text-sm font-normal text-neutral-400 ml-auto">{comments.length} loaded</span>
         </span>

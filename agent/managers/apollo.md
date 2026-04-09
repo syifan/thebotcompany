@@ -25,7 +25,7 @@ Decide: does your team need to do more checking, or is the evidence sufficient t
 Hire agents for the verification task and assign them specific areas to review (see manager.md). Make sure **every file relevant to the milestone is checked by at least one agent**. You need agents who can:
 
 - **Check every file** that was touched or should have been touched
-- Read actual code, PRs, and test results — not just summaries
+- Read actual code, TBC PRs, and test results — not just summaries
 - Verify tests actually pass by looking at CI results
 - Verify numbers and data — are benchmarks real or fabricated?
 - Look for shortcuts — placeholder code, hardcoded values, skipped edge cases
@@ -37,10 +37,10 @@ When your team has thoroughly reviewed the work, include ONE of these in your re
 
 **If the milestone is verified:**
 
-Before approving, **clean up all open PRs**:
-- Merge any PRs that contain useful work from this milestone
-- Close any obsolete or superseded PRs with a comment explaining why
-- The goal is **zero open PRs when a milestone completes**, unless there's a clear reason to keep one open (e.g., it's for the next milestone)
+Before approving, **clean up all open TBC PRs**:
+- Mark any useful milestone PRs as completed
+- Close or supersede obsolete TBC PRs with an updated status or summary
+- The goal is **zero stale open TBC PRs when a milestone completes**, unless there's a clear reason to keep one open
 
 Then output:
 <!-- VERIFY_PASS -->

@@ -3,7 +3,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Users, User, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
+import SegmentedControl from '@/components/ui/segmented-control'
+import StatusPill from '@/components/ui/status-pill'
+import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
 import { PanelSlot, closeAllPanels } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
@@ -20,6 +22,7 @@ import ReportsPanel from '@/components/panels/ReportsPanel'
 import ChatPanel from '@/components/panels/ChatPanel'
 import AgentDetailPanel from '@/components/panels/AgentDetailPanel'
 import IssueDetailPanel from '@/components/panels/IssueDetailPanel'
+import PRDetailPanel from '@/components/panels/PRDetailPanel'
 import ProjectSettingsPanel from '@/components/panels/ProjectSettingsPanel'
 import LoginModal from '@/components/modals/LoginModal'
 import ApiKeyHelpModal from '@/components/modals/ApiKeyHelpModal'
@@ -56,6 +59,7 @@ export default function ProjectView({
   const [agents, setAgents] = useState({ workers: [], managers: [] })
   const [config, setConfig] = useState({ config: null, raw: '' })
   const [prs, setPrs] = useState([])
+  const [prFilter, setPrFilter] = useState('open')
   const [issues, setIssues] = useState([])
   const [issueFilter, setIssueFilter] = useState('open')
   const [repoUrl, setRepoUrl] = useState(null)
@@ -98,6 +102,7 @@ export default function ProjectView({
   // Modals
   const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
   const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
+  const [prModal, setPrModal] = useState({ open: false, pr: null, loading: false, error: null })
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
@@ -138,7 +143,7 @@ export default function ProjectView({
         fetch(`${baseApi}/logs?lines=100`),
         fetch(`${baseApi}/agents`),
         fetch(`${baseApi}/config`),
-        fetch(`${baseApi}/prs`),
+        fetch(`${baseApi}/prs?status=${prFilter}`),
         fetch(`${baseApi}/issues`).catch(() => ({ ok: false })),
         fetch(`${baseApi}/repo`)
       ])
@@ -170,7 +175,7 @@ export default function ProjectView({
     } finally {
       setProjectLoading(false)
     }
-  }, [showToast])
+  }, [prFilter, showToast])
 
   const fetchComments = useCallback(async (page = 1, agent = null, append = false, silent = false) => {
     const currentProject = selectedProjectRef.current
@@ -218,12 +223,13 @@ export default function ProjectView({
       setSettingsOpen(false)
       setLogs([])
       setAgents({ workers: [], managers: [] })
+      setPrFilter('open')
       setComments([])
       setCommentsPage(1)
       setPrs([])
       setIssues([])
       setIssueFilter('open')
-
+      setPrModal({ open: false, pr: null, loading: false, error: null })
 
       fetchProjectData(true)
       const savedAgent = localStorage.getItem('selectedAgent')
@@ -262,6 +268,11 @@ export default function ProjectView({
       }
     }
   }, [selectedProject?.id])
+
+  useEffect(() => {
+    if (!selectedProject) return
+    fetchProjectData()
+  }, [selectedProject?.id, prFilter, fetchProjectData])
 
   // Fetch models on mount
   useEffect(() => {
@@ -511,6 +522,19 @@ export default function ProjectView({
     }
   }
 
+  const openPRModal = async (prId) => {
+    if (!selectedProject) return
+    setPrModal({ open: true, pr: null, loading: true, error: null })
+    try {
+      const res = await fetch(projectApi(`/prs/${prId}`))
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to load PR')
+      setPrModal({ open: true, pr: data.pr, loading: false, error: null })
+    } catch (err) {
+      setPrModal({ open: true, pr: null, loading: false, error: err.message })
+    }
+  }
+
   const submitIssueComment = async () => {
     if (!issueModal.issue || !issueModal.newComment?.trim()) return
     setIssueModal(prev => ({ ...prev, commenting: true }))
@@ -649,7 +673,7 @@ export default function ProjectView({
             </div>
           )}
           
-          {error && <Badge variant="warning">Error: {error}</Badge>}
+          {error && <StatusPill variant="warning">Error: {error}</StatusPill>}
         </div>
 
         {selectedProject && projectLoading && (
@@ -668,13 +692,13 @@ export default function ProjectView({
                   <span className="text-lg">
                     {selectedProject.phase === 'athena' ? '🧠' : selectedProject.phase === 'implementation' ? '🔨' : selectedProject.phase === 'verification' ? '✅' : '❓'}
                   </span>
-                  <Badge variant={
-                    selectedProject.phase === 'athena' ? 'default' :
+                  <StatusPill variant={
+                    selectedProject.phase === 'athena' ? 'info' :
                     selectedProject.phase === 'implementation' ? 'success' :
-                    selectedProject.phase === 'verification' ? 'warning' : 'secondary'
-                  } className="text-sm capitalize">
+                    selectedProject.phase === 'verification' ? 'warning' : 'meta'
+                  }>
                     {selectedProject.phase === 'athena' ? 'Planning' : selectedProject.phase === 'implementation' ? (selectedProject.isFixRound ? 'Fixing' : 'Implementation') : selectedProject.phase === 'verification' ? 'Verification' : selectedProject.phase}
-                  </Badge>
+                  </StatusPill>
                   {selectedProject.milestoneCyclesBudget > 0 && selectedProject.phase === 'implementation' && (
                     <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 ml-auto">
                       {selectedProject.milestoneCyclesUsed}/{selectedProject.milestoneCyclesBudget} cycles
@@ -741,6 +765,67 @@ export default function ProjectView({
                 onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
               />}
 
+              <AgentReportsCard
+                comments={comments}
+                commentsLoading={commentsLoading}
+                loadMoreComments={loadMoreComments}
+                liveAgentLog={liveAgentLog}
+                selectedProject={selectedProject}
+                setFocusedReportId={setFocusedReportId}
+                setReportsPanelOpen={setReportsPanelOpen}
+              />
+
+              <DashboardWidget icon={GitPullRequest} title={`Agent PRs (${prs.length})`}>
+                  <div className="space-y-2">
+                    <SegmentedControl
+                      value={prFilter}
+                      onChange={setPrFilter}
+                      options={[
+                        { value: 'open', label: 'Open' },
+                        { value: 'merged', label: 'Merged' },
+                        { value: 'closed', label: 'Closed' },
+                        { value: 'all', label: 'All' },
+                      ]}
+                    />
+                    {prs.map((pr) => {
+                      const content = (
+                        <div className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-neutral-400 dark:text-neutral-500">#{pr.number}</span>
+                            <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{pr.shortTitle || pr.title}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500 dark:text-neutral-400 flex-wrap">
+                            <span className="truncate">{pr.baseRefName === pr.headRefName ? pr.baseRefName : `${pr.baseRefName} ← ${pr.headRefName}`}</span>
+                            {pr.status && <StatusPill variant={pr.status === 'open' ? 'open' : pr.status === 'merged' ? 'merged' : 'closed'}>{pr.status}</StatusPill>}
+                            {pr.test_status && <StatusPill variant="meta">tests: {pr.test_status}</StatusPill>}
+                            {pr.issueIds?.length > 0 && <span>{pr.issueIds.map(id => `#${id}`).join(', ')}</span>}
+                          </div>
+                        </div>
+                      )
+                      return (
+                        <button
+                          key={pr.number}
+                          type="button"
+                          onClick={() => openPRModal(pr.number)}
+                          className="block w-full text-left cursor-pointer"
+                        >
+                          {content}
+                        </button>
+                      )
+                    })}
+                    {prs.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">{prFilter === 'open' ? 'No open Agent PRs' : prFilter === 'merged' ? 'No merged Agent PRs' : prFilter === 'closed' ? 'No closed Agent PRs' : 'No Agent PRs'}</p>}
+                  </div>
+              </DashboardWidget>
+
+              <IssuesSidebar
+                issues={issues}
+                issueFilter={issueFilter}
+                setIssueFilter={setIssueFilter}
+                openIssueModal={openIssueModal}
+                setCreateIssueModal={setCreateIssueModal}
+                isWriteMode={isWriteMode}
+              />
+
               <DashboardWidget icon={Sparkles} title={`Managers (${agents.managers.length})`}>
                   <div className="space-y-2">
                     {agents.managers.map((agent) => (
@@ -777,44 +862,6 @@ export default function ProjectView({
                     {agents.workers.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No workers</p>}
                   </div>
               </DashboardWidget>
-
-              <DashboardWidget icon={GitPullRequest} title={`Open PRs (${prs.length})`}>
-                  <div className="space-y-2">
-                    {prs.map((pr) => (
-                      <a key={pr.number} href={`${repoUrl}/pull/${pr.number}`} target="_blank" rel="noopener noreferrer"
-                        className="block p-2 bg-neutral-50 dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-neutral-400 dark:text-neutral-500">#{pr.number}</span>
-                          <span className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{pr.shortTitle || pr.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                          {pr.agent && <span className="flex items-center gap-1"><User className="w-3 h-3" />{pr.agent}</span>}
-                          <span className="truncate">{pr.headRefName}</span>
-                        </div>
-                      </a>
-                    ))}
-                    {prs.length === 0 && <p className="text-sm text-neutral-400 dark:text-neutral-500">No open PRs</p>}
-                  </div>
-              </DashboardWidget>
-
-              <AgentReportsCard
-                comments={comments}
-                commentsLoading={commentsLoading}
-                loadMoreComments={loadMoreComments}
-                liveAgentLog={liveAgentLog}
-                selectedProject={selectedProject}
-                setFocusedReportId={setFocusedReportId}
-                setReportsPanelOpen={setReportsPanelOpen}
-              />
-
-              <IssuesSidebar
-                issues={issues}
-                issueFilter={issueFilter}
-                setIssueFilter={setIssueFilter}
-                openIssueModal={openIssueModal}
-                setCreateIssueModal={setCreateIssueModal}
-                isWriteMode={isWriteMode}
-              />
             </div>
 
             {/* Logs */}
@@ -860,6 +907,7 @@ export default function ProjectView({
         submitIssueComment={submitIssueComment}
         modKey={modKey}
       />
+      <PRDetailPanel prModal={prModal} setPrModal={setPrModal} />
       <ChatPanel
         open={chatPanelOpen}
         onClose={() => setChatPanelOpen(false)}
