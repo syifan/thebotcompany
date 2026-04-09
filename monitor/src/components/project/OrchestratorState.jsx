@@ -3,6 +3,7 @@ import { Activity, DollarSign, Settings, Save, Info, AlertTriangle } from 'lucid
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import StatusPill from '@/components/ui/status-pill'
 import SleepCountdown from '@/components/layout/SleepCountdown'
 
 export function OrchestratorStateCard({ selectedProject, globalUptime, controlAction, isWriteMode }) {
@@ -11,10 +12,10 @@ export function OrchestratorStateCard({ selectedProject, globalUptime, controlAc
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-neutral-600 dark:text-neutral-300">Status</span>
-            <Badge variant={selectedProject.isComplete ? (selectedProject.completionSuccess ? 'success' : 'destructive') : selectedProject.paused ? 'warning' : selectedProject.running ? 'success' : 'destructive'}>
-              {selectedProject.isComplete ? (selectedProject.completionSuccess ? '✅ Complete' : '🛑 Ended')
-                : selectedProject.paused && selectedProject.currentAgent ? '⏳ Pausing...' : selectedProject.paused ? '⏸️ Paused' : selectedProject.running ? '▶️ Running' : '⏹️ Stopped'}
-            </Badge>
+            <StatusPill variant={selectedProject.isComplete ? (selectedProject.completionSuccess ? 'success' : 'danger') : selectedProject.paused ? 'warning' : selectedProject.running ? 'success' : 'danger'}>
+              {selectedProject.isComplete ? (selectedProject.completionSuccess ? 'Complete' : 'Ended')
+                : selectedProject.paused && selectedProject.currentAgent ? 'Pausing...' : selectedProject.paused ? 'Paused' : selectedProject.running ? 'Running' : 'Stopped'}
+            </StatusPill>
           </div>
           {selectedProject.isComplete && selectedProject.completionMessage && (
             <div className={`p-3 rounded-lg text-sm ${selectedProject.completionSuccess ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'}`}>
@@ -28,12 +29,12 @@ export function OrchestratorStateCard({ selectedProject, globalUptime, controlAc
           <div className="flex justify-between items-center">
             <span className="text-neutral-600 dark:text-neutral-300">Agent</span>
             {selectedProject.sleeping ? (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                💤 Sleeping
+              <StatusPill variant="info" className="gap-1 normal-case">
+                Sleeping
                 {isWriteMode && <button onClick={(e) => { e.stopPropagation(); controlAction('skip') }} className="ml-1 hover:text-red-500 cursor-pointer" title="Skip sleep">✕</button>}
-              </Badge>
+              </StatusPill>
             ) : (
-              <Badge variant="secondary">{selectedProject.currentAgent || 'None'}</Badge>
+              <StatusPill variant="meta" className="normal-case">{selectedProject.currentAgent || 'None'}</StatusPill>
             )}
           </div>
           {selectedProject.sleeping && selectedProject.sleepUntil && !selectedProject.paused && (
@@ -45,16 +46,16 @@ export function OrchestratorStateCard({ selectedProject, globalUptime, controlAc
           <Separator className="my-2" />
           <div className="flex justify-between items-center">
             <span className="text-neutral-600 dark:text-neutral-300">Phase</span>
-            <Badge variant={
-              selectedProject.phase === 'athena' ? 'default' :
+            <StatusPill variant={
+              selectedProject.phase === 'athena' ? 'info' :
               selectedProject.phase === 'implementation' ? 'success' :
-              selectedProject.phase === 'verification' ? 'warning' : 'secondary'
+              selectedProject.phase === 'verification' ? 'warning' : 'meta'
             }>
-              {selectedProject.phase === 'athena' ? '🧠 Planning (Athena)' :
-               selectedProject.phase === 'implementation' ? (selectedProject.isFixRound ? '🔧 Fixing' : '🔨 Implementation') :
-               selectedProject.phase === 'verification' ? '✅ Verification' :
+              {selectedProject.phase === 'athena' ? 'Planning (Athena)' :
+               selectedProject.phase === 'implementation' ? (selectedProject.isFixRound ? 'Fixing' : 'Implementation') :
+               selectedProject.phase === 'verification' ? 'Verification' :
                selectedProject.phase || 'Unknown'}
-            </Badge>
+            </StatusPill>
           </div>
           {selectedProject.phase === 'implementation' && selectedProject.milestoneCyclesBudget > 0 && (
             <div className="flex justify-between items-center">
@@ -277,7 +278,7 @@ export function CostBudgetCard({ selectedProject, setBudgetInfoModal, configForm
         </div>
           {configDirty && (
             <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-700">
-              <Badge variant="warning">Unsaved</Badge>
+              <StatusPill variant="warning">Unsaved</StatusPill>
               <button onClick={resetConfig} className="px-2 py-1 text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">
                 Reset
               </button>

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import StatusPill from '@/components/ui/status-pill'
 import { Bell, Unlock, Lock, Settings, Plus, Folder, BellOff } from 'lucide-react'
 import { PanelSlot } from '@/components/ui/panel'
 import Footer from '@/components/layout/Footer'
@@ -245,14 +246,14 @@ export default function ProjectListPage({
                   
                   <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
                     <div className="text-left sm:text-right">
-                      <Badge variant={project.isComplete ? (project.completionSuccess ? 'success' : 'destructive') : project.paused ? 'warning' : project.sleeping ? 'secondary' : project.currentAgent ? 'success' : project.running ? 'success' : 'destructive'}>
-                        {project.isComplete ? (project.completionSuccess ? '✅ Complete' : '🛑 Ended')
-                          : project.paused ? (project.currentAgent ? '⏳ Pausing...' : '⏸️ Paused')
-                          : project.sleeping ? '💤 Sleeping' 
-                          : project.currentAgent ? `▶ ${project.currentAgent}` 
+                      <StatusPill variant={project.isComplete ? (project.completionSuccess ? 'success' : 'danger') : project.paused ? 'warning' : project.sleeping ? 'info' : project.currentAgent ? 'success' : project.running ? 'success' : 'danger'}>
+                        {project.isComplete ? (project.completionSuccess ? 'Complete' : 'Ended')
+                          : project.paused ? (project.currentAgent ? 'Pausing...' : 'Paused')
+                          : project.sleeping ? 'Sleeping' 
+                          : project.currentAgent ? project.currentAgent 
                           : project.running ? 'Running' 
                           : 'Stopped'}
-                      </Badge>
+                      </StatusPill>
                       {project.sleeping && project.sleepUntil && !project.paused && (
                         <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5 font-mono">
                           <SleepCountdown sleepUntil={project.sleepUntil} />
@@ -269,7 +270,7 @@ export default function ProjectListPage({
                       )}
                     </div>
                     {project.archived && (
-                      <Badge variant="outline" className="text-[10px] text-neutral-400 dark:text-neutral-500 border-neutral-300 dark:border-neutral-600 shrink-0">Archived</Badge>
+                      <StatusPill variant="meta">Archived</StatusPill>
                     )}
                   </div>
                 </div>
