@@ -15,14 +15,28 @@ function createDbWithTbcPrsSchema(dbPath) {
         summary TEXT DEFAULT '',
         base_branch TEXT NOT NULL,
         head_branch TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'draft',
+        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')),
         issue_ids TEXT DEFAULT '[]',
         test_status TEXT DEFAULT 'unknown',
         github_pr_number INTEGER,
         github_pr_url TEXT,
         created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
         updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-      )
+      );
+      CREATE TRIGGER IF NOT EXISTS tbc_prs_status_insert_check
+      BEFORE INSERT ON tbc_prs
+      FOR EACH ROW
+      WHEN NEW.status NOT IN ('open', 'merged', 'closed')
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid tbc_prs.status');
+      END;
+      CREATE TRIGGER IF NOT EXISTS tbc_prs_status_update_check
+      BEFORE UPDATE OF status ON tbc_prs
+      FOR EACH ROW
+      WHEN NEW.status NOT IN ('open', 'merged', 'closed')
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid tbc_prs.status');
+      END;
     `);
   } finally {
     db.close();
@@ -64,20 +78,20 @@ describe('TBC local PR staging model', () => {
     }
   });
 
-  it('supports creating a local TBC PR draft without a GitHub PR number', () => {
+  it('supports creating a local open TBC PR without a GitHub PR number', () => {
     const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-')), 'project.db');
     createDbWithTbcPrsSchema(dbPath);
     const db = new Database(dbPath);
     try {
       db.prepare(`INSERT INTO tbc_prs (title, summary, base_branch, head_branch, status, issue_ids, test_status)
         VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run('Fix scheduler race', 'Local staging draft', 'main', 'tbc/change-123', 'draft', JSON.stringify([12, 34]), 'unknown');
+        .run('Fix scheduler race', 'Local staging draft', 'main', 'tbc/change-123', 'open', JSON.stringify([12, 34]), 'unknown');
 
       const row = db.prepare(`SELECT * FROM tbc_prs`).get();
       assert.equal(row.title, 'Fix scheduler race');
       assert.equal(row.base_branch, 'main');
       assert.equal(row.head_branch, 'tbc/change-123');
-      assert.equal(row.status, 'draft');
+      assert.equal(row.status, 'open');
       assert.equal(row.issue_ids, JSON.stringify([12, 34]));
       assert.equal(row.github_pr_number, null);
       assert.equal(row.github_pr_url, null);
@@ -86,20 +100,35 @@ describe('TBC local PR staging model', () => {
     }
   });
 
-  it('supports status progression for local review states', () => {
+  it('supports merged/closed status progression only', () => {
     const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-')), 'project.db');
     createDbWithTbcPrsSchema(dbPath);
     const db = new Database(dbPath);
     try {
       db.prepare(`INSERT INTO tbc_prs (title, base_branch, head_branch, status) VALUES (?, ?, ?, ?)`).run(
-        'Feature draft', 'main', 'tbc/feature-1', 'draft'
+        'Feature draft', 'main', 'tbc/feature-1', 'open'
       );
       db.prepare(`UPDATE tbc_prs SET status = ?, test_status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = 1`).run(
-        'ready_for_ci', 'pending'
+        'merged', 'pass'
       );
       const row = db.prepare(`SELECT status, test_status FROM tbc_prs WHERE id = 1`).get();
-      assert.equal(row.status, 'ready_for_ci');
-      assert.equal(row.test_status, 'pending');
+      assert.equal(row.status, 'merged');
+      assert.equal(row.test_status, 'pass');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects invalid PR statuses at the DB level', () => {
+    const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-')), 'project.db');
+    createDbWithTbcPrsSchema(dbPath);
+    const db = new Database(dbPath);
+    try {
+      assert.throws(() => {
+        db.prepare(`INSERT INTO tbc_prs (title, base_branch, head_branch, status) VALUES (?, ?, ?, ?)`).run(
+          'Bad status', 'main', 'tbc/bad-status', 'superseded'
+        );
+      }, /invalid tbc_prs.status|CHECK constraint failed/i);
     } finally {
       db.close();
     }

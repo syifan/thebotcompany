@@ -97,7 +97,7 @@ describe('issue visibility policy', () => {
     const blindCreate = await executeTool('Bash', { command: 'tbc-db pr-create --title "Draft" --head leo/draft' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.blind);
     assert.doesNotMatch(blindCreate, /access denied|blind mode|issue tracker/i);
 
-    const focusedEdit = await executeTool('Bash', { command: 'tbc-db pr-edit 1 --status ready_for_review' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
+    const focusedEdit = await executeTool('Bash', { command: 'tbc-db pr-edit 1 --status merged' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
     assert.doesNotMatch(focusedEdit, /access denied|focused mode|issue tracker/i);
   });
 
