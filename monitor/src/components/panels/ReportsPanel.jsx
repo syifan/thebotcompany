@@ -4,6 +4,7 @@ import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import StatusPill from '@/components/ui/status-pill'
+import ToolCallBlock from '@/components/ui/tool-call-block'
 import { ReportCardHeader } from '@/components/project/AgentReportsCard'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -74,6 +75,15 @@ export default function ReportsPanel({
     }
   }, [liveAgentLog])
 
+  const parseToolLogLine = (line) => {
+    const match = line.match(/Tool:\s+([^→]+?)(?:\s+→\s+(.*))?$/)
+    if (!match) return null
+    const name = match[1].trim()
+    const summary = (match[2] || '').trim()
+    const input = name === 'Bash' ? { command: summary } : { raw: summary }
+    return { name, summary, input }
+  }
+
   return (
     <Panel id="reports" open={open} onClose={onClose}>
       <PanelHeader onClose={onClose}>
@@ -115,12 +125,23 @@ export default function ReportsPanel({
                   className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1"
                 >
                   {liveAgentLog.log.length === 0 && <p className="text-neutral-400 italic">Waiting for output...</p>}
-                  {liveAgentLog.log.map((entry, i) => (
-                    <div key={i} className={`leading-relaxed break-words whitespace-pre-wrap ${entry.msg.startsWith('Tool:') ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-600 dark:text-neutral-300'}`}>
-                      <span className="text-neutral-400 dark:text-neutral-500 mr-1.5">{new Date(entry.time).toLocaleTimeString()}</span>
-                      {entry.msg}
-                    </div>
-                  ))}
+                  {liveAgentLog.log.map((entry, i) => {
+                    const tool = parseToolLogLine(entry.msg)
+                    if (tool) {
+                      return (
+                        <div key={i}>
+                          <div className="text-neutral-400 dark:text-neutral-500 text-[10px] mb-1">{new Date(entry.time).toLocaleTimeString()}</div>
+                          <ToolCallBlock name={tool.name} input={tool.input} summary={tool.summary} />
+                        </div>
+                      )
+                    }
+                    return (
+                      <div key={i} className="leading-relaxed break-words whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">
+                        <span className="text-neutral-400 dark:text-neutral-500 mr-1.5">{new Date(entry.time).toLocaleTimeString()}</span>
+                        {entry.msg}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
               <Separator className="my-4" />
