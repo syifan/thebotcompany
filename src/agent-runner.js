@@ -100,9 +100,6 @@ function checkGitCommand(command, allowedRepo) {
 
 function checkSensitiveDbAccess(command) {
   if (!command) return null;
-  if (/\bsqlite3\b/.test(command)) {
-    return 'Blocked: raw SQLite access is not allowed. Use tbc-db CLI for project database operations.';
-  }
   if (/project\.db\b/.test(command) || /\$\{?TBC_DB\}?/.test(command) || /process\.env\.TBC_DB|os\.environ\[['"]TBC_DB['"]\]/.test(command)) {
     return 'Blocked: raw project database access is not allowed. Use tbc-db CLI for project database operations.';
   }
