@@ -49,6 +49,24 @@ function formatDuration(ms) {
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
 }
 
+function formatDateTime(value) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function extractStartedAt(report) {
+  if (report._startTime) return report._startTime
+  const match = report.body?.match(/^>\s*⏱\s*Started:\s*([^|\n]+)/m)
+  return match ? match[1].trim() : report.created_at || null
+}
+
 function formatTokens(n) {
   if (!n) return null
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
@@ -87,11 +105,12 @@ export function ReportCardHeader({ report }) {
   const visibilityTitle = visibilityMode === 'focused' && visibilityIssues.length
     ? `Visibility: focused (#${visibilityIssues.join(', #')})`
     : `Visibility: ${visibilityMode}`
+  const startedAt = extractStartedAt(report)
 
   return (
     <div className="mb-0.5">
-      <div className="flex items-center gap-2">
-        <Avatar className="w-5 h-5">
+      <div className="flex items-start gap-2">
+        <Avatar className="w-5 h-5 mt-0.5">
           <AvatarFallback className={`text-white text-[9px] ${
             report._live
               ? 'bg-gradient-to-br from-green-400 to-emerald-500'
@@ -102,47 +121,41 @@ export function ReportCardHeader({ report }) {
             {agent.slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
-        <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{agent}</span>
-        {!report._live && report.success === 0 && <XCircle className="w-3 h-3 text-red-500 shrink-0" />}
-        {!report._live && report.timed_out === 1 && <Timer className="w-3 h-3 text-orange-500 shrink-0" title="Timed out" />}
-        <span className="text-[11px] text-neutral-400 dark:text-neutral-500 ml-auto whitespace-nowrap flex items-center gap-1">
-          {report._live && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
-          {report._live && report._startTime != null ? <LiveDuration startTime={report._startTime} /> : report.duration_ms != null && <span>{formatDuration(report.duration_ms)}</span>}
-          {report.cost != null && (
-            <>
-              <span className="text-neutral-300 dark:text-neutral-600">·</span>
-              <StatusPill variant="meta" className="font-mono normal-case">${report.cost.toFixed(2)}</StatusPill>
-            </>
-          )}
-        </span>
-      </div>
-      {(report.model || visibilityMode !== 'full' || report.key_id || report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
-        <div className="pl-7 mt-0.5 space-y-1">
-          {report.model && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <StatusPill variant="meta" className="shrink-0 normal-case">{report.model}</StatusPill>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-semibold text-neutral-800 dark:text-neutral-100 capitalize truncate">{agent}</span>
+              {!report._live && report.success === 0 && <XCircle className="w-3 h-3 text-red-500 shrink-0" />}
+              {!report._live && report.timed_out === 1 && <Timer className="w-3 h-3 text-orange-500 shrink-0" title="Timed out" />}
+              {report._live && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" />}
             </div>
-          )}
-          {(visibilityMode !== 'full' || report.key_id) && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {visibilityMode !== 'full' && (
-                <StatusPill variant="meta" className={`shrink-0 normal-case ${visibilityMeta.className || ''}`} title={visibilityTitle}>
-                  <VisibilityIcon className="w-2.5 h-2.5 mr-0.5" />
-                  {visibilityMeta.label}
-                </StatusPill>
-              )}
-              {report.key_id && <StatusPill variant="meta" className="shrink-0 normal-case text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</StatusPill>}
+            <div className="ml-auto text-[11px] text-neutral-400 dark:text-neutral-500 whitespace-nowrap flex items-center gap-1.5">
+              {startedAt && <span>{formatDateTime(startedAt)}</span>}
+              {(startedAt && (report._live || report.duration_ms != null)) && <span>·</span>}
+              {report._live && report._startTime != null ? <LiveDuration startTime={report._startTime} /> : report.duration_ms != null && <span>{formatDuration(report.duration_ms)}</span>}
             </div>
-          )}
-          {(report.input_tokens > 0 || report.output_tokens > 0 || report.cache_read_tokens > 0) && (
-            <div className="text-[10px] text-neutral-400 dark:text-neutral-500 leading-relaxed">
-              {report.input_tokens > 0 && <span>{formatTokens(report.input_tokens)} new</span>}
-              {report.cache_read_tokens > 0 && <span className="ml-1">{formatTokens(report.cache_read_tokens)} cached</span>}
-              {report.output_tokens > 0 && <span className="ml-1">{formatTokens(report.output_tokens)} out</span>}
-            </div>
-          )}
+          </div>
+
+          <div className="text-[10px] text-neutral-400 dark:text-neutral-500 leading-relaxed flex flex-wrap gap-x-2">
+            {report.input_tokens > 0 && <span>{formatTokens(report.input_tokens)} new</span>}
+            {report.cache_read_tokens > 0 && <span>{formatTokens(report.cache_read_tokens)} cached</span>}
+            {report.output_tokens > 0 && <span>{formatTokens(report.output_tokens)} out</span>}
+            {report.cost != null && <span>${report.cost.toFixed(2)}</span>}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-neutral-500 dark:text-neutral-400">
+            {report.model && <StatusPill variant="meta" className="shrink-0 normal-case">{report.model}</StatusPill>}
+            {report.key_id && <StatusPill variant="meta" className="shrink-0 normal-case text-neutral-400" title={report.key_id}>🔑 {report.key_label || report.key_id.slice(0, 8)}</StatusPill>}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <StatusPill variant="meta" className={`shrink-0 normal-case ${visibilityMeta.className || ''}`} title={visibilityTitle}>
+              <VisibilityIcon className="w-2.5 h-2.5 mr-0.5" />
+              {visibilityMeta.label}
+            </StatusPill>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
