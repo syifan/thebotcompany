@@ -1,13 +1,10 @@
 import React, { useRef, useCallback, useEffect } from 'react'
 import { RefreshCw, X } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import StatusPill from '@/components/ui/status-pill'
-import ToolCallBlock from '@/components/ui/tool-call-block'
 import { ReportCardHeader } from '@/components/project/AgentReportsCard'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { AgentContentBlocks, buildLiveLogBlocks, buildReportBlocks } from '@/components/ui/agent-text-blocks'
 import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadges } from '@/components/ScheduleDiagram'
 
 // Lazy report summary component — triggers summarization on first render if missing
@@ -75,15 +72,6 @@ export default function ReportsPanel({
     }
   }, [liveAgentLog])
 
-  const parseToolLogLine = (line) => {
-    const match = line.match(/Tool:\s+([^→]+?)(?:\s+→\s+(.*))?$/)
-    if (!match) return null
-    const name = match[1].trim()
-    const summary = (match[2] || '').trim()
-    const input = name === 'Bash' ? { command: summary } : { raw: summary }
-    return { name, summary, input }
-  }
-
   return (
     <Panel id="reports" open={open} onClose={onClose}>
       <PanelHeader onClose={onClose}>
@@ -124,24 +112,9 @@ export default function ReportsPanel({
                   onScroll={onLiveLogScroll}
                   className="max-h-[400px] overflow-y-auto rounded bg-neutral-50 dark:bg-neutral-900/50 p-2 text-xs font-mono space-y-0.5 mt-1"
                 >
-                  {liveAgentLog.log.length === 0 && <p className="text-neutral-400 italic">Waiting for output...</p>}
-                  {liveAgentLog.log.map((entry, i) => {
-                    const tool = parseToolLogLine(entry.msg)
-                    if (tool) {
-                      return (
-                        <div key={i}>
-                          <div className="text-neutral-400 dark:text-neutral-500 text-[10px] mb-1">{new Date(entry.time).toLocaleTimeString()}</div>
-                          <ToolCallBlock name={tool.name} input={tool.input} summary={tool.summary} />
-                        </div>
-                      )
-                    }
-                    return (
-                      <div key={i} className="leading-relaxed break-words whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">
-                        <span className="text-neutral-400 dark:text-neutral-500 mr-1.5">{new Date(entry.time).toLocaleTimeString()}</span>
-                        {entry.msg}
-                      </div>
-                    )
-                  })}
+                  {liveAgentLog.log.length === 0
+                    ? <p className="text-neutral-400 italic">Waiting for output...</p>
+                    : <AgentContentBlocks blocks={buildLiveLogBlocks(liveAgentLog.log)} showTimestamps={false} />}
                 </div>
               </div>
               <Separator className="my-4" />
@@ -154,8 +127,8 @@ export default function ReportsPanel({
               <div className={`rounded-lg transition-colors duration-700 ${focusedReportId === comment.id ? 'bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-300 dark:ring-blue-700 p-2 -m-2' : ''}`}>
                 <ReportCardHeader report={comment} />
                 <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} className="text-xs text-neutral-500 dark:text-neutral-400 italic block mb-1" />
-                <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_code]:break-all overflow-x-auto [&_table]:text-xs [&_pre]:overflow-x-auto">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
+                <div className="text-sm text-neutral-700 dark:text-neutral-300 break-words overflow-x-auto">
+                  <AgentContentBlocks blocks={buildReportBlocks(stripAllMetaBlocks(comment.body))} />
                   {parseScheduleBlock(comment.body) && (
                     <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
                   )}

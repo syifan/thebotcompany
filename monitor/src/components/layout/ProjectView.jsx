@@ -257,6 +257,13 @@ export default function ProjectView({
           if (event.type === 'report-new' && event.project === selectedProject.id) {
             fetchComments(1, localStorage.getItem('selectedAgent') || null, false, true)
           }
+          if (event.type === 'agent-log-event' && event.project === selectedProject.id) {
+            setLiveAgentLog(prev => {
+              if (!prev) return prev
+              const nextLog = [...(prev.log || []), event.event].slice(-500)
+              return { ...prev, log: nextLog }
+            })
+          }
         } catch {}
       }
       

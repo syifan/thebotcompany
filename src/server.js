@@ -211,6 +211,13 @@ function broadcastReportUpdate(projectId, reportId, agent, cycle) {
   }
 }
 
+function broadcastLiveAgentEvent(projectId, event) {
+  const data = JSON.stringify({ type: 'agent-log-event', project: projectId, event });
+  for (const client of sseClients) {
+    client.write(`data: ${data}\n\n`);
+  }
+}
+
 function broadcastEvent(event) {
   const messages = {
     milestone: `📌 New milestone: ${event.title}`,
@@ -2172,8 +2179,17 @@ class ProjectRunner {
       },
       log: (msg) => {
         log(`  [${agent.name}] ${msg}`, projectId);
-        this.currentAgentLog.push({ time: Date.now(), msg });
+        if (typeof msg === 'string' && msg.startsWith('Tool: ')) return;
+        const event = { time: Date.now(), type: 'thinking', content: String(msg) };
+        this.currentAgentLog.push(event);
         if (this.currentAgentLog.length > 500) this.currentAgentLog.shift();
+        broadcastLiveAgentEvent(projectId, event);
+      },
+      onEvent: (event) => {
+        const enriched = { time: Date.now(), ...event };
+        this.currentAgentLog.push(enriched);
+        if (this.currentAgentLog.length > 500) this.currentAgentLog.shift();
+        broadcastLiveAgentEvent(projectId, enriched);
       },
       onProgress: ({ usage, cost }) => {
         this.currentAgentCost = cost;

@@ -14,7 +14,8 @@ const TOOL_ICONS = {
 export default function ToolCallBlock({ name, input, output, summary }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = TOOL_ICONS[name] || Paperclip
-  const isRunning = !output
+  const hasOutput = output !== undefined && output !== null
+  const isRunning = !hasOutput
   const isError = typeof output === 'string' && output.trim().startsWith('Error:')
   const StatusIcon = isRunning ? Loader2 : isError ? AlertCircle : CheckCircle2
   const statusIconClass = isRunning
@@ -46,10 +47,14 @@ export default function ToolCallBlock({ name, input, output, summary }) {
             <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-1">Input</div>
             <pre className="text-[11px] text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap break-words overflow-x-auto">{JSON.stringify(input, null, 2)}</pre>
           </div>
-          {output && (
+          {hasOutput && (
             <div className="px-2 py-1.5">
               <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-1">Output</div>
-              <pre className="text-[11px] text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap break-words overflow-x-auto">{typeof output === 'string' ? output : JSON.stringify(output, null, 2)}</pre>
+              {typeof output === 'string' && output.length === 0 ? (
+                <div className="text-[11px] italic text-neutral-500 dark:text-neutral-400">No output captured</div>
+              ) : (
+                <pre className="text-[11px] text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap break-words overflow-x-auto">{typeof output === 'string' ? output : JSON.stringify(output, null, 2)}</pre>
+              )}
             </div>
           )}
         </div>

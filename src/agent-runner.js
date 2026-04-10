@@ -732,6 +732,7 @@ export async function runAgentWithAPI(opts) {
     onRateLimited = null,
     resolveNewToken = null,
     onProgress = null,
+    onEvent = () => {},
   } = opts;
 
   const startTime = Date.now();
@@ -1072,6 +1073,7 @@ export async function runAgentWithAPI(opts) {
       // Extract text
       if (response.content) {
         lastResultText = response.content;
+        onEvent({ type: 'thinking', content: response.content });
       }
 
       // Check stop reason
@@ -1090,10 +1092,14 @@ export async function runAgentWithAPI(opts) {
           if (aborted) break;
 
           log(`Tool: ${tc.name}${tc.name === 'Bash' ? ` → ${(tc.input.command || '').slice(0, 300)}` : ''}`);
+          onEvent({ type: 'tool_call', id: tc.id, name: tc.name, input: tc.input });
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
           const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
           toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: result });
+          const output = typeof result === 'string' ? result : JSON.stringify(result);
+          const displayOutput = output.length > 4000 ? output.slice(0, 4000) + '\n... (truncated)' : output;
+          onEvent({ type: 'tool_result', id: tc.id, name: tc.name, output: displayOutput });
         }
 
         if (aborted) {

@@ -1,68 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Terminal, FileText, Pencil, Search, FolderSearch, Paperclip, X, CheckCircle2, AlertCircle } from 'lucide-react'
-import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
+import { Send, Loader2, Paperclip, X } from 'lucide-react'
+import { Panel, PanelHeader } from '@/components/ui/panel'
 import { useAuth } from '@/hooks/useAuth'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-
-const TOOL_ICONS = {
-  Bash: Terminal,
-  Read: FileText,
-  Write: Pencil,
-  Edit: Pencil,
-  Glob: FolderSearch,
-  Grep: Search,
-}
-
-function ToolCallBlock({ name, input, output }) {
-  const [expanded, setExpanded] = useState(false)
-  const Icon = TOOL_ICONS[name] || Terminal
-  const isRunning = !output
-  const isError = typeof output === 'string' && output.trim().startsWith('Error:')
-  const StatusIcon = isRunning ? Loader2 : isError ? AlertCircle : CheckCircle2
-  const statusIconClass = isRunning
-    ? 'w-3.5 h-3.5 shrink-0 animate-spin text-neutral-400'
-    : isError
-      ? 'w-3.5 h-3.5 shrink-0 text-red-500'
-      : 'w-3.5 h-3.5 shrink-0 text-emerald-500'
-  const containerClass = isRunning
-    ? 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/50'
-    : isError
-      ? 'border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/20'
-      : 'border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20'
-
-  return (
-    <div className={`my-1.5 rounded border text-xs overflow-hidden ${containerClass}`}>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-1.5 px-2 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-      >
-        {expanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
-        <Icon className="w-3 h-3 shrink-0 text-blue-500" />
-        <span className="font-semibold text-blue-600 dark:text-blue-400">{name}</span>
-        <span className="text-neutral-500 dark:text-neutral-400 truncate text-left flex-1">
-          {name === 'Bash' && input?.command ? input.command.slice(0, 60) : ''}
-          {(name === 'Read' || name === 'Write' || name === 'Edit') && input?.file_path ? input.file_path : ''}
-          {name === 'Grep' && input?.pattern ? `/${input.pattern}/` : ''}
-          {name === 'Glob' && input?.pattern ? input.pattern : ''}
-        </span>
-        <StatusIcon className={statusIconClass} />
-      </button>
-      {expanded && (
-        <div className="border-t border-neutral-200 dark:border-neutral-700">
-          <div className="px-2 py-1 bg-neutral-100 dark:bg-neutral-900 font-mono whitespace-pre-wrap break-all max-h-32 overflow-y-auto text-neutral-600 dark:text-neutral-400">
-            {JSON.stringify(input, null, 2)}
-          </div>
-          {output && (
-            <div className="px-2 py-1 border-t border-neutral-200 dark:border-neutral-700 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto text-neutral-600 dark:text-neutral-300 bg-white dark:bg-neutral-950">
-              {output}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
+import { AgentContentBlocks, buildChatAssistantBlocks } from '@/components/ui/agent-text-blocks'
 
 function MessageBubble({ msg }) {
   if (msg.role === 'user') {
@@ -94,19 +34,10 @@ function MessageBubble({ msg }) {
   }
 
   // Assistant
-  const toolCalls = msg.tool_calls ? (typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls) : []
-
   return (
     <div className="flex justify-start mb-3">
       <div className="max-w-[90%]">
-        {toolCalls.map((tc, i) => (
-          <ToolCallBlock key={tc.id || i} name={tc.name} input={tc.input} output={tc.output} />
-        ))}
-        {msg.content && (
-          <div className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2 text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none [&_code]:break-all [&_pre]:overflow-x-auto [&_pre]:text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-          </div>
-        )}
+        <AgentContentBlocks blocks={buildChatAssistantBlocks(msg)} />
       </div>
     </div>
   )
@@ -547,14 +478,8 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
           {/* Streaming indicators */}
           {streaming && streamingBlocks.length > 0 && (
             <div className="flex justify-start mb-3">
-              <div className="max-w-[90%] space-y-1">
-                {streamingBlocks.filter(b => b.type === 'tool' || (b.content && b.content.trim())).map((block, i) => (
-                  block.type === 'tool'
-                    ? <ToolCallBlock key={block.id || i} name={block.name} input={block.input} output={block.output} />
-                    : <div key={i} className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2 text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content}</ReactMarkdown>
-                      </div>
-                ))}
+              <div className="max-w-[90%]">
+                <AgentContentBlocks blocks={streamingBlocks} />
               </div>
             </div>
           )}
