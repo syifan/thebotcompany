@@ -689,16 +689,21 @@ function normalizeToolExecutionResult(toolName, result) {
   };
 }
 
-async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
+async function executeToolDetailed(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
   switch (toolName) {
-    case 'Bash':  return await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
-    case 'Read':  return executeRead(toolInput, cwd, allowedPaths);
-    case 'Write': return executeWrite(toolInput, cwd, allowedPaths);
-    case 'Edit':  return executeEdit(toolInput, cwd, allowedPaths);
-    case 'Glob':  return executeGlob(toolInput, cwd, allowedPaths);
-    case 'Grep':  return executeGrep(toolInput, cwd, allowedPaths);
-    default:      return `Unknown tool: ${toolName}`;
+    case 'Bash':  return normalizeToolExecutionResult('Bash', await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy));
+    case 'Read':  return normalizeToolExecutionResult('Read', executeRead(toolInput, cwd, allowedPaths));
+    case 'Write': return normalizeToolExecutionResult('Write', executeWrite(toolInput, cwd, allowedPaths));
+    case 'Edit':  return normalizeToolExecutionResult('Edit', executeEdit(toolInput, cwd, allowedPaths));
+    case 'Glob':  return normalizeToolExecutionResult('Glob', executeGlob(toolInput, cwd, allowedPaths));
+    case 'Grep':  return normalizeToolExecutionResult('Grep', executeGrep(toolInput, cwd, allowedPaths));
+    default:      return normalizeToolExecutionResult(toolName, `Unknown tool: ${toolName}`);
   }
+}
+
+async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
+  const result = await executeToolDetailed(toolName, toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
+  return result.output;
 }
 
 // ---------------------------------------------------------------------------
@@ -1105,8 +1110,7 @@ export async function runAgentWithAPI(opts) {
           onEvent({ type: 'tool_call', id: tc.id, name: tc.name, input: tc.input });
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
-          const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
-          const normalized = normalizeToolExecutionResult(tc.name, result);
+          const normalized = await executeToolDetailed(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
           toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: normalized.output });
           const displayOutput = normalized.output.length > 4000 ? normalized.output.slice(0, 4000) + '\n... (truncated)' : normalized.output;
           onEvent({ type: 'tool_result', id: tc.id, name: tc.name, output: displayOutput, exitCode: normalized.exitCode, ok: normalized.ok });
@@ -1137,4 +1141,4 @@ export async function runAgentWithAPI(opts) {
 }
 
 // Exported for testing
-export { executeRead, executeWrite, executeEdit, executeGlob, executeGrep, executeTool };
+export { executeRead, executeWrite, executeEdit, executeGlob, executeGrep, executeTool, executeToolDetailed };

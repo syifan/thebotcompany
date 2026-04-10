@@ -17,7 +17,7 @@ import {
   buildUserMessage,
   buildToolResultMessages,
 } from './providers/index.js';
-import { executeTool } from './agent-runner.js';
+import { executeToolDetailed } from './agent-runner.js';
 
 // ---------------------------------------------------------------------------
 // Active stream tracking — in-memory state for reconnection
@@ -507,14 +507,7 @@ export async function streamChatMessage(opts) {
       for (const tc of toolCalls) {
         try {
           const chatEnv = { TBC_DB: path.join(agentDir, 'project.db') };
-          const result = await executeTool(tc.name, tc.input, worktreePath, 0, chatEnv);
-          const normalized = tc.name === 'Bash' && result && typeof result === 'object' && 'output' in result
-            ? result
-            : {
-                output: typeof result === 'string' ? result : JSON.stringify(result),
-                exitCode: null,
-                ok: !(typeof result === 'string' && result.trim().startsWith('Error:')),
-              };
+          const normalized = await executeToolDetailed(tc.name, tc.input, worktreePath, 0, chatEnv);
           toolResults.push({
             toolCallId: tc.id,
             toolName: tc.name,
