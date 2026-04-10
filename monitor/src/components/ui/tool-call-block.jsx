@@ -11,12 +11,21 @@ const TOOL_ICONS = {
   WebFetch: Globe,
 }
 
-export default function ToolCallBlock({ name, input, output, summary }) {
+export default function ToolCallBlock({ name, input, output, summary, ok, exitCode }) {
   const [expanded, setExpanded] = useState(false)
   const Icon = TOOL_ICONS[name] || Paperclip
   const hasOutput = output !== undefined && output !== null
   const isRunning = !hasOutput
-  const isError = typeof output === 'string' && output.trim().startsWith('Error:')
+  const outputText = typeof output === 'string' ? output.trim() : ''
+  const inferredError = !!outputText && (
+    outputText.startsWith('Error:') ||
+    outputText.startsWith('Blocked:') ||
+    /\bExit code:\s*[1-9]\d*\b/.test(outputText) ||
+    /operation not permitted/i.test(outputText) ||
+    /permission denied/i.test(outputText) ||
+    /access denied/i.test(outputText)
+  )
+  const isError = ok === false || (typeof exitCode === 'number' && exitCode !== 0) || inferredError
   const StatusIcon = isRunning ? Loader2 : isError ? AlertCircle : CheckCircle2
   const statusIconClass = isRunning
     ? 'w-3.5 h-3.5 shrink-0 animate-spin text-neutral-400'

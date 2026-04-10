@@ -466,28 +466,28 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
   command = command.replace(/\bTBC_DB=[^\s;|&]*/g, 'true');
   return new Promise((resolve) => {
     if (runtime?.signal?.aborted) {
-      resolve('Command cancelled: agent was terminated.');
+      resolve({ output: 'Command cancelled: agent was terminated.', exitCode: null, ok: false });
       return;
     }
 
     const gitBlock = checkGitCommand(command, allowedRepo);
     if (gitBlock) {
-      resolve(gitBlock);
+      resolve({ output: gitBlock, exitCode: 1, ok: false });
       return;
     }
     const dbBlock = checkSensitiveDbAccess(command);
     if (dbBlock) {
-      resolve(dbBlock);
+      resolve({ output: dbBlock, exitCode: 1, ok: false });
       return;
     }
     const issueBlock = checkIssueAccessInCommand(command, issuePolicy);
     if (issueBlock) {
-      resolve(issueBlock);
+      resolve({ output: issueBlock, exitCode: 1, ok: false });
       return;
     }
     const pathBlock = checkPathAccessInCommand(command, cwd, allowedPaths);
     if (pathBlock) {
-      resolve(pathBlock);
+      resolve({ output: pathBlock, exitCode: 1, ok: false });
       return;
     }
 
@@ -550,7 +550,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
-      resolve(result || '(no output)');
+      resolve({ output: result || '(no output)', exitCode: code, ok: code === 0 });
     });
 
     proc.on('error', (err) => {
@@ -562,7 +562,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
-      resolve(`Error executing command: ${err.message}`);
+      resolve({ output: `Error executing command: ${err.message}`, exitCode: null, ok: false });
     });
 
     // Guard against grandchild processes keeping pipe FDs open after the main
@@ -677,6 +677,18 @@ function executeGrep(input, cwd, allowedPaths = null) {
   } catch (err) {
     return `Error: ${err.message}`;
   }
+}
+
+function normalizeToolExecutionResult(toolName, result) {
+  if (toolName === 'Bash') {
+    if (result && typeof result === 'object' && 'output' in result) return result;
+    return { output: typeof result === 'string' ? result : JSON.stringify(result), exitCode: null, ok: false };
+  }
+  return {
+    output: typeof result === 'string' ? result : JSON.stringify(result),
+    exitCode: null,
+    ok: !(typeof result === 'string' && result.trim().startsWith('Error:')),
+  };
 }
 
 async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
@@ -1096,10 +1108,10 @@ export async function runAgentWithAPI(opts) {
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
           const result = await executeTool(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
-          toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: result });
-          const output = typeof result === 'string' ? result : JSON.stringify(result);
-          const displayOutput = output.length > 4000 ? output.slice(0, 4000) + '\n... (truncated)' : output;
-          onEvent({ type: 'tool_result', id: tc.id, name: tc.name, output: displayOutput });
+          const normalized = normalizeToolExecutionResult(tc.name, result);
+          toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: normalized.output });
+          const displayOutput = normalized.output.length > 4000 ? normalized.output.slice(0, 4000) + '\n... (truncated)' : normalized.output;
+          onEvent({ type: 'tool_result', id: tc.id, name: tc.name, output: displayOutput, exitCode: normalized.exitCode, ok: normalized.ok });
         }
 
         if (aborted) {

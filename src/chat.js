@@ -508,22 +508,40 @@ export async function streamChatMessage(opts) {
         try {
           const chatEnv = { TBC_DB: path.join(agentDir, 'project.db') };
           const result = await executeTool(tc.name, tc.input, worktreePath, 0, chatEnv);
-          const output = typeof result === 'string' ? result : JSON.stringify(result);
+          const normalized = tc.name === 'Bash' && result && typeof result === 'object' && 'output' in result
+            ? result
+            : {
+                output: typeof result === 'string' ? result : JSON.stringify(result),
+                exitCode: null,
+                ok: !(typeof result === 'string' && result.trim().startsWith('Error:')),
+              };
           toolResults.push({
             toolCallId: tc.id,
             toolName: tc.name,
-            content: output,
+            content: normalized.output,
           });
           // Truncate output for SSE display
-          const displayOutput = output.length > 2000 ? output.slice(0, 2000) + '\n... (truncated)' : output;
+          const displayOutput = normalized.output.length > 2000 ? normalized.output.slice(0, 2000) + '\n... (truncated)' : normalized.output;
           // Update stream tracking
           const matchingTc = stream.toolCalls.find(t => t.id === tc.id);
-          if (matchingTc) matchingTc.output = displayOutput;
+          if (matchingTc) {
+            matchingTc.output = displayOutput;
+            matchingTc.exitCode = normalized.exitCode;
+            matchingTc.ok = normalized.ok;
+          }
+          const storedTc = allToolCalls.find(t => t.id === tc.id);
+          if (storedTc) {
+            storedTc.output = displayOutput;
+            storedTc.exitCode = normalized.exitCode;
+            storedTc.ok = normalized.ok;
+          }
           sseWrite({
             type: 'tool_result',
             id: tc.id,
             name: tc.name,
             output: displayOutput,
+            exitCode: normalized.exitCode,
+            ok: normalized.ok,
           });
         } catch (err) {
           const errOutput = `Error: ${err.message}`;
@@ -533,12 +551,24 @@ export async function streamChatMessage(opts) {
             content: errOutput,
           });
           const matchingTc = stream.toolCalls.find(t => t.id === tc.id);
-          if (matchingTc) matchingTc.output = errOutput;
+          if (matchingTc) {
+            matchingTc.output = errOutput;
+            matchingTc.exitCode = null;
+            matchingTc.ok = false;
+          }
+          const storedTc = allToolCalls.find(t => t.id === tc.id);
+          if (storedTc) {
+            storedTc.output = errOutput;
+            storedTc.exitCode = null;
+            storedTc.ok = false;
+          }
           sseWrite({
             type: 'tool_result',
             id: tc.id,
             name: tc.name,
             output: errOutput,
+            exitCode: null,
+            ok: false,
           });
         }
       }

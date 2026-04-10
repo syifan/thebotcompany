@@ -125,7 +125,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                     setStreamingBlocks(prev => [...prev, { type: 'tool', ...evt }])
                     break
                   case 'tool_result':
-                    setStreamingBlocks(prev => prev.map(b => b.type === 'tool' && b.id === evt.id ? { ...b, output: evt.output } : b))
+                    setStreamingBlocks(prev => prev.map(b => b.type === 'tool' && b.id === evt.id ? { ...b, output: evt.output, ok: evt.ok, exitCode: evt.exitCode } : b))
                     break
                   case 'done':
                     const finalRes = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
@@ -192,7 +192,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                     return [...prev, { type: 'text', content: evt.content }]
                   })
                   else if (evt.type === 'tool_call') setStreamingBlocks(prev => [...prev, { type: 'tool', ...evt }])
-                  else if (evt.type === 'tool_result') setStreamingBlocks(prev => prev.map(b => b.id === evt.id ? { ...b, output: evt.output } : b))
+                  else if (evt.type === 'tool_result') setStreamingBlocks(prev => prev.map(b => b.id === evt.id ? { ...b, output: evt.output, ok: evt.ok, exitCode: evt.exitCode } : b))
                   else if (evt.type === 'done') {
                     const fr = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
                     const fd = await fr.json()
@@ -365,11 +365,11 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
               case 'tool_result':
                 accToolCalls = accToolCalls.map(tc =>
-                  tc.id === data.id ? { ...tc, output: data.output } : tc
+                  tc.id === data.id ? { ...tc, output: data.output, ok: data.ok, exitCode: data.exitCode } : tc
                 )
                 setStreamingToolCalls([...accToolCalls])
                 setStreamingBlocks(prev => prev.map(b =>
-                  b.type === 'tool' && b.id === data.id ? { ...b, output: data.output } : b
+                  b.type === 'tool' && b.id === data.id ? { ...b, output: data.output, ok: data.ok, exitCode: data.exitCode } : b
                 ))
                 break
 
@@ -429,7 +429,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                       return [...prev, { type: 'text', content: evt.content }]
                     })
                     else if (evt.type === 'tool_call') setStreamingBlocks(prev => [...prev, { type: 'tool', ...evt }])
-                    else if (evt.type === 'tool_result') setStreamingBlocks(prev => prev.map(b => b.id === evt.id ? { ...b, output: evt.output } : b))
+                    else if (evt.type === 'tool_result') setStreamingBlocks(prev => prev.map(b => b.id === evt.id ? { ...b, output: evt.output, ok: evt.ok, exitCode: evt.exitCode } : b))
                     else if (evt.type === 'done') {
                       const finalRes2 = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
                       const finalData2 = await finalRes2.json()

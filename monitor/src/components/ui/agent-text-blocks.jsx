@@ -32,16 +32,6 @@ export function ResponseBlock({ content, timestamp }) {
   )
 }
 
-export function parseToolLogLine(line) {
-  if (!line || typeof line !== 'string') return null
-  const match = line.match(/^Tool:\s+([^→\n]+?)(?:\s+→\s+([\s\S]*))?$/)
-  if (!match) return null
-  const name = match[1].trim()
-  const summary = (match[2] || '').trim()
-  const input = name === 'Bash' ? { command: summary } : { raw: summary }
-  return { type: 'tool', name, summary, input }
-}
-
 function parseMaybeJson(value) {
   if (!value) return null
   if (Array.isArray(value)) return value
@@ -62,6 +52,8 @@ export function buildChatAssistantBlocks(message) {
     input: tc.input,
     output: tc.output,
     summary: tc.summary,
+    ok: tc.ok,
+    exitCode: tc.exitCode,
   }))
 
   if (message?.content && String(message.content).trim()) {
@@ -86,6 +78,8 @@ export function buildLiveLogBlocks(log = []) {
         input: entry.input,
         summary: entry.name === 'Bash' ? entry.input?.command : '',
         timestamp,
+        ok: entry.ok,
+        exitCode: entry.exitCode,
       }
       blocks.push(block)
       if (entry.id) toolIndexById.set(entry.id, blocks.length - 1)
@@ -95,7 +89,19 @@ export function buildLiveLogBlocks(log = []) {
     if (entry?.type === 'tool_result') {
       const idx = entry.id ? toolIndexById.get(entry.id) : undefined
       if (idx !== undefined) {
-        blocks[idx] = { ...blocks[idx], output: entry.output ?? '' }
+        blocks[idx] = { ...blocks[idx], output: entry.output ?? '', ok: entry.ok, exitCode: entry.exitCode }
+      } else {
+        blocks.push({
+          type: 'tool',
+          id: entry.id,
+          name: entry.name || 'Tool',
+          input: entry.input || {},
+          summary: entry.name === 'Bash' ? entry.input?.command : '',
+          output: entry.output ?? '',
+          ok: entry.ok,
+          exitCode: entry.exitCode,
+          timestamp,
+        })
       }
       continue
     }
@@ -103,15 +109,6 @@ export function buildLiveLogBlocks(log = []) {
     if (entry?.type === 'thinking') {
       if (entry.content?.trim()) blocks.push({ type: 'thinking', content: entry.content, timestamp })
       continue
-    }
-
-    const tool = parseToolLogLine(entry?.msg)
-    if (tool) {
-      blocks.push({ ...tool, timestamp })
-      continue
-    }
-    if (entry?.msg?.trim()) {
-      blocks.push({ type: 'thinking', content: entry.msg, timestamp })
     }
   }
 
@@ -146,7 +143,7 @@ export function AgentContentBlocks({ blocks = [], showTimestamps = true }) {
           return (
             <div key={block.id || index}>
               {showTimestamps ? <Timestamp value={block.timestamp} /> : null}
-              <ToolCallBlock name={block.name} input={block.input} output={block.output} summary={block.summary} />
+              <ToolCallBlock name={block.name} input={block.input} output={block.output} summary={block.summary} ok={block.ok} exitCode={block.exitCode} />
             </div>
           )
         }
