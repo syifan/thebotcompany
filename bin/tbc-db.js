@@ -44,7 +44,9 @@ db.exec(`
     labels TEXT DEFAULT '',
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    closed_at TEXT
+    updated_by TEXT,
+    closed_at TEXT,
+    closed_by TEXT
   );
 
   CREATE TABLE IF NOT EXISTS comments (
@@ -107,6 +109,11 @@ db.exec(`
 `);
 
 const command = process.argv[2];
+try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
+try { db.exec('ALTER TABLE issues ADD COLUMN closed_by TEXT'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN actor TEXT'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN updated_by TEXT'); } catch {}
+
 const args = process.argv.slice(3);
 
 // --- Visibility enforcement ---
@@ -155,21 +162,24 @@ const commands = {
     const { values } = parseArgs({
       args,
       options: {
+        actor: { type: 'string' },
         title: { type: 'string', short: 't' },
         body: { type: 'string', short: 'b', default: '' },
+        actor: { type: 'string' },
         creator: { type: 'string', short: 'c' },
         assignee: { type: 'string', short: 'a' },
         labels: { type: 'string', short: 'l', default: '' },
       },
       strict: false,
     });
-    if (!values.title || !values.creator) {
-      console.error('Usage: tbc-db issue-create --title "..." --creator agent_name [--body "..."] [--assignee name] [--labels "label1,label2"]');
+    const actor = values.actor || values.creator;
+    if (!values.title || !actor) {
+      console.error('Usage: tbc-db issue-create --title "..." --actor name [--body "..."] [--assignee name] [--labels "label1,label2"]');
       process.exit(1);
     }
     const now = new Date().toISOString();
-    const stmt = db.prepare('INSERT INTO issues (title, body, creator, assignee, labels, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    const result = stmt.run(values.title, values.body || '', values.creator, values.assignee || null, values.labels || '', now, now);
+    const stmt = db.prepare('INSERT INTO issues (title, body, creator, assignee, labels, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const result = stmt.run(values.title, values.body || '', actor, values.assignee || null, values.labels || '', now, now, actor);
     console.log(`Created issue #${result.lastInsertRowid}`);
   },
 
@@ -179,6 +189,7 @@ const commands = {
       options: {
         status: { type: 'string', short: 's', default: 'open' },
         assignee: { type: 'string', short: 'a' },
+        actor: { type: 'string' },
         creator: { type: 'string', short: 'c' },
         label: { type: 'string', short: 'l' },
         json: { type: 'boolean', default: false },
@@ -245,18 +256,42 @@ const commands = {
 
   'issue-close'() {
     const id = args[0];
-    if (!id) { console.error('Usage: tbc-db issue-close <id>'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: {
+        actor: { type: 'string' },
+        closer: { type: 'string', short: 'c' },
+      },
+      strict: false,
+    });
+    const actor = values.actor || values.closer;
+    if (!id || !actor) { console.error('Usage: tbc-db issue-close <id> --actor name'); process.exit(1); }
+    const issue = db.prepare('SELECT id, creator, status FROM issues WHERE id = ?').get(id);
+    if (!issue) { console.error(`Issue #${id} not found`); process.exit(1); }
+    if (issue.status === 'closed') { console.log(`Issue #${id} already closed`); return; }
+    const closer = actor;
+    if (issue.creator === 'human') {
+      if (closer !== 'human') {
+        console.error(`Blocked: issue #${id} was opened by human and can only be closed by human`);
+        process.exit(1);
+      }
+    } else if (closer !== issue.creator) {
+      console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by that same agent`);
+      process.exit(1);
+    }
     const now = new Date().toISOString();
-    db.prepare("UPDATE issues SET status = 'closed', closed_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
+    db.prepare("UPDATE issues SET status = 'closed', closed_at = ?, closed_by = ?, updated_at = ?, updated_by = ? WHERE id = ?").run(now, closer, now, closer, id);
     console.log(`Closed issue #${id}`);
   },
 
   'issue-edit'() {
     const id = args[0];
-    if (!id) { console.error('Usage: tbc-db issue-edit <id> [--title "..."] [--body "..."] [--assignee name] [--labels "..."]'); process.exit(1); }
+    if (!id) { console.error('Usage: tbc-db issue-edit <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]'); process.exit(1); }
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
+        actor: { type: 'string' },
+        editor: { type: 'string', short: 'e' },
         title: { type: 'string', short: 't' },
         body: { type: 'string', short: 'b' },
         assignee: { type: 'string', short: 'a' },
@@ -264,6 +299,9 @@ const commands = {
       },
       strict: false,
     });
+    const actor = values.actor || values.editor;
+    if (!actor) { console.error('Usage: tbc-db issue-edit <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]'); process.exit(1); }
+    if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
     const sets = [];
     const params = [];
     if (values.title) { sets.push('title = ?'); params.push(values.title); }
@@ -272,6 +310,7 @@ const commands = {
     if (values.labels !== undefined) { sets.push('labels = ?'); params.push(values.labels); }
     if (sets.length === 0) { console.error('Nothing to update'); process.exit(1); }
     sets.push("updated_at = ?"); params.push(new Date().toISOString());
+    sets.push('updated_by = ?'); params.push(actor);
     params.push(id);
     db.prepare(`UPDATE issues SET ${sets.join(', ')} WHERE id = ?`).run(...params);
     console.log(`Updated issue #${id}`);
@@ -283,21 +322,23 @@ const commands = {
       args,
       options: {
         issue: { type: 'string', short: 'i' },
+        actor: { type: 'string' },
         author: { type: 'string', short: 'a' },
         body: { type: 'string', short: 'b' },
       },
       strict: false,
     });
-    if (!values.issue || !values.author || !values.body) {
-      console.error('Usage: tbc-db comment --issue <id> --author agent_name --body "..."');
+    const actor = values.actor || values.author;
+    if (!values.issue || !actor || !values.body) {
+      console.error('Usage: tbc-db comment --issue <id> --actor name --body "..."');
       process.exit(1);
     }
     if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(values.issue))) {
       console.error(`Access denied: issue #${values.issue} is not in your focused set.`);
       process.exit(1);
     }
-    const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.issue, values.author, values.body, new Date().toISOString());
-    db.prepare("UPDATE issues SET updated_at = ? WHERE id = ?").run(new Date().toISOString(), values.issue);
+    const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.issue, actor, values.body, new Date().toISOString());
+    db.prepare("UPDATE issues SET updated_at = ?, updated_by = ? WHERE id = ?").run(new Date().toISOString(), actor, values.issue);
     console.log(`Added comment #${result.lastInsertRowid} to issue #${values.issue}`);
   },
 
@@ -329,13 +370,14 @@ const commands = {
         status: { type: 'string', default: 'draft' },
         issues: { type: 'string', default: '' },
         test: { type: 'string', default: 'unknown' },
+        actor: { type: 'string' },
         github_number: { type: 'string' },
         github_url: { type: 'string' },
       },
       strict: false,
     });
-    if (!values.title || !values.head) {
-      console.error('Usage: tbc-db pr-create --title "..." --head branch [--summary "..."] [--base main] [--status draft] [--issues "1,2"] [--test unknown]');
+    if (!values.title || !values.head || !values.actor) {
+      console.error('Usage: tbc-db pr-create --title "..." --head branch --actor name [--summary "..."] [--base main] [--status draft] [--issues "1,2"] [--test unknown]');
       process.exit(1);
     }
     if ((values.base || 'main') === values.head) {
@@ -348,8 +390,8 @@ const commands = {
       ? JSON.stringify(values.issues.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite))
       : '[]';
     const result = db.prepare(`INSERT INTO tbc_prs
-      (title, summary, base_branch, head_branch, status, issue_ids, test_status, github_pr_number, github_pr_url, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (title, summary, base_branch, head_branch, status, issue_ids, test_status, actor, updated_by, github_pr_number, github_pr_url, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(
         values.title,
         values.summary || '',
@@ -358,6 +400,8 @@ const commands = {
         normalizedStatus,
         issueIds,
         values.test || 'unknown',
+        values.actor,
+        values.actor,
         values.github_number ? Number(values.github_number) : null,
         values.github_url || null,
         now,
@@ -416,10 +460,11 @@ const commands = {
 
   'pr-edit'() {
     const id = args[0];
-    if (!id) { console.error('Usage: tbc-db pr-edit <id> [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
+    if (!id) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
+        actor: { type: 'string' },
         title: { type: 'string', short: 't' },
         summary: { type: 'string', short: 's' },
         base: { type: 'string' },
@@ -432,6 +477,7 @@ const commands = {
       },
       strict: false,
     });
+    if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
     const sets = [];
     const params = [];
     if (values.title !== undefined) { sets.push('title = ?'); params.push(values.title); }
@@ -458,6 +504,7 @@ const commands = {
       process.exit(1);
     }
     sets.push('updated_at = ?'); params.push(new Date().toISOString());
+    sets.push('updated_by = ?'); params.push(values.actor);
     params.push(id);
     db.prepare(`UPDATE tbc_prs SET ${sets.join(', ')} WHERE id = ?`).run(...params);
     console.log(`Updated TBC PR #${id}`);
@@ -488,8 +535,8 @@ Issues:
   issue-create  --title "..." --creator name [--body "..."] [--assignee name] [--labels "..."]
   issue-list    [--status open|closed|all] [--assignee name] [--creator name] [--label name] [--json]
   issue-view    <id>
-  issue-edit    <id> [--title "..."] [--body "..."] [--assignee name] [--labels "..."]
-  issue-close   <id>
+  issue-edit    <id> --editor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]
+  issue-close   <id> --closer name
 
 Comments:
   comment       --issue <id> --author name --body "..."

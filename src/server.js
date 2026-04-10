@@ -2157,7 +2157,7 @@ class ProjectRunner {
       env: agentEnv,
       allowedRepo: this.repo || null,
       allowedPaths: this._getAgentFilesystemPolicy(agent, visibility),
-      issuePolicy: visibility || { mode: 'full', issues: [] },
+      issuePolicy: { ...(visibility || { mode: 'full', issues: [] }), actor: agent.name },
       abortSignal: runAbortController.signal,
       keyId: resolvedKeyId,
       onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),

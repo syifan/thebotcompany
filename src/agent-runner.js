@@ -119,26 +119,39 @@ function extractTbcDbCommand(command) {
   const prFlagMatch = args.match(/--pr\s+(\d+)/);
   const positionalPrMatch = args.match(/^(?:pr-view|pr-edit)\s+(\d+)\b/);
   const prId = prFlagMatch?.[1] || positionalPrMatch?.[1] || null;
+  const actorMatch = args.match(/--(?:actor|creator|author|editor|closer)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
+  const actor = actorMatch ? (actorMatch[1] || actorMatch[2] || actorMatch[3]) : null;
 
-  if (/^issue-create\b/.test(args)) return { kind: 'issue-create' };
+  if (/^issue-create\b/.test(args)) return { kind: 'issue-create', actor };
   if (/^issue-list\b/.test(args)) return { kind: 'issue-list' };
   if (/^issue-view\b/.test(args)) return { kind: 'issue-view', issueId };
   if (/^comments\b/.test(args)) return { kind: 'comments', issueId };
-  if (/^comment\b/.test(args)) return { kind: 'comment', issueId };
-  if (/^issue-edit\b/.test(args)) return { kind: 'issue-edit', issueId };
-  if (/^issue-close\b/.test(args)) return { kind: 'issue-close', issueId };
-  if (/^pr-create\b/.test(args)) return { kind: 'pr-create' };
+  if (/^comment\b/.test(args)) return { kind: 'comment', issueId, actor };
+  if (/^issue-edit\b/.test(args)) return { kind: 'issue-edit', issueId, actor };
+  if (/^issue-close\b/.test(args)) return { kind: 'issue-close', issueId, actor };
+  if (/^pr-create\b/.test(args)) return { kind: 'pr-create', actor };
   if (/^pr-list\b/.test(args)) return { kind: 'pr-list' };
   if (/^pr-view\b/.test(args)) return { kind: 'pr-view', prId };
-  if (/^pr-edit\b/.test(args)) return { kind: 'pr-edit', prId };
+  if (/^pr-edit\b/.test(args)) return { kind: 'pr-edit', prId, actor };
   if (/^query\b/.test(args)) return { kind: 'query' };
-  return { kind: 'unknown' };
+  return { kind: 'unknown', actor };
 }
 
 function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (!issuePolicy) return null;
   const parsed = extractTbcDbCommand(command);
   if (!parsed) return null;
+
+  const actor = issuePolicy.actor || null;
+  const mutatingKinds = new Set(['issue-create', 'comment', 'issue-edit', 'issue-close', 'pr-create', 'pr-edit']);
+  if (actor && mutatingKinds.has(parsed.kind)) {
+    if (!parsed.actor) {
+      return `Blocked: ${parsed.kind} requires --actor ${actor}.`;
+    }
+    if (parsed.actor !== actor) {
+      return `Blocked: agent ${actor} cannot act as ${parsed.actor}. Use --actor ${actor}.`;
+    }
+  }
 
   const mode = issuePolicy.mode || 'full';
   if (mode === 'full') return null;
