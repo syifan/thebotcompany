@@ -1,20 +1,34 @@
 # Folder Structure
 
-Treat the project directory as having four top-level areas:
+Use this canonical project layout:
 
-- `repo/` — the git repository and all tracked source files
-- `knowledge/` — private project knowledge, such as `spec.md`, `roadmap.md`, decisions, and analysis
+```text
+<project>/
+├── repo/
+├── knowledge/
+│   ├── spec.md
+│   ├── roadmap.md
+│   ├── analysis/
+│   └── decisions/
+├── skills/
+│   └── workers/
+└── workspace/
+    ├── project.db
+    ├── orchestrator.log
+    ├── responses/
+    └── agents/
+        ├── athena/
+        ├── ares/
+        ├── apollo/
+        └── <other-agent>/
+```
+
+## Meaning
+
+- `repo/` — the git repository and tracked source files
+- `knowledge/` — private project knowledge, including `spec.md`, `roadmap.md`, analysis, and decisions
 - `skills/` — private project skills and worker skill material
-- `workspace/` — operational state and agent scratch space
-
-## Workspace Layout
-
-Inside `workspace/`:
-
-- `project.db` — the canonical TBC project database
-- `orchestrator.log` — project orchestration log
-- `responses/` — saved response artifacts
-- `agents/<agent_name>/` — the personal notes and files for each agent
+- `workspace/` — operational state, logs, responses, and per-agent personal files
 
 ## Rules
 
@@ -22,3 +36,6 @@ Inside `workspace/`:
 - Do not create or expect `spec.md` at repo root
 - Per-agent personal files belong in `workspace/agents/<agent_name>/`
 - Project-wide operational state belongs directly under `workspace/`
+- If the structure is already canonical, keep using it
+- If you are only allowed to modify your own area, do not move another agent's files just to clean up layout drift
+- If broader layout drift exists outside your permissions, report it instead of forcing a move
