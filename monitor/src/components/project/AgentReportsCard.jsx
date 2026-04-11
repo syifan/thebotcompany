@@ -5,6 +5,36 @@ import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import StatusPill from '@/components/ui/status-pill'
 import LiveDuration from '@/components/layout/LiveDuration'
+import ScheduleDiagram, { parseScheduleBlock } from '@/components/ScheduleDiagram'
+
+function parseInlineSchedule(text) {
+  if (!text) return null
+  const startMarker = '<!-- SCHEDULE -->'
+  const endMarker = '<!-- /SCHEDULE -->'
+  const start = text.indexOf(startMarker)
+  if (start === -1) return null
+  const end = text.indexOf(endMarker, start + startMarker.length)
+  if (end === -1) return null
+  const rawText = text.slice(start + startMarker.length, end).trim()
+  if (!rawText) return null
+  try {
+    const raw = JSON.parse(rawText)
+    if (!Array.isArray(raw)) return null
+    const steps = raw.map(step => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return null
+      if (step.delay !== undefined) {
+        return Object.keys(step).length === 1 && typeof step.delay === 'number' ? { delay: step.delay } : null
+      }
+      if (typeof step.agent !== 'string' || !step.agent.trim()) return null
+      const { agent, ...rest } = step
+      if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null
+      return { [agent]: rest }
+    })
+    return steps.every(Boolean) ? { _steps: steps } : null
+  } catch {
+    return null
+  }
+}
 
 // Lazy report summary — triggers summarization on first render if missing
 const summaryCache = new Map()
@@ -208,7 +238,9 @@ export default function AgentReportsCard({
             </>
           )}
           {comments.length === 0 && !commentsLoading && !liveAgentLog && <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">No reports</p>}
-          {comments.map((comment) => (
+          {comments.map((comment) => {
+            const schedule = parseScheduleBlock(comment.body) || parseInlineSchedule(comment.body)
+            return (
             <div
               key={comment.id}
               className="py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors -mx-1 px-1 rounded"
@@ -217,9 +249,14 @@ export default function AgentReportsCard({
               <ReportCardHeader report={comment} />
               <div className="text-xs text-neutral-500 dark:text-neutral-400 break-words leading-relaxed pl-7">
                 <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} />
+                {schedule && (
+                  <div className="mt-2 max-w-full overflow-hidden">
+                    <ScheduleDiagram schedule={schedule} />
+                  </div>
+                )}
               </div>
             </div>
-          ))}
+          )})}
           {commentsLoading && (
             <div className="flex items-center justify-center py-3 text-neutral-400">
               <span className="text-xs">Loading...</span>

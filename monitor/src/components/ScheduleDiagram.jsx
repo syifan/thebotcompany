@@ -55,10 +55,16 @@ function normalizeStep(step) {
       ? { delay: step.delay }
       : null
   }
-  if (typeof step.agent !== 'string' || !step.agent.trim()) return null
-  const { agent, ...rest } = step
-  if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null
-  return { [agent]: rest }
+  if (typeof step.agent === 'string' && step.agent.trim()) {
+    const { agent, ...rest } = step
+    if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null
+    return { [agent]: rest }
+  }
+  const keys = Object.keys(step)
+  if (keys.length === 1 && keys[0] !== 'delay') {
+    return step
+  }
+  return null
 }
 
 function normalizeSteps(schedule) {
@@ -93,7 +99,7 @@ export function getAgentTask(schedule, agentName) {
   const entry = entries.find(([name]) => name.toLowerCase() === agentName.toLowerCase())
   if (!entry) return null
   const value = entry[1]
-  return typeof value === 'string' ? value : value?.task || null
+  return typeof value === 'string' ? value : value?.prompt || value?.task || null
 }
 
 function ScheduleBody({ schedule }) {
@@ -126,7 +132,7 @@ function ScheduleBody({ schedule }) {
         const name = keys.find(k => k !== 'delay')
         if (!name) return null
         const value = step[name]
-        const task = typeof value === 'string' ? value : value.task || ''
+        const task = typeof value === 'string' ? value : (value.prompt || value.task || '')
         const vis = typeof value === 'object' ? value.visibility : null
         const visInfo = visConfig[vis || 'full']
         const VisIcon = visInfo?.icon
@@ -198,15 +204,23 @@ function ScheduleDiagram({ schedule }) {
 
 export function parseScheduleBlock(text) {
   if (!text) return null
-  const match = text.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/)
-  if (!match) return null
+  const startMarker = '<!-- SCHEDULE -->'
+  const endMarker = '<!-- /SCHEDULE -->'
+  const start = text.indexOf(startMarker)
+  if (start === -1) return null
+  const end = text.indexOf(endMarker, start + startMarker.length)
+  if (end === -1) return null
+  const rawText = text.slice(start + startMarker.length, end).trim()
+  if (!rawText) return null
   try {
-    const raw = JSON.parse(match[1])
+    const raw = JSON.parse(rawText)
     if (!Array.isArray(raw)) return null
     const steps = raw.map(normalizeStep)
     if (!steps.every(Boolean)) return null
     return { _steps: steps }
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
 export function stripScheduleBlock(text) {
