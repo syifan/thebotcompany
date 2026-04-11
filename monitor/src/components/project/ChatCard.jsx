@@ -3,7 +3,7 @@ import { MessageCircle, Plus, Trash2 } from 'lucide-react'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { useAuth } from '@/hooks/useAuth'
 
-export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
+export default function ChatCard({ selectedProject, onOpenChat, onNewChat, refreshToken = 0 }) {
   const { authFetch } = useAuth()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -21,7 +21,7 @@ export default function ChatCard({ selectedProject, onOpenChat, onNewChat }) {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchSessions() }, [selectedProject?.id])
+  useEffect(() => { fetchSessions() }, [selectedProject?.id, refreshToken])
 
   const handleNew = () => {
     if (!selectedProject) return

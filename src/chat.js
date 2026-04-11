@@ -279,6 +279,8 @@ function getChatToolDefinitions() {
  *
  * @param {object} opts
  * @param {string} opts.agentDir     - Project chat data directory
+ * @param {string} opts.tbcDbPath    - Orchestrator-controlled TBC database path
+ * @param {string} opts.uploadsDir   - Orchestrator-controlled uploads directory
  * @param {string} opts.projectPath  - Project repo path
  * @param {number} opts.chatId       - Chat session ID
  * @param {string} opts.userMessage  - User's message text
@@ -290,7 +292,7 @@ function getChatToolDefinitions() {
  * @param {string} [opts.reasoningEffort] - Optional reasoning effort
  */
 export async function streamChatMessage(opts) {
-  const { agentDir, projectPath, chatId, userMessage, images = [], model, token, provider, customConfig = null, res, reasoningEffort } = opts;
+  const { agentDir, tbcDbPath, uploadsDir, projectPath, chatId, userMessage, images = [], model, token, provider, customConfig = null, res, reasoningEffort } = opts;
 
   // Initialize active stream tracking
   const stream = { text: '', toolCalls: [], clients: new Set() };
@@ -370,7 +372,7 @@ export async function streamChatMessage(opts) {
   }
   if (images && images.length > 0) {
     for (const img of images) {
-      const imgPath = path.join(agentDir, 'uploads', img.filename);
+      const imgPath = path.join(uploadsDir, img.filename);
       if (fs.existsSync(imgPath)) {
         const data = fs.readFileSync(imgPath);
         const base64 = data.toString('base64');
@@ -506,7 +508,7 @@ export async function streamChatMessage(opts) {
       const toolResults = [];
       for (const tc of toolCalls) {
         try {
-          const chatEnv = { TBC_DB: path.join(agentDir, 'project.db') };
+          const chatEnv = { TBC_DB: tbcDbPath };
           const normalized = await executeToolDetailed(tc.name, tc.input, worktreePath, 0, chatEnv);
           toolResults.push({
             toolCallId: tc.id,

@@ -16,4 +16,4 @@ You are a worker agent. You execute tasks assigned to you by your manager.
 
 - Do not invent project structure; use the shared folder structure rules.
 - Do not move private knowledge into the repo.
-- Do not bypass the canonical TBC database path.
+- Do not bypass `tbc-db` for project issue and PR operations.

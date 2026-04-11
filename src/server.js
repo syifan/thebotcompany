@@ -4135,6 +4135,8 @@ const server = http.createServer(async (req, res) => {
 
           const chatOpts = {
             agentDir: runner.chatsDir,
+            tbcDbPath: runner.projectDbPath,
+            uploadsDir: runner.uploadsDir,
             projectPath: runner.path,
             chatId,
             userMessage: data.message.trim(),

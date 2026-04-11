@@ -117,6 +117,7 @@ export default function ProjectView({
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
   const [chatPanelOpen, setChatPanelOpen] = useState(false)
   const [chatSession, setChatSession] = useState(null)
+  const [chatRefreshToken, setChatRefreshToken] = useState(0)
 
   // Project settings (token state now managed inside ProjectSettingsPanel)
 
@@ -805,6 +806,7 @@ export default function ProjectView({
 
               {isWriteMode && <ChatCard
                 selectedProject={selectedProject}
+                refreshToken={chatRefreshToken}
                 onOpenChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
                 onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
               />}
@@ -964,7 +966,10 @@ export default function ProjectView({
         onClose={() => setChatPanelOpen(false)}
         selectedProject={selectedProject}
         chatSession={chatSession}
-        onSessionCreated={(session) => setChatSession(session)}
+        onSessionCreated={(session) => {
+          setChatRefreshToken(t => t + 1)
+          setChatSession(session)
+        }}
         modelTiers={config?.tiers || {}}
       />
       <ReportsPanel
