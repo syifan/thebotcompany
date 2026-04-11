@@ -1432,44 +1432,53 @@ class ProjectRunner {
     // Supports both array and object formats
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
+    const normalizeStep = (step) => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return [];
+      if (step.delay !== undefined && Object.keys(step).length === 1) {
+        return [{ delay: step.delay }];
+      }
+      if (typeof step.agent === 'string' && step.agent.trim()) {
+        const { agent, ...rest } = step;
+        return [{ [agent]: rest }];
+      }
+      return [step];
+    };
     try {
       const raw = JSON.parse(match[1]);
       
-      // New array format: [{ "delay": 20 }, { "leo": { "task": "..." } }, ...]
+      // Array format: [{ "delay": 20 }, { "leo": { ... } }, { "agent": "diana", ... }]
       if (Array.isArray(raw)) {
-        return { _steps: raw };
+        return { _steps: raw.flatMap(normalizeStep) };
       }
       
-      // Legacy object format: { "agents": { "delay": 20, "leo": {...} } }
-      // Convert to array format internally
+      // Object format with nested agents map
       if (raw.agents) {
         const steps = [];
         const agents = raw.agents;
-        // Top-level delay (before first agent)
         if (agents.delay) {
           steps.push({ delay: agents.delay });
         }
         for (const [name, value] of Object.entries(agents)) {
           if (name === 'delay') continue;
-          steps.push({ [name]: value });
-          // Per-agent delay
-          const agentDelay = typeof value === 'object' ? value.delay : null;
-          if (agentDelay) {
-            // Remove delay from agent value since it's now a separate step
-            const clean = { ...value };
-            delete clean.delay;
-            steps[steps.length - 1] = { [name]: Object.keys(clean).length === 1 && clean.task ? clean.task : clean };
-          }
+          const payload = typeof value === 'object' && value ? { ...value } : value;
+          const agentDelay = typeof payload === 'object' ? payload.delay : null;
+          if (typeof payload === 'object' && payload) delete payload.delay;
+          steps.push({ [name]: (typeof payload === 'object' && Object.keys(payload).length === 1 && payload.task) ? payload.task : payload });
+          if (agentDelay) steps.push({ delay: agentDelay });
         }
-        return { _steps: steps };
+        return { _steps: steps.flatMap(normalizeStep) };
+      }
+
+      if (raw && Array.isArray(raw._steps)) {
+        return { ...raw, _steps: raw._steps.flatMap(normalizeStep) };
       }
       
       // Bare object with delay at top level
-      if (raw.delay !== undefined) {
+      if (raw.delay !== undefined && Object.keys(raw).length === 1) {
         return { _steps: [{ delay: raw.delay }] };
       }
       
-      return null;
+      return raw ? { _steps: normalizeStep(raw) } : null;
     } catch (e) {
       log(`Failed to parse schedule: ${e.message}`, this.id);
       return null;
