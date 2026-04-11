@@ -100,6 +100,9 @@ function checkGitCommand(command, allowedRepo) {
 
 function checkSensitiveDbAccess(command) {
   if (!command) return null;
+  if (/\b(?:export\s+)?TBC_DB\s*=/.test(command)) {
+    return 'Blocked: overriding TBC_DB is not allowed. Use the orchestrator-provided project database only.';
+  }
   if (/project\.db\b/.test(command) || /\$\{?TBC_DB\}?/.test(command) || /process\.env\.TBC_DB|os\.environ\[['"]TBC_DB['"]\]/.test(command)) {
     return 'Blocked: raw project database access is not allowed. Use tbc-db CLI for project database operations.';
   }
@@ -471,8 +474,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
   if (remainingMs > 0) {
     timeout = Math.min(timeout, remainingMs);
   }
+  const originalCommand = input.command;
   // Strip any TBC_DB overrides — agents must use the injected env value
-  let command = input.command;
+  let command = originalCommand;
   command = command.replace(/\bexport\s+TBC_DB=[^\s;|&]*/g, 'true');
   command = command.replace(/\bTBC_DB=[^\s;|&]*/g, 'true');
   return new Promise((resolve) => {
@@ -486,7 +490,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       resolve({ output: gitBlock, exitCode: 1, ok: false });
       return;
     }
-    const dbBlock = checkSensitiveDbAccess(command);
+    const dbBlock = checkSensitiveDbAccess(originalCommand);
     if (dbBlock) {
       resolve({ output: dbBlock, exitCode: 1, ok: false });
       return;
@@ -517,7 +521,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,  // new process group so grandchildren can be killed too
       timeout,
-      ...(bashEnv ? { env: bashEnv } : {}),
+      env: bashEnv ? { ...process.env, ...bashEnv } : process.env,
     });
     proc.unref();  // don't keep the event loop alive
     runtime?.registerProcess?.(proc);

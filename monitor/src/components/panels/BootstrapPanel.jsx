@@ -58,12 +58,12 @@ export default function BootstrapPanel({
               </ul>
             </div>
 
-            {/* Remove roadmap.md — toggle switch */}
+            {/* Remove knowledge/roadmap.md — toggle switch */}
             <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
               <div>
-                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Remove roadmap.md</p>
+                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Remove knowledge/roadmap.md</p>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                  {bootstrapModal.preview.hasRoadmap ? 'Delete from repo and push' : 'No roadmap.md found — will be skipped'}
+                  {bootstrapModal.preview.hasRoadmap ? 'Delete private knowledge file' : 'No knowledge/roadmap.md found, will be skipped'}
                 </p>
               </div>
               <button
@@ -77,9 +77,9 @@ export default function BootstrapPanel({
               </button>
             </div>
 
-            {/* Spec.md — segmented control */}
+            {/* knowledge/spec.md — segmented control */}
             <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded space-y-3">
-              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">spec.md</p>
+              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">knowledge/spec.md</p>
               <div className="flex rounded-lg bg-neutral-200 dark:bg-neutral-700 p-0.5">
                 {[{ value: 'keep', label: 'Keep' }, { value: 'edit', label: 'Edit' }, { value: 'new', label: 'Rewrite' }].map(opt => (
                   <button

@@ -74,6 +74,12 @@ function mkProject() {
 }
 
 describe('agent filesystem allowlist', () => {
+  it('blocks overriding TBC_DB in bash commands', async () => {
+    const p = mkProject();
+    const blocked = await executeTool('Bash', { command: 'export TBC_DB=/tmp/other.db && tbc-db issue-list' }, p.repo, 0, { TBC_DB: p.allowedWorker.dbPath }, null, null, p.allowedWorker, null);
+    assert.match(blocked, /overriding TBC_DB is not allowed/i);
+  });
+
   it('allows reading repo and own workspace but blocks other workspaces', async () => {
     const p = mkProject();
     assert.match(executeRead({ file_path: path.join(p.repo, 'repo.txt') }, p.repo, p.allowedWorker), /repo ok/);
