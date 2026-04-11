@@ -8,3 +8,7 @@ dist/
 .history
 monitor/test-results/
 monitor/playwright-report/
+
+# local tool state
+.claude/
+agent/project.db
