@@ -385,22 +385,20 @@ class ProjectRunner {
     return path.join(this.projectDir, 'workspace');
   }
 
+  get agentsDir() {
+    return path.join(this.agentDir, 'agents');
+  }
+
   get skillsDir() {
-    return path.join(this.agentDir, 'skills');
+    return path.join(this.projectDir, 'skills');
   }
 
   get knowledgeDir() {
-    return path.join(this.agentDir, 'knowledge');
+    return path.join(this.projectDir, 'knowledge');
   }
 
   get workerSkillsDir() {
-    const dir = path.join(this.skillsDir, 'workers');
-    const legacyDir = path.join(this.agentDir, 'workers');
-    if (!fs.existsSync(dir) && fs.existsSync(legacyDir)) {
-      fs.mkdirSync(this.skillsDir, { recursive: true });
-      fs.renameSync(legacyDir, dir);
-    }
-    return dir;
+    return path.join(this.skillsDir, 'workers');
   }
 
   get repo() {
@@ -1057,8 +1055,7 @@ class ProjectRunner {
       if (newContent) {
         try {
           fs.writeFileSync(specPath, newContent);
-          execSync('git add spec.md && git commit -m "chore: update spec.md (bootstrap)" && git push', { cwd: this.path, stdio: 'pipe' });
-          log(`Updated spec.md and pushed`, this.id);
+          log(`Updated private knowledge/spec.md`, this.id);
         } catch (e) {
           log(`Warning: failed to update spec.md: ${e.message}`, this.id);
         }
@@ -1076,13 +1073,15 @@ class ProjectRunner {
       return;
     }
 
-    // Ensure project workspace/control-plane directories exist
-    for (const sub of ['', 'responses', 'workspace', 'skills', path.join('skills', 'workers'), 'knowledge', path.join('knowledge', 'analysis'), path.join('knowledge', 'decisions')]) {
-      fs.mkdirSync(path.join(this.agentDir, sub), { recursive: true });
-    }
-    // Migrate legacy worker skills dir (<project>/workspace/workers) to
-    // the new control-plane location (<project>/workspace/skills/workers).
-    this.workerSkillsDir;
+    // Ensure project directories exist
+    fs.mkdirSync(this.agentDir, { recursive: true });
+    fs.mkdirSync(this.agentsDir, { recursive: true });
+    fs.mkdirSync(path.join(this.agentDir, 'responses'), { recursive: true });
+    fs.mkdirSync(this.skillsDir, { recursive: true });
+    fs.mkdirSync(this.knowledgeDir, { recursive: true });
+    fs.mkdirSync(path.join(this.knowledgeDir, 'analysis'), { recursive: true });
+    fs.mkdirSync(path.join(this.knowledgeDir, 'decisions'), { recursive: true });
+    fs.mkdirSync(this.workerSkillsDir, { recursive: true });
     
     // Load persisted state
     this.loadState();
@@ -1859,10 +1858,12 @@ class ProjectRunner {
   _getAgentFilesystemPolicy(agent, visibility = null) {
     const visMode = visibility?.mode || 'full';
     const repoDir = this.path;
-    const ownWorkspaceDir = path.join(this.agentDir, 'workspace', agent.name);
+    const knowledgeDir = this.knowledgeDir;
+    const ownWorkspaceDir = path.join(this.agentsDir, agent.name);
     const read = [repoDir];
     const write = [repoDir];
     if (visMode !== 'blind') {
+      read.push(knowledgeDir);
       read.push(ownWorkspaceDir);
       write.push(ownWorkspaceDir);
     }
@@ -1893,11 +1894,15 @@ class ProjectRunner {
 
     let skillContent = fs.readFileSync(skillPath, 'utf-8');
 
-    // Build shared rules: everyone.md + db.md + role-specific rules (worker.md or manager.md)
+    // Build shared rules: everyone.md + folder_structure.md + db.md + role-specific rules
     let sharedRules = '';
     try {
       const everyonePath = path.join(ROOT, 'agent', 'everyone.md');
+      const folderStructurePath = path.join(ROOT, 'agent', 'folder_structure.md');
       sharedRules = fs.readFileSync(everyonePath, 'utf-8') + '\n\n---\n\n';
+      try {
+        sharedRules += fs.readFileSync(folderStructurePath, 'utf-8') + '\n\n---\n\n';
+      } catch {}
       const visMode = visibility?.mode || 'full';
       if (agent.name !== 'themis') {
         if (visMode === 'full') {
@@ -2947,7 +2952,9 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        const specPath = path.join(parsed.repoDir, 'spec.md');
+        const knowledgeSpecPath = path.join(parsed.projectDir, 'knowledge', 'spec.md');
+        const legacySpecPath = path.join(parsed.repoDir, 'spec.md');
+        const specPath = fs.existsSync(knowledgeSpecPath) ? knowledgeSpecPath : legacySpecPath;
         const hasSpec = fs.existsSync(specPath);
         let specContent = null;
         if (hasSpec) {
@@ -2986,16 +2993,14 @@ const server = http.createServer(async (req, res) => {
 
         const resolvedPath = projectPath.replace(/^~/, process.env.HOME);
 
-        // Write spec.md if spec data provided
+        // Write project-private knowledge/spec.md if spec data provided
         if (spec && (spec.whatToBuild || spec.successCriteria)) {
-          const specPath = path.join(resolvedPath, 'spec.md');
+          const projectRoot = path.dirname(resolvedPath);
+          const knowledgeDir = path.join(projectRoot, 'knowledge');
+          const specPath = path.join(knowledgeDir, 'spec.md');
           const specContent = `# Project Specification\n\n## What do you want to build?\n\n${spec.whatToBuild || ''}\n\n## How do you consider the project is success?\n\n${spec.successCriteria || ''}\n`;
+          fs.mkdirSync(knowledgeDir, { recursive: true });
           fs.writeFileSync(specPath, specContent);
-          try {
-            execSync('git add spec.md && git commit -m "[TBC] Add project specification" && git push', {
-              cwd: resolvedPath, encoding: 'utf-8', stdio: 'pipe'
-            });
-          } catch {} // Best effort
         }
 
         const projectsPath = path.join(TBC_HOME, 'projects.yaml');

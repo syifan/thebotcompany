@@ -21,6 +21,15 @@ function run(args, dbPath) {
 }
 
 describe('tbc-db actor requirements', () => {
+  it('refuses non-canonical TBC_DB paths', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-actor-'));
+    const dbPath = path.join(dir, 'tracker.db');
+
+    const res = run(['issue-list'], dbPath);
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /must point to canonical project\.db/i);
+  });
+
   it('requires actor for issue create and comment', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-actor-'));
     const dbPath = path.join(dir, 'project.db');

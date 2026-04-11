@@ -10,11 +10,16 @@
  */
 
 import Database from 'better-sqlite3';
+import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 const dbPath = process.env.TBC_DB;
 if (!dbPath) {
   console.error('Error: TBC_DB environment variable not set');
+  process.exit(1);
+}
+if (path.basename(dbPath) !== 'project.db') {
+  console.error(`Error: TBC_DB must point to canonical project.db, got ${dbPath}`);
   process.exit(1);
 }
 
