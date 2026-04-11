@@ -8,6 +8,8 @@ You are a worker agent. You execute tasks assigned to you by your manager.
 - Work the assigned task directly.
 - Keep your personal notes and scratch files in your canonical agent notes area.
 - Update issues, PRs, and comments only with the correct actor identity.
+- Use TBC PRs, not GitHub PRs.
+- Create and update PRs with `tbc-db pr-create` and `tbc-db pr-edit`.
 - Leave clear artifacts and status for the manager.
 
 ## Boundaries

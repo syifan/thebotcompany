@@ -382,6 +382,10 @@ class ProjectRunner {
   }
 
   get agentDir() {
+    return this.projectDir;
+  }
+
+  get chatsDir() {
     return path.join(this.projectDir, 'chats');
   }
 
@@ -1198,12 +1202,13 @@ class ProjectRunner {
 
     // Ensure project directories exist
     fs.mkdirSync(this.projectDir, { recursive: true });
+    fs.mkdirSync(this.chatsDir, { recursive: true });
     fs.mkdirSync(this.agentsDir, { recursive: true });
     fs.mkdirSync(this.responsesDir, { recursive: true });
     fs.mkdirSync(this.skillsDir, { recursive: true });
     fs.mkdirSync(this.knowledgeDir, { recursive: true });
-    fs.mkdirSync(path.join(this.knowledgeDir, 'analysis'), { recursive: true });
-    fs.mkdirSync(path.join(this.knowledgeDir, 'decisions'), { recursive: true });
+    fs.mkdirSync(path.join(this.projectDir, 'knowledge', 'analysis'), { recursive: true });
+    fs.mkdirSync(path.join(this.projectDir, 'knowledge', 'decisions'), { recursive: true });
     fs.mkdirSync(this.workerSkillsDir, { recursive: true });
     
     // Load persisted state
@@ -1980,12 +1985,7 @@ class ProjectRunner {
   // Build the full prompt for an agent (shared across CLI and API paths)
   _getAgentFilesystemPolicy(agent, visibility = null) {
     if (agent.name === 'doctor') {
-      return {
-        read: [this.projectDir, this.path],
-        write: [this.projectDir, this.path],
-        denied: [],
-        dbPath: this.projectDbPath,
-      };
+      return null;
     }
     const visMode = visibility?.mode || 'full';
     const repoDir = this.path;
@@ -2291,7 +2291,7 @@ class ProjectRunner {
       cwd: this.path,
       timeoutMs: config.agentTimeoutMs || 0,
       env: agentEnv,
-      allowedRepo: this.repo || null,
+      allowedRepo: agent.name === 'doctor' ? null : (this.repo || null),
       allowedPaths: this._getAgentFilesystemPolicy(agent, visibility),
       issuePolicy: { ...(visibility || { mode: 'full', issues: [] }), actor: agent.name },
       abortSignal: runAbortController.signal,
@@ -3871,7 +3871,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', () => {
         try {
           const options = body ? JSON.parse(body) : {};
-          fs.mkdirSync(runner.agentDir, { recursive: true });
+          fs.mkdirSync(runner.chatsDir, { recursive: true });
           const result = runner.bootstrap(options);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, ...result }));
@@ -3912,7 +3912,7 @@ const server = http.createServer(async (req, res) => {
     // GET /api/projects/:id/chats — list chat sessions
     if (req.method === 'GET' && subPath === 'chats') {
       try {
-        const sessions = chatListSessions(runner.agentDir);
+        const sessions = chatListSessions(runner.chatsDir);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ sessions }));
       } catch (e) {
@@ -3930,7 +3930,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', () => {
         try {
           const data = body ? JSON.parse(body) : {};
-          const session = chatCreateSession(runner.agentDir, data.title);
+          const session = chatCreateSession(runner.chatsDir, data.title);
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ session }));
         } catch (e) {
@@ -3945,7 +3945,7 @@ const server = http.createServer(async (req, res) => {
     const chatDetailMatch = req.method === 'GET' && subPath.match(/^chats\/(\d+)$/);
     if (chatDetailMatch) {
       try {
-        const session = chatGetSession(runner.agentDir, parseInt(chatDetailMatch[1]));
+        const session = chatGetSession(runner.chatsDir, parseInt(chatDetailMatch[1]));
         if (!session) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Session not found' }));
@@ -3988,7 +3988,7 @@ const server = http.createServer(async (req, res) => {
     if (chatDeleteMatch) {
       if (!requireWrite(req, res)) return;
       try {
-        chatDeleteSession(runner.agentDir, parseInt(chatDeleteMatch[1]));
+        chatDeleteSession(runner.chatsDir, parseInt(chatDeleteMatch[1]));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
       } catch (e) {
@@ -4124,7 +4124,7 @@ const server = http.createServer(async (req, res) => {
           // Save user message once (before any retry/fallback)
           // Save user message with image references
           const imageUrls = (data.images || []).map(img => `/api/projects/${projectId}/uploads/${img.filename}`);
-          chatSaveMessage(runner.agentDir, chatId, 'user', data.message.trim(), imageUrls.length > 0 ? imageUrls : null);
+          chatSaveMessage(runner.chatsDir, chatId, 'user', data.message.trim(), imageUrls.length > 0 ? imageUrls : null);
 
           // SSE headers
           res.writeHead(200, {
@@ -4134,7 +4134,7 @@ const server = http.createServer(async (req, res) => {
           });
 
           const chatOpts = {
-            agentDir: runner.agentDir,
+            agentDir: runner.chatsDir,
             projectPath: runner.path,
             chatId,
             userMessage: data.message.trim(),
