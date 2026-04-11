@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import SegmentedControl from '@/components/ui/segmented-control'
 import StatusPill from '@/components/ui/status-pill'
-import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock } from 'lucide-react'
+import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope } from 'lucide-react'
 import { PanelSlot, closeAllPanels } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
@@ -31,6 +31,7 @@ import BudgetInfoModal from '@/components/modals/BudgetInfoModal'
 import IntervalInfoModal from '@/components/modals/IntervalInfoModal'
 import TimeoutInfoModal from '@/components/modals/TimeoutInfoModal'
 import CreateIssueModal from '@/components/modals/CreateIssueModal'
+import DoctorConfirmModal from '@/components/modals/DoctorConfirmModal'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/contexts/NotificationContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -66,6 +67,8 @@ export default function ProjectView({
   const [projectLoading, setProjectLoading] = useState(false)
   const [logsAutoFollow, setLogsAutoFollow] = useState(true)
   const logsRef = useRef(null)
+  const [doctorConfirmOpen, setDoctorConfirmOpen] = useState(false)
+  const [doctorRunning, setDoctorRunning] = useState(false)
 
   // Config state
   const [configForm, setConfigForm] = useState({
@@ -327,6 +330,30 @@ export default function ProjectView({
       if (res.ok) await fetchGlobalStatus()
       else showToast(`Action "${action}" failed`)
     } catch (err) { showToast(`Action "${action}" failed: ${err.message}`) }
+  }
+
+  const runDoctor = async () => {
+    if (!selectedProject) return
+    if (!selectedProject.paused || selectedProject.currentAgent) {
+      showToast('Doctor requires the project to be fully paused')
+      return
+    }
+    setDoctorRunning(true)
+    try {
+      const res = await authFetch(projectApi('/doctor'), { method: 'POST' })
+      if (res.ok) {
+        showToast('Doctor report generated')
+        fetchComments(1, localStorage.getItem('selectedAgent') || null, false, true)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        showToast(data.error || 'Doctor failed')
+      }
+    } catch (err) {
+      showToast(`Doctor failed: ${err.message}`)
+    } finally {
+      setDoctorRunning(false)
+      setDoctorConfirmOpen(false)
+    }
   }
 
   const saveConfig = async () => {
@@ -656,6 +683,16 @@ export default function ProjectView({
                   <Pause className="w-4 h-4" />
                 </button>
               ))}
+              {isWriteMode && (
+                <button
+                  onClick={() => setDoctorConfirmOpen(true)}
+                  disabled={!selectedProject.paused || selectedProject.currentAgent || doctorRunning}
+                  className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors disabled:opacity-50"
+                  title={selectedProject.paused && !selectedProject.currentAgent ? 'Run Doctor' : 'Doctor requires project to be fully paused'}
+                >
+                  <Stethoscope className="w-4 h-4" />
+                </button>
+              )}
               {isWriteMode && <button onClick={openBootstrapModal} className="p-1.5 rounded bg-red-500 hover:bg-red-600 text-white transition-colors" title="Bootstrap project">
                 <RotateCcw className="w-4 h-4" />
               </button>}
@@ -903,6 +940,13 @@ export default function ProjectView({
       <BudgetInfoModal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)} />
       <IntervalInfoModal open={intervalInfoModal} onClose={() => setIntervalInfoModal(false)} />
       <TimeoutInfoModal open={timeoutInfoModal} onClose={() => setTimeoutInfoModal(false)} />
+      <DoctorConfirmModal
+        open={doctorConfirmOpen}
+        onClose={() => setDoctorConfirmOpen(false)}
+        onConfirm={runDoctor}
+        projectId={selectedProject?.id}
+        running={doctorRunning}
+      />
       <ApiKeyHelpModal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)} />
       <CreateIssueModal createIssueModal={createIssueModal} setCreateIssueModal={setCreateIssueModal} createIssue={createIssue} agents={agents} modKey={modKey} />
       <IssueDetailPanel

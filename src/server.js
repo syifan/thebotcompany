@@ -1065,6 +1065,102 @@ class ProjectRunner {
     return { bootstrapped: true };
   }
 
+  _writeReport(agentName, body, { success = true, durationMs = 0 } = {}) {
+    const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
+    const startedAt = new Date();
+    const endedAt = new Date();
+    const reportBody = `> ⏱ Started: ${startedAt.toLocaleString('sv-SE')} | Ended: ${endedAt.toLocaleString('sv-SE')} | Duration: ${durationStr}\n\n${body.trim()}`;
+    const db = this.getDb();
+    db.exec(`CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cycle INTEGER NOT NULL,
+      agent TEXT NOT NULL,
+      body TEXT NOT NULL,
+      summary TEXT,
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    )`);
+    try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN cost REAL'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN duration_ms INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN input_tokens INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN output_tokens INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN cache_read_tokens INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN success INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN model TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN timed_out INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
+    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      this.cycleCount, agentName, reportBody, new Date().toISOString(),
+      null, durationMs,
+      null, null, null,
+      success ? 1 : 0, null, 0,
+      null,
+      'full', JSON.stringify([])
+    );
+    const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
+    db.close();
+    log(`Saved report for ${agentName}`, this.id);
+    broadcastReportUpdate(this.id, lastId, agentName, this.cycleCount);
+    return { reportId: lastId };
+  }
+
+  runDoctor() {
+    const startedAt = Date.now();
+    const checks = [];
+    const addCheck = (label, targetPath, type) => {
+      if (!fs.existsSync(targetPath)) {
+        checks.push({ label, ok: false, issue: 'missing' });
+        return;
+      }
+      const stat = fs.statSync(targetPath);
+      const ok = type === 'dir' ? stat.isDirectory() : stat.isFile();
+      checks.push({ label, ok, issue: ok ? null : 'wrong type' });
+    };
+
+    addCheck('repo/', path.join(this.projectDir, 'repo'), 'dir');
+    addCheck('knowledge/', this.knowledgeDir, 'dir');
+    addCheck('skills/', this.skillsDir, 'dir');
+    addCheck('workspace/', this.agentDir, 'dir');
+    addCheck('workspace/project.db', path.join(this.agentDir, 'project.db'), 'file');
+    addCheck('workspace/orchestrator.log', path.join(this.agentDir, 'orchestrator.log'), 'file');
+    addCheck('workspace/responses/', path.join(this.agentDir, 'responses'), 'dir');
+    addCheck('workspace/agents/', this.agentsDir, 'dir');
+
+    const { managers, workers } = this.loadAgents();
+    const agentNames = [...managers, ...workers].map(agent => agent.name).sort();
+    for (const name of agentNames) {
+      addCheck(`workspace/agents/${name}/`, path.join(this.agentsDir, name), 'dir');
+    }
+
+    const issues = checks.filter(check => !check.ok);
+    const lines = [];
+    lines.push('## Doctor Check');
+    lines.push('');
+    lines.push(issues.length === 0
+      ? 'Layout status: OK'
+      : `Layout status: ${issues.length} issue(s) found`);
+    lines.push('');
+    lines.push('### Required paths');
+    lines.push('');
+    for (const check of checks) {
+      lines.push(`- ${check.ok ? 'OK' : 'MISSING'} ${check.label}${check.ok ? '' : ` (${check.issue})`}`);
+    }
+    if (agentNames.length === 0) {
+      lines.push('');
+      lines.push('Note: No active agents found; skipped agent-specific workspace checks.');
+    }
+    lines.push('');
+    lines.push('Doctor is read-only and does not modify files.');
+
+    return this._writeReport('doctor', lines.join('\n'), {
+      success: issues.length === 0,
+      durationMs: Date.now() - startedAt,
+    });
+  }
+
   async start() {
     if (this.running) return;
     // Validate project path exists
@@ -3749,6 +3845,25 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: e.message }));
         }
       });
+      return;
+    }
+
+    // POST /api/projects/:id/doctor - check workspace layout
+    if (req.method === 'POST' && subPath === 'doctor') {
+      if (!requireWrite(req, res)) return;
+      try {
+        if (!runner.isPaused || runner.currentAgent) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Doctor is only available when the project is fully paused.' }));
+          return;
+        }
+        const result = runner.runDoctor();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...result }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 
