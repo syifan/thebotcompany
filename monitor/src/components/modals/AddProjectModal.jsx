@@ -315,7 +315,7 @@ export default function AddProjectModal({
               </div>
             </div>
             <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-blue-700 dark:text-blue-300 text-sm">
-              A fresh workspace will be created and the orchestrator will start running agents.
+              A fresh project data area will be created and the orchestrator will start running agents.
             </div>
             <div className="flex justify-between gap-2">
               <Button variant="outline" onClick={() => setAddProjectModal(prev => ({ ...prev, step: 'budget', error: null }))}>

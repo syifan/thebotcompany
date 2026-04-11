@@ -666,7 +666,7 @@ export default function ProjectView({
               >
                 <Settings className="w-4 h-4" />
               </button>
-              <a href={projectApi('/download')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Download workspace as ZIP">
+              <a href={projectApi('/download')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Download project data as ZIP">
                 <Save className="w-4 h-4" />
               </a>
               {repoUrl && (

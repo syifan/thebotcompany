@@ -9,6 +9,7 @@
 - There is a private shared knowledge base under `knowledge/`.
 - Read `knowledge/spec.md` and `knowledge/roadmap.md` before major work when they exist.
 - Treat `folder_structure.md` as authoritative for project layout.
+- Worker skill files live under `{project_dir}/skills/workers/`.
 
 ## General Rules
 

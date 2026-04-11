@@ -356,7 +356,7 @@ export default function ProjectSettingsPanel({
                   size="sm"
                   onClick={async () => {
                     if (!confirm(`Are you sure you want to permanently delete "${selectedProject?.id}"? This cannot be undone.`)) return
-                    if (!confirm('This will delete all workspace data, agent skills, and history. Really delete?')) return
+                    if (!confirm('This will delete all project data, agent skills, and history. Really delete?')) return
                     try {
                       await removeProject(selectedProject.id)
                       setProjectSettingsOpen(false)

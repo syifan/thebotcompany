@@ -30,13 +30,13 @@ export default function BootstrapPanel({
         ) : bootstrapModal.preview ? (
           <div className="space-y-4">
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Bootstrap wipes the agent workspace and resets the project cycle so agents start fresh.
+              Bootstrap wipes project data and resets the project cycle so agents start fresh.
             </p>
 
             <div className="p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded">
               <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">What will be lost</p>
               <ul className="text-sm text-red-700 dark:text-red-300 space-y-1 list-disc list-inside">
-                <li>The entire workspace folder will be emptied — all worker skills, agent notes, and workspace files will be deleted</li>
+                <li>Project data will be reset — agent notes, reports, uploaded files, and run history will be deleted</li>
                 <li>The cycle count will be reset to 1</li>
               </ul>
             </div>

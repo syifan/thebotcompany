@@ -16,13 +16,12 @@ export default function DoctorConfirmModal({
       </ModalHeader>
       <ModalContent>
         <p className="text-sm text-neutral-600 dark:text-neutral-300">
-          Doctor will check the workspace layout for <span className="font-mono font-semibold">{projectId}</span> and report any missing paths.
-          This is read-only and will not modify files.
+          Doctor will inspect the canonical project layout for <span className="font-mono font-semibold">{projectId}</span>, repair project structure issues when possible, and write a report with anything it changed or could not fix.
         </p>
         <div className="flex items-center justify-end gap-2 mt-6">
           <Button variant="outline" onClick={onClose} disabled={running}>Cancel</Button>
           <Button variant="warning" onClick={onConfirm} disabled={running}>
-            {running ? 'Running...' : 'Run Doctor'}
+            {running ? 'Running...' : 'Run Doctor Repair'}
           </Button>
         </div>
       </ModalContent>

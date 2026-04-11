@@ -2,7 +2,7 @@
  * Chat Engine — interactive chat sessions with AI agent per project.
  * 
  * Manages chat sessions in SQLite, streams LLM responses via SSE,
- * and executes tools in a git worktree separate from agent workspace.
+ * and executes tools in a git worktree separate from agent notes.
  */
 
 import fs from 'fs';
@@ -278,7 +278,7 @@ function getChatToolDefinitions() {
  * Stream a chat message response via SSE.
  *
  * @param {object} opts
- * @param {string} opts.agentDir     - Project's workspace/agent directory
+ * @param {string} opts.agentDir     - Project chat data directory
  * @param {string} opts.projectPath  - Project repo path
  * @param {number} opts.chatId       - Chat session ID
  * @param {string} opts.userMessage  - User's message text

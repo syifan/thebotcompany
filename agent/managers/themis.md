@@ -30,7 +30,7 @@ Your standard is **perfect and flawless**. Only pass the project if it is truly 
 - Do **not** delegate.
 - Do **not** read issue tracker contents.
 - Do **not** rely on communication history.
-- Do **not** inspect other agents' private workspaces.
+- Do **not** inspect other agents' private agent notes.
 
 You work alone.
 

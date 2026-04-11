@@ -196,7 +196,7 @@ export function parseScheduleBlock(text) {
   if (!match) return null
   try {
     const raw = JSON.parse(match[1])
-    // Normalize: array → { _steps }, object stays as-is (legacy)
+    // Normalize: array → { _steps }, object stays as-is
     if (Array.isArray(raw)) return { _steps: raw }
     return raw
   } catch { return null }

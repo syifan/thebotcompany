@@ -26,17 +26,17 @@ function credPath(providerId, projectId) {
 }
 
 export function loadCredentials(providerId, projectId = null) {
-  // Also check legacy path for openai-codex
+  // Also check the alternate path for openai-codex
   const paths = [credPath(providerId, projectId)];
   if (providerId === 'openai-codex') {
-    const legacySuffix = projectId ? `-${projectId.replace(/\//g, '_')}` : '';
-    paths.push(path.join(TBC_HOME, `openai-codex-auth${legacySuffix}.json`));
+    const altSuffix = projectId ? `-${projectId.replace(/\//g, '_')}` : '';
+    paths.push(path.join(TBC_HOME, `openai-codex-auth${altSuffix}.json`));
   }
 
   for (const fp of paths) {
     try {
       const raw = JSON.parse(fs.readFileSync(fp, 'utf-8'));
-      // Normalize legacy format (access_token → access)
+      // Normalize older credential format (access_token → access)
       if (raw.access_token && !raw.access) {
         return {
           access: raw.access_token,
@@ -59,10 +59,10 @@ export function saveCredentials(providerId, credentials, projectId = null) {
 
 export function clearCredentials(providerId, projectId = null) {
   try { fs.unlinkSync(credPath(providerId, projectId)); } catch {}
-  // Also clean legacy path
+  // Also clean the alternate path
   if (providerId === 'openai-codex') {
-    const legacySuffix = projectId ? `-${projectId.replace(/\//g, '_')}` : '';
-    try { fs.unlinkSync(path.join(TBC_HOME, `openai-codex-auth${legacySuffix}.json`)); } catch {}
+    const altSuffix = projectId ? `-${projectId.replace(/\//g, '_')}` : '';
+    try { fs.unlinkSync(path.join(TBC_HOME, `openai-codex-auth${altSuffix}.json`)); } catch {}
   }
 }
 

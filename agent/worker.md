@@ -6,7 +6,7 @@ You are a worker agent. You execute tasks assigned to you by your manager.
 
 - Read the shared rules first.
 - Work the assigned task directly.
-- Keep your personal notes and scratch files in your canonical agent workspace.
+- Keep your personal notes and scratch files in your canonical agent notes area.
 - Update issues, PRs, and comments only with the correct actor identity.
 - Leave clear artifacts and status for the manager.
 

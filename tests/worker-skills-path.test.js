@@ -14,26 +14,21 @@ function read(file) {
 }
 
 describe('worker skill directory layout', () => {
-  it('stores worker skills under skills/workers instead of the legacy workers dir', () => {
+  it('stores worker skills under skills/workers', () => {
     const src = read(serverPath);
     assert.ok(src.includes("get skillsDir()"), 'Expected skillsDir getter in server.js');
     assert.ok(src.includes("get workerSkillsDir()"), 'Expected workerSkillsDir getter in server.js');
     assert.ok(src.includes("path.join(this.skillsDir, 'workers')"), 'Expected worker skills under skills/workers');
   });
 
-  it('migrates the legacy workspace/workers directory to skills/workers', () => {
-    const src = read(serverPath);
-    assert.ok(src.includes("const legacyDir = path.join(this.agentDir, 'workers')"), 'Expected legacy workers dir reference for migration');
-    assert.ok(src.includes("fs.renameSync(legacyDir, dir)"), 'Expected legacy workers dir migration');
-  });
 
   it('creates the new skills/workers control-plane directories at startup', () => {
     const src = read(serverPath);
-    assert.ok(src.includes("path.join('skills', 'workers')"), 'Expected startup to create skills/workers');
-    assert.ok(src.includes("'workspace'"), 'Expected startup to keep per-agent workspace dir');
+    assert.ok(src.includes("this.workerSkillsDir"), 'Expected startup to create skills/workers');
+    assert.ok(src.includes("this.agentsDir"), 'Expected startup to create agent directories');
   });
 
-  it('updates manager-facing prompts to use skills/workers', () => {
+  it('keeps manager-facing prompts on skills/workers', () => {
     const managerPrompt = read(managerPromptPath);
     const everyonePrompt = read(everyonePromptPath);
     assert.ok(managerPrompt.includes('{project_dir}/skills/workers/'));

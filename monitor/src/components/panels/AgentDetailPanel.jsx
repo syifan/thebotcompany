@@ -31,9 +31,9 @@ export default function AgentDetailPanel({ agentModal, setAgentModal }) {
                 onClick={() => setAgentModal(prev => ({ ...prev, tab: 'skill' }))}
               >Skill</button>
               <button
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'workspace' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                onClick={() => setAgentModal(prev => ({ ...prev, tab: 'workspace' }))}
-              >Workspace</button>
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'files' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                onClick={() => setAgentModal(prev => ({ ...prev, tab: 'files' }))}
+              >Files</button>
             </div>
             {agentModal.tab === 'skill' ? (
             <div className="space-y-3">
@@ -65,8 +65,8 @@ export default function AgentDetailPanel({ agentModal, setAgentModal }) {
             </div>
             ) : (
             <div className="space-y-3">
-              {agentModal.data.workspaceFiles?.length > 0 ? (
-                agentModal.data.workspaceFiles.map((file, i) => (
+              {agentModal.data.agentFiles?.length > 0 ? (
+                agentModal.data.agentFiles.map((file, i) => (
                   <details key={file.name} open={i === 0}>
                     <summary className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase cursor-pointer select-none py-1 hover:text-neutral-700 dark:hover:text-neutral-300 flex items-center justify-between">
                       <span>{file.name}</span>
@@ -80,7 +80,7 @@ export default function AgentDetailPanel({ agentModal, setAgentModal }) {
                   </details>
                 ))
               ) : (
-                <p className="text-neutral-400 dark:text-neutral-500 italic py-4 text-center">No workspace files</p>
+                <p className="text-neutral-400 dark:text-neutral-500 italic py-4 text-center">No agent files</p>
               )}
             </div>
             )}
