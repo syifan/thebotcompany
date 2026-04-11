@@ -17,14 +17,13 @@ export default function ToolCallBlock({ name, input, output, summary, ok, exitCo
   const hasOutput = output !== undefined && output !== null
   const isRunning = !hasOutput
   const outputText = typeof output === 'string' ? output.trim() : ''
-  const inferredError = !!outputText && (
+  const explicitBashFailure = name === 'Bash' && !!outputText && (
     outputText.startsWith('Error:') ||
     outputText.startsWith('Blocked:') ||
-    /\bExit code:\s*[1-9]\d*\b/.test(outputText) ||
-    /operation not permitted/i.test(outputText) ||
-    /permission denied/i.test(outputText) ||
-    /access denied/i.test(outputText)
+    /\nExit code:\s*[1-9]\d*\b/.test(outputText) ||
+    /^Exit code:\s*[1-9]\d*\b/.test(outputText)
   )
+  const inferredError = explicitBashFailure || (name !== 'Bash' && outputText.startsWith('Error:'))
   const isError = ok === false || (typeof exitCode === 'number' && exitCode !== 0) || inferredError
   const StatusIcon = isRunning ? Loader2 : isError ? AlertCircle : CheckCircle2
   const statusIconClass = isRunning

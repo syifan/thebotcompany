@@ -2,6 +2,7 @@ import React from 'react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import { GitPullRequest, ExternalLink } from 'lucide-react'
 import StatusPill from '@/components/ui/status-pill'
+import { EntityTimeline, buildPRTimeline } from '@/components/ui/entity-event-list'
 
 function formatDate(value) {
   if (!value) return 'Unknown'
@@ -64,6 +65,8 @@ export default function PRDetailPanel({ prModal, setPrModal }) {
               <div className="text-neutral-500">Updated</div>
               <div className="font-medium">{formatDate(pr.updated_at)}</div>
             </div>
+
+            <EntityTimeline title="PR activity" items={buildPRTimeline(pr)} />
 
             <div>
               <div className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Summary</div>

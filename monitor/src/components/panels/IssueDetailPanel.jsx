@@ -9,6 +9,7 @@ import ScheduleDiagram, { parseScheduleBlock, stripAllMetaBlocks, MetaBlockBadge
 import remarkGfm from 'remark-gfm'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { EntityTimeline, buildIssueTimeline } from '@/components/ui/entity-event-list'
 
 export default function IssueDetailPanel({
   issueModal,
@@ -93,38 +94,7 @@ export default function IssueDetailPanel({
               </>
             )}
 
-            {/* Comments */}
-            {issueModal.comments.length > 0 && (
-              <>
-                <Separator />
-                <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 flex items-center gap-2">
-                  <span>Comments</span>
-                  <StatusPill variant="meta" className="font-normal normal-case">{issueModal.comments.length}</StatusPill>
-                </h3>
-                <div className="space-y-3">
-                  {issueModal.comments.map((comment) => (
-                    <div key={comment.id} className="border-b border-neutral-200 dark:border-neutral-700 pb-3 last:border-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Avatar className="w-6 h-6">
-                          <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white text-xs">
-                            {(comment.author || '??').slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100 capitalize">{comment.author}</span>
-                        <span className="text-xs text-neutral-400 dark:text-neutral-500 ml-auto">{new Date(comment.created_at).toLocaleString()}</span>
-                      </div>
-                      <div className="text-sm text-neutral-700 dark:text-neutral-300 prose prose-sm prose-neutral dark:prose-invert max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripAllMetaBlocks(comment.body)}</ReactMarkdown>
-                        {parseScheduleBlock(comment.body) && (
-                          <ScheduleDiagram schedule={parseScheduleBlock(comment.body)} />
-                        )}
-                        <MetaBlockBadges text={comment.body} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+            <EntityTimeline title="Issue activity" items={buildIssueTimeline(issueModal.issue, issueModal.comments)} />
 
             {/* Add Comment */}
             {isWriteMode && <>
