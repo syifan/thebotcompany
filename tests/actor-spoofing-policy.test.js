@@ -5,11 +5,11 @@ import path from 'node:path';
 
 function mkProject() {
   const repo = path.resolve('/tmp/project/repo');
-  const workspace = path.resolve('/tmp/project/workspace/workers/leo');
+  const notesDir = path.resolve('/tmp/project/agents/leo');
   return {
     repo,
-    workspace,
-    allowedPaths: [repo, workspace],
+    notesDir,
+    allowedPaths: [repo, notesDir],
     issuePolicy: { mode: 'full', issues: [], actor: 'leo' },
   };
 }

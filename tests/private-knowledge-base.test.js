@@ -16,8 +16,8 @@ describe('private knowledge base for spec, roadmap, and internal analysis docs',
   it('defines a shared knowledge-base path outside the repo root', () => {
     const src = read(serverPath);
     assert.match(src, /get knowledgeDir\(\)/, 'Expected a knowledgeDir getter in server.js');
-    assert.match(src, /path\.join\(this\.agentDir, 'knowledge'\)/,
-      'Expected knowledge base to live under private workspace/knowledge, not the repo root');
+    assert.match(src, /path\.join\(this\.projectDir, 'knowledge'\)/,
+      'Expected knowledge base to live under project knowledge/, not the repo root');
   });
 
   it('bootstrap preview should read spec/roadmap from knowledge base, not repo root', () => {

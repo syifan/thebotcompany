@@ -8,26 +8,26 @@ import { executeTool } from '../src/agent-runner.js';
 function mkProject() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-issue-policy-'));
   const repo = path.join(root, 'repo');
-  const workspaceRoot = path.join(root, 'workspace');
-  const own = path.join(workspaceRoot, 'workspace', 'leo');
+  const projectRoot = root;
+  const own = path.join(projectRoot, 'agents', 'leo');
   fs.mkdirSync(repo, { recursive: true });
   fs.mkdirSync(own, { recursive: true });
   fs.writeFileSync(path.join(repo, 'README.md'), 'repo ok');
-  fs.writeFileSync(path.join(workspaceRoot, 'project.db'), 'sqlite');
+  fs.writeFileSync(path.join(projectRoot, 'project.db'), 'sqlite');
 
   const allowedPaths = {
     read: [repo, own],
     write: [repo, own],
     denied: [
-      path.join(workspaceRoot, 'workspace'),
-      path.join(workspaceRoot, 'responses'),
-      path.join(workspaceRoot, 'uploads'),
-      path.join(workspaceRoot, 'skills'),
-      path.join(workspaceRoot, 'state.json'),
-      path.join(workspaceRoot, 'orchestrator.log'),
-      path.join(workspaceRoot, 'project.db'),
+      path.join(projectRoot, 'agents'),
+      path.join(projectRoot, 'responses'),
+      path.join(projectRoot, 'uploads'),
+      path.join(projectRoot, 'skills'),
+      path.join(projectRoot, 'state.json'),
+      path.join(projectRoot, 'orchestrator.log'),
+      path.join(projectRoot, 'project.db'),
     ],
-    dbPath: path.join(workspaceRoot, 'project.db'),
+    dbPath: path.join(projectRoot, 'project.db'),
   };
 
   return {

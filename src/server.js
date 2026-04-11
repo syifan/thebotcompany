@@ -271,7 +271,7 @@ function log(msg, projectId = null) {
   if (projectId) {
     const runner = projects.get(projectId);
     if (runner) {
-      const logPath = path.join(runner.agentDir, 'orchestrator.log');
+      const logPath = runner.orchestratorLogPath;
       try { fs.appendFileSync(logPath, line + '\n'); } catch {}
     }
   }
@@ -382,11 +382,55 @@ class ProjectRunner {
   }
 
   get agentDir() {
-    return path.join(this.projectDir, 'workspace');
+    return this.projectDir;
+  }
+
+  get chatsDir() {
+    return path.join(this.projectDir, 'chats');
   }
 
   get agentsDir() {
-    return path.join(this.agentDir, 'agents');
+    return path.join(this.projectDir, 'agents');
+  }
+
+  get responsesDir() {
+    return path.join(this.projectDir, 'responses');
+  }
+
+  get uploadsDir() {
+    return path.join(this.projectDir, 'uploads');
+  }
+
+  get projectDbPath() {
+    return path.join(this.projectDir, 'project.db');
+  }
+
+  get orchestratorLogPath() {
+    return path.join(this.projectDir, 'orchestrator.log');
+  }
+
+  get statePath() {
+    return path.join(this.projectDir, 'state.json');
+  }
+
+  get stopPath() {
+    return path.join(this.projectDir, 'STOP');
+  }
+
+  getAgentNotesDir(agentName) {
+    return path.join(this.agentsDir, agentName);
+  }
+
+  getOperationalPaths() {
+    return [
+      this.projectDbPath,
+      this.orchestratorLogPath,
+      this.responsesDir,
+      this.agentsDir,
+      this.uploadsDir,
+      this.statePath,
+      this.stopPath,
+    ];
   }
 
   get skillsDir() {
@@ -529,7 +573,7 @@ class ProjectRunner {
   getAgentDetails(agentName) {
     const workersDir = this.workerSkillsDir;
     const managersDir = path.join(ROOT, 'agent', 'managers');
-    const workspaceDir = path.join(this.agentDir, 'workspace', agentName);
+    const agentNotesDir = this.getAgentNotesDir(agentName);
     
     let skillPath = path.join(workersDir, `${agentName}.md`);
     let isManager = false;
@@ -544,10 +588,10 @@ class ProjectRunner {
     
     const skill = fs.readFileSync(skillPath, 'utf-8');
     
-    let workspaceFiles = [];
-    if (fs.existsSync(workspaceDir)) {
-      workspaceFiles = fs.readdirSync(workspaceDir).flatMap(f => {
-        const filePath = path.join(workspaceDir, f);
+    let agentFiles = [];
+    if (fs.existsSync(agentNotesDir)) {
+      agentFiles = fs.readdirSync(agentNotesDir).flatMap(f => {
+        const filePath = path.join(agentNotesDir, f);
         const stat = fs.statSync(filePath);
         if (!stat.isFile()) return [];
         return [{
@@ -562,8 +606,8 @@ class ProjectRunner {
     // Get last response from response log
     let lastResponse = null;
     let lastRawOutput = null;
-    const responseLogPath = path.join(this.agentDir, 'responses', `${agentName}.log`);
-    const rawLogPath = path.join(this.agentDir, 'responses', `${agentName}.raw.log`);
+    const responseLogPath = path.join(this.responsesDir, `${agentName}.log`);
+    const rawLogPath = path.join(this.responsesDir, `${agentName}.raw.log`);
     
     const getLastBlock = (filePath, maxChars = 15000) => {
       if (!fs.existsSync(filePath)) return null;
@@ -597,11 +641,11 @@ class ProjectRunner {
     try { everyone = fs.readFileSync(path.join(ROOT, 'agent', 'everyone.md'), 'utf-8'); } catch {}
     try { roleRules = fs.readFileSync(path.join(ROOT, 'agent', isManager ? 'manager.md' : 'worker.md'), 'utf-8'); } catch {}
 
-    return { name: agentName, isManager, skill, workspaceFiles, lastResponse, lastRawOutput, model, everyone, roleRules };
+    return { name: agentName, isManager, skill, agentFiles, lastResponse, lastRawOutput, model, everyone, roleRules };
   }
 
   getLogs(lines = 50) {
-    const logPath = path.join(this.agentDir, 'orchestrator.log');
+    const logPath = this.orchestratorLogPath;
     if (!fs.existsSync(logPath)) return [];
     const content = fs.readFileSync(logPath, 'utf-8');
     return content.split('\n').filter(l => l.trim()).slice(-lines);
@@ -611,7 +655,7 @@ class ProjectRunner {
     const empty = { totalCost: 0, last24hCost: 0, lastCycleCost: 0, avgCycleCost: 0, lastCycleDuration: 0, avgCycleDuration: 0, agents: {} };
     try {
       const db = this.getDb();
-      // Ensure cost columns exist (migration)
+      // Ensure cost columns exist
       try { db.exec('ALTER TABLE reports ADD COLUMN cost REAL'); } catch {}
       try { db.exec('ALTER TABLE reports ADD COLUMN duration_ms INTEGER'); } catch {}
 
@@ -783,7 +827,7 @@ class ProjectRunner {
   }
 
   getDb() {
-    const dbPath = path.join(this.agentDir, 'project.db');
+    const dbPath = this.projectDbPath;
     const db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -970,17 +1014,17 @@ class ProjectRunner {
   }
 
   bootstrapPreview() {
-    const workspaceExists = fs.existsSync(this.agentDir);
-    let workspaceContents = [];
-    if (workspaceExists) {
-      workspaceContents = fs.readdirSync(this.agentDir);
+    const projectDataExists = fs.existsSync(this.projectDir);
+    let projectDataContents = [];
+    if (projectDataExists) {
+      projectDataContents = fs.readdirSync(this.projectDir).filter(name => !['repo', 'knowledge', 'skills', 'config.yaml'].includes(name));
     }
     // Read spec.md and check roadmap.md from private knowledge base
     let specContent = null;
     const specPath = path.join(this.knowledgeDir, 'spec.md');
     try { specContent = fs.readFileSync(specPath, 'utf-8'); } catch {}
     const hasRoadmap = fs.existsSync(path.join(this.knowledgeDir, 'roadmap.md'));
-    return { available: true, workspaceEmpty: workspaceContents.length === 0, repo: this.repo, specContent, hasRoadmap };
+    return { available: true, projectDataEmpty: projectDataContents.length === 0, repo: this.repo, specContent, hasRoadmap };
   }
 
   bootstrap(options = {}) {
@@ -1000,12 +1044,13 @@ class ProjectRunner {
     this.currentCycleId = null;
     this.currentSchedule = null;
 
-    // 1. Wipe the entire workspace folder
-    if (fs.existsSync(this.agentDir)) {
-      fs.rmSync(this.agentDir, { recursive: true });
-      log(`Cleared workspace folder`, this.id);
+    // 1. Wipe project operational state only, keep repo/knowledge/skills intact
+    for (const target of this.getOperationalPaths()) {
+      if (!fs.existsSync(target)) continue;
+      fs.rmSync(target, { recursive: true, force: true });
     }
-    fs.mkdirSync(this.agentDir, { recursive: true });
+    log(`Cleared project operational state`, this.id);
+    fs.mkdirSync(this.projectDir, { recursive: true });
 
     // 2. Reset cycle count, phase, and save state
     this.setState({
@@ -1065,6 +1110,88 @@ class ProjectRunner {
     return { bootstrapped: true };
   }
 
+  _writeReport(agentName, body, { success = true, durationMs = 0 } = {}) {
+    const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
+    const startedAt = new Date();
+    const endedAt = new Date();
+    const reportBody = `> ⏱ Started: ${startedAt.toLocaleString('sv-SE')} | Ended: ${endedAt.toLocaleString('sv-SE')} | Duration: ${durationStr}\n\n${body.trim()}`;
+    const db = this.getDb();
+    db.exec(`CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cycle INTEGER NOT NULL,
+      agent TEXT NOT NULL,
+      body TEXT NOT NULL,
+      summary TEXT,
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    )`);
+    try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN cost REAL'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN duration_ms INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN input_tokens INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN output_tokens INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN cache_read_tokens INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN success INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN model TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN timed_out INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
+    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      this.cycleCount, agentName, reportBody, new Date().toISOString(),
+      null, durationMs,
+      null, null, null,
+      success ? 1 : 0, null, 0,
+      null,
+      'full', JSON.stringify([])
+    );
+    const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
+    db.close();
+    log(`Saved report for ${agentName}`, this.id);
+    broadcastReportUpdate(this.id, lastId, agentName, this.cycleCount);
+    return { reportId: lastId };
+  }
+
+  async runDoctor() {
+    const config = this.loadConfig();
+    const doctorAgent = { name: 'doctor', isManager: true, rawModel: 'high' };
+    const task = [
+      'Inspect this project and act only as an AI Doctor agent.',
+      '',
+      'Your job is to inspect and repair project layout drift. Do not rely on any built-in deterministic doctor behavior. You are the doctor.',
+      '',
+      'Canonical layout:',
+      '- repo/',
+      '- knowledge/',
+      '- skills/',
+      '- project.db',
+      '- orchestrator.log',
+      '- responses/',
+      '- agents/',
+      '',
+      'Required behavior:',
+      '- Inspect the actual filesystem.',
+      '- Repair missing or misplaced project files when it is safe.',
+      '- Ensure required directories and files exist after repair.',
+      '- If known agent directories under agents/ are missing, create them.',
+      '- Do not change product code in repo/ unless absolutely necessary for the repair itself.',
+      '- Prefer move/rename over copy when safe.',
+      '',
+      'At the end, write a concise doctor report with these sections exactly:',
+      '## Doctor Check',
+      'Layout status: ...',
+      '',
+      '### Required paths',
+      '- ...',
+      '',
+      '### Repair actions',
+      '- ...',
+      '',
+      'If something could not be fixed, say why clearly.',
+    ].join('\n');
+    return await this.runAgent(doctorAgent, config, 'doctor', task, { mode: 'full', issues: [] });
+  }
+
   async start() {
     if (this.running) return;
     // Validate project path exists
@@ -1074,25 +1201,26 @@ class ProjectRunner {
     }
 
     // Ensure project directories exist
-    fs.mkdirSync(this.agentDir, { recursive: true });
+    fs.mkdirSync(this.projectDir, { recursive: true });
+    fs.mkdirSync(this.chatsDir, { recursive: true });
     fs.mkdirSync(this.agentsDir, { recursive: true });
-    fs.mkdirSync(path.join(this.agentDir, 'responses'), { recursive: true });
+    fs.mkdirSync(this.responsesDir, { recursive: true });
     fs.mkdirSync(this.skillsDir, { recursive: true });
     fs.mkdirSync(this.knowledgeDir, { recursive: true });
-    fs.mkdirSync(path.join(this.knowledgeDir, 'analysis'), { recursive: true });
-    fs.mkdirSync(path.join(this.knowledgeDir, 'decisions'), { recursive: true });
+    fs.mkdirSync(path.join(this.projectDir, 'knowledge', 'analysis'), { recursive: true });
+    fs.mkdirSync(path.join(this.projectDir, 'knowledge', 'decisions'), { recursive: true });
     fs.mkdirSync(this.workerSkillsDir, { recursive: true });
     
     // Load persisted state
     this.loadState();
     
     this.running = true;
-    log(`Starting project runner (data: ${this.agentDir}, cycle: ${this.cycleCount})`, this.id);
+    log(`Starting project runner (data: ${this.projectDir}, cycle: ${this.cycleCount})`, this.id);
     this.runLoop();
   }
 
   loadState() {
-    const statePath = path.join(this.agentDir, 'state.json');
+    const statePath = this.statePath;
     try {
       if (fs.existsSync(statePath)) {
         const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
@@ -1132,7 +1260,7 @@ class ProjectRunner {
   }
 
   saveState() {
-    const statePath = path.join(this.agentDir, 'state.json');
+    const statePath = this.statePath;
     try {
       const state = {
         cycleCount: this.cycleCount,
@@ -1300,48 +1428,28 @@ class ProjectRunner {
   }
 
   parseSchedule(resultText) {
-    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from manager response
-    // Supports both array format (new) and object format (legacy)
+    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from manager response.
+    // Canonical format only: a JSON array of steps.
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
+    const normalizeStep = (step) => {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return null;
+      if (step.delay !== undefined) {
+        return Object.keys(step).length === 1 && typeof step.delay === 'number'
+          ? { delay: step.delay }
+          : null;
+      }
+      if (typeof step.agent !== 'string' || !step.agent.trim()) return null;
+      const { agent, ...rest } = step;
+      if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null;
+      return { [agent]: rest };
+    };
     try {
       const raw = JSON.parse(match[1]);
-      
-      // New array format: [{ "delay": 20 }, { "leo": { "task": "..." } }, ...]
-      if (Array.isArray(raw)) {
-        return { _steps: raw };
-      }
-      
-      // Legacy object format: { "agents": { "delay": 20, "leo": {...} } }
-      // Convert to array format internally
-      if (raw.agents) {
-        const steps = [];
-        const agents = raw.agents;
-        // Top-level delay (before first agent)
-        if (agents.delay) {
-          steps.push({ delay: agents.delay });
-        }
-        for (const [name, value] of Object.entries(agents)) {
-          if (name === 'delay') continue;
-          steps.push({ [name]: value });
-          // Per-agent delay
-          const agentDelay = typeof value === 'object' ? value.delay : null;
-          if (agentDelay) {
-            // Remove delay from agent value since it's now a separate step
-            const clean = { ...value };
-            delete clean.delay;
-            steps[steps.length - 1] = { [name]: Object.keys(clean).length === 1 && clean.task ? clean.task : clean };
-          }
-        }
-        return { _steps: steps };
-      }
-      
-      // Bare object with delay at top level
-      if (raw.delay !== undefined) {
-        return { _steps: [{ delay: raw.delay }] };
-      }
-      
-      return null;
+      if (!Array.isArray(raw)) return null;
+      const steps = raw.map(normalizeStep);
+      if (steps.some(step => step === null)) return null;
+      return { _steps: steps };
     } catch (e) {
       log(`Failed to parse schedule: ${e.message}`, this.id);
       return null;
@@ -1550,7 +1658,7 @@ class ProjectRunner {
             }
 
             // Check for STOP file
-            if (fs.existsSync(path.join(this.agentDir, 'STOP'))) {
+            if (fs.existsSync(this.stopPath)) {
               log(`STOP file detected — pausing project`, this.id);
               this.setState({ isPaused: true, pauseReason: 'Project stopped by Athena' });
               continue;
@@ -1856,6 +1964,9 @@ class ProjectRunner {
 
   // Build the full prompt for an agent (shared across CLI and API paths)
   _getAgentFilesystemPolicy(agent, visibility = null) {
+    if (agent.name === 'doctor') {
+      return null;
+    }
     const visMode = visibility?.mode || 'full';
     const repoDir = this.path;
     const knowledgeDir = this.knowledgeDir;
@@ -1872,15 +1983,15 @@ class ProjectRunner {
       write.push(this.workerSkillsDir);
     }
     const denied = [
-      path.join(this.agentDir, 'workspace'),
-      path.join(this.agentDir, 'responses'),
-      path.join(this.agentDir, 'uploads'),
-      path.join(this.agentDir, 'skills'),
-      path.join(this.agentDir, 'state.json'),
-      path.join(this.agentDir, 'orchestrator.log'),
-      path.join(this.agentDir, 'project.db'),
+      this.agentsDir,
+      this.responsesDir,
+      this.uploadsDir,
+      this.skillsDir,
+      this.statePath,
+      this.orchestratorLogPath,
+      this.projectDbPath,
     ];
-    return { read, write, denied, dbPath: path.join(this.agentDir, 'project.db') };
+    return { read, write, denied, dbPath: this.projectDbPath };
   }
 
   _buildAgentPrompt(agent, task, visibility) {
@@ -1912,12 +2023,12 @@ class ProjectRunner {
             sharedRules += dbContent + '\n\n---\n\n';
           } catch {}
         } else if (visMode === 'focused') {
-          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker. Work only from the task, the repository, and your own workspace notes. If needed, you may create a new issue to report a blocker or finding.\n\n---\n\n';
+          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker. Work only from the task, the repository, and your own agent notes. If needed, you may create a new issue to report a blocker or finding.\n\n---\n\n';
         } else {
-          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker and you cannot rely on any workspace notes, including your own prior notes. Work only from the task and the repository.\n\n---\n\n';
+          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker and you cannot rely on any agent notes, including your own prior notes. Work only from the task and the repository.\n\n---\n\n';
         }
       } else {
-        sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or any workspace notes, including your own. Evaluate only the repository, tests, artifacts, and your own fresh inspection.\n\n---\n\n';
+        sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or any agent notes, including your own. Evaluate only the repository, tests, artifacts, and your own fresh inspection.\n\n---\n\n';
       }
       const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
@@ -1930,7 +2041,7 @@ class ProjectRunner {
 
     // Strip YAML frontmatter (---...---) from skill content before building prompt
     skillContent = skillContent.replace(/^---[\s\S]*?---\n*/, '');
-    skillContent = (taskHeader + sharedRules + skillContent).replaceAll('{project_dir}', this.agentDir);
+    skillContent = (taskHeader + sharedRules + skillContent).replaceAll('{project_dir}', this.projectDir);
 
     return skillContent;
   }
@@ -1949,7 +2060,7 @@ class ProjectRunner {
 
     // Log response to agent-specific log file
     try {
-      const responsesDir = path.join(this.agentDir, 'responses');
+      const responsesDir = this.responsesDir;
       fs.mkdirSync(responsesDir, { recursive: true });
       const timestamp = new Date().toLocaleString('sv-SE', { hour12: false }).replace(',', '');
       const header = `\n${'='.repeat(60)}\n[${timestamp}] Cycle ${this.cycleCount} | Success: ${success}\n${'='.repeat(60)}\n`;
@@ -1980,7 +2091,7 @@ class ProjectRunner {
           let partialWork = '';
           if (killedByTimeout) {
             try {
-              const repoDir = path.join(this.agentDir, 'repo');
+              const repoDir = path.join(this.projectDir, 'repo');
               if (fs.existsSync(path.join(repoDir, '.git'))) {
                 const diffStat = execSync('git diff --stat HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
                 const stagedStat = execSync('git diff --stat --cached HEAD 2>/dev/null || true', { cwd: repoDir, encoding: 'utf-8', timeout: 10000 }).trim();
@@ -2068,9 +2179,9 @@ class ProjectRunner {
     const modeStr = mode ? ` [${mode}]` : '';
     log(`Running: ${agent.name}${agent.isManager ? ' (manager)' : ''}${modeStr}`, this.id);
 
-    // Ensure workspace directory exists for this agent
-    const workspaceDir = path.join(this.agentDir, 'workspace', agent.name);
-    fs.mkdirSync(workspaceDir, { recursive: true });
+    // Ensure agent notes directory exists for this agent
+    const agentNotesDir = this.getAgentNotesDir(agent.name);
+    fs.mkdirSync(agentNotesDir, { recursive: true });
 
     // Build the prompt (shared between CLI and API paths)
     const skillContent = this._buildAgentPrompt(agent, task, visibility);
@@ -2099,7 +2210,7 @@ class ProjectRunner {
     const resolvedKeyType = keyResult?.type || 'api';
     this.currentAgentKeyId = resolvedKeyId;
 
-    // Fallback: legacy setupToken (for un-migrated configs)
+    // Fallback: setupToken when project key selection is not configured
     if (!resolvedToken && config.setupToken) {
       resolvedToken = config.setupToken;
     }
@@ -2139,7 +2250,7 @@ class ProjectRunner {
 
     const agentEnv = {
       CLAUDE_CODE_ENTRYPOINT: 'cli',
-      TBC_DB: path.join(this.agentDir, 'project.db'),
+      TBC_DB: this.projectDbPath,
       TBC_VISIBILITY: visibility?.mode || 'full',
       TBC_FOCUSED_ISSUES: visibility?.issues?.join(',') || '',
     };
@@ -2160,7 +2271,7 @@ class ProjectRunner {
       cwd: this.path,
       timeoutMs: config.agentTimeoutMs || 0,
       env: agentEnv,
-      allowedRepo: this.repo || null,
+      allowedRepo: agent.name === 'doctor' ? null : (this.repo || null),
       allowedPaths: this._getAgentFilesystemPolicy(agent, visibility),
       issuePolicy: { ...(visibility || { mode: 'full', issues: [] }), actor: agent.name },
       abortSignal: runAbortController.signal,
@@ -2715,7 +2826,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Backward compat: legacy OpenAI Codex endpoints
+  // Backward-compatible OpenAI Codex endpoints
   if (req.method === 'POST' && url.pathname === '/api/openai-codex/login') {
     if (!requireWrite(req, res)) return;
     const projectId = url.searchParams.get('project') || null;
@@ -2953,8 +3064,8 @@ const server = http.createServer(async (req, res) => {
         }
 
         const knowledgeSpecPath = path.join(parsed.projectDir, 'knowledge', 'spec.md');
-        const legacySpecPath = path.join(parsed.repoDir, 'spec.md');
-        const specPath = fs.existsSync(knowledgeSpecPath) ? knowledgeSpecPath : legacySpecPath;
+        const repoSpecPath = path.join(parsed.repoDir, 'spec.md');
+        const specPath = fs.existsSync(knowledgeSpecPath) ? knowledgeSpecPath : repoSpecPath;
         const hasSpec = fs.existsSync(specPath);
         let specContent = null;
         if (hasSpec) {
@@ -3290,7 +3401,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // POST /api/projects/:id/token — set per-project key selection or legacy token
+    // POST /api/projects/:id/token — set per-project key selection or direct token
     if (req.method === 'POST' && subPath === 'token') {
       if (!requireWrite(req, res)) return;
       let body = '';
@@ -3654,7 +3765,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         try {
           const { title, body: issueBody, creator, assignee, text } = JSON.parse(body);
-          // Support both new format (title/body/creator) and legacy (text)
+          // Support both structured and text input
           if (title) {
             const result = await runner.createIssue(title, issueBody, creator, assignee);
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -3685,25 +3796,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // GET /api/projects/:id/download - zip and download workspace
+    // GET /api/projects/:id/download - zip and download project data
     if (req.method === 'GET' && subPath === 'download') {
       try {
-        const workspaceDir = runner.agentDir;
-        if (!fs.existsSync(workspaceDir)) {
+        const projectDataDir = runner.projectDir;
+        if (!fs.existsSync(projectDataDir)) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Workspace not found' }));
+          res.end(JSON.stringify({ error: 'Project data not found' }));
           return;
         }
-        const filename = `${runner.id.replace(/\//g, '-')}-workspace.zip`;
+        const filename = `${runner.id.replace(/\//g, '-')}-project.zip`;
         res.writeHead(200, {
           'Content-Type': 'application/zip',
           'Content-Disposition': `attachment; filename="${filename}"`,
         });
-        const zip = spawn('zip', ['-r', '-q', '-', '.'], { cwd: workspaceDir, stdio: ['ignore', 'pipe', 'ignore'] });
+        const zip = spawn('zip', ['-r', '-q', '-', '.'], { cwd: projectDataDir, stdio: ['ignore', 'pipe', 'ignore'] });
         zip.stdout.pipe(res);
         zip.on('error', () => {
           // Fallback to tar if zip not available
-          const tar = spawn('tar', ['-czf', '-', '-C', workspaceDir, '.'], { stdio: ['ignore', 'pipe', 'ignore'] });
+          const tar = spawn('tar', ['-czf', '-', '-C', projectDataDir, '.'], { stdio: ['ignore', 'pipe', 'ignore'] });
           res.writeHead(200, {
             'Content-Type': 'application/gzip',
             'Content-Disposition': `attachment; filename="${filename.replace('.zip', '.tar.gz')}"`,
@@ -3740,7 +3851,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', () => {
         try {
           const options = body ? JSON.parse(body) : {};
-          fs.mkdirSync(runner.agentDir, { recursive: true });
+          fs.mkdirSync(runner.chatsDir, { recursive: true });
           const result = runner.bootstrap(options);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, ...result }));
@@ -3752,12 +3863,36 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // POST /api/projects/:id/doctor - run AI Doctor agent
+    if (req.method === 'POST' && subPath === 'doctor') {
+      if (!requireWrite(req, res)) return;
+      try {
+        if (!runner.isPaused || runner.currentAgent) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Doctor is only available when the project is fully paused.' }));
+          return;
+        }
+        const result = await runner.runDoctor();
+        if (!result.success) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Doctor agent failed', ...result }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, ...result }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
     // --- Chat endpoints ---
 
     // GET /api/projects/:id/chats — list chat sessions
     if (req.method === 'GET' && subPath === 'chats') {
       try {
-        const sessions = chatListSessions(runner.agentDir);
+        const sessions = chatListSessions(runner.chatsDir);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ sessions }));
       } catch (e) {
@@ -3775,7 +3910,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', () => {
         try {
           const data = body ? JSON.parse(body) : {};
-          const session = chatCreateSession(runner.agentDir, data.title);
+          const session = chatCreateSession(runner.chatsDir, data.title);
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ session }));
         } catch (e) {
@@ -3790,7 +3925,7 @@ const server = http.createServer(async (req, res) => {
     const chatDetailMatch = req.method === 'GET' && subPath.match(/^chats\/(\d+)$/);
     if (chatDetailMatch) {
       try {
-        const session = chatGetSession(runner.agentDir, parseInt(chatDetailMatch[1]));
+        const session = chatGetSession(runner.chatsDir, parseInt(chatDetailMatch[1]));
         if (!session) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Session not found' }));
@@ -3833,7 +3968,7 @@ const server = http.createServer(async (req, res) => {
     if (chatDeleteMatch) {
       if (!requireWrite(req, res)) return;
       try {
-        chatDeleteSession(runner.agentDir, parseInt(chatDeleteMatch[1]));
+        chatDeleteSession(runner.chatsDir, parseInt(chatDeleteMatch[1]));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
       } catch (e) {
@@ -3888,8 +4023,8 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          // Save to workspace/uploads/
-          const uploadsDir = path.join(runner.agentDir, 'uploads');
+          // Save to uploads/
+          const uploadsDir = runner.uploadsDir;
           if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
           const ext = path.extname(filename) || '.bin';
           const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
@@ -3915,7 +4050,7 @@ const server = http.createServer(async (req, res) => {
     const uploadMatch = req.method === 'GET' && subPath.match(/^uploads\/(.+)$/);
     if (uploadMatch) {
       const filename = uploadMatch[1];
-      const filePath = path.join(runner.agentDir, 'uploads', filename);
+      const filePath = path.join(runner.uploadsDir, filename);
       if (!fs.existsSync(filePath)) {
         res.writeHead(404);
         res.end('Not found');
@@ -3969,7 +4104,7 @@ const server = http.createServer(async (req, res) => {
           // Save user message once (before any retry/fallback)
           // Save user message with image references
           const imageUrls = (data.images || []).map(img => `/api/projects/${projectId}/uploads/${img.filename}`);
-          chatSaveMessage(runner.agentDir, chatId, 'user', data.message.trim(), imageUrls.length > 0 ? imageUrls : null);
+          chatSaveMessage(runner.chatsDir, chatId, 'user', data.message.trim(), imageUrls.length > 0 ? imageUrls : null);
 
           // SSE headers
           res.writeHead(200, {
@@ -3979,7 +4114,9 @@ const server = http.createServer(async (req, res) => {
           });
 
           const chatOpts = {
-            agentDir: runner.agentDir,
+            agentDir: runner.chatsDir,
+            tbcDbPath: runner.projectDbPath,
+            uploadsDir: runner.uploadsDir,
             projectPath: runner.path,
             chatId,
             userMessage: data.message.trim(),

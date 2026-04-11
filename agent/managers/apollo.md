@@ -14,7 +14,7 @@ You lead the verification phase. When Ares claims a milestone is done, you hire 
 
 Read:
 - The milestone description (injected at top)
-- Worker findings: workspace notes and issue comments (see manager.md)
+- Worker findings: agent notes and issue comments (see manager.md)
 
 On the first cycle you have no reports yet — go to Step 2. On subsequent cycles, synthesize your team's findings: have all files relevant to the milestone been checked?
 

@@ -8,10 +8,10 @@ import { executeRead, executeWrite, executeEdit, executeTool } from '../src/agen
 function mkProject() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-policy-'));
   const repo = path.join(root, 'repo');
-  const workspaceRoot = path.join(root, 'workspace');
-  const own = path.join(workspaceRoot, 'workspace', 'leo');
-  const other = path.join(workspaceRoot, 'workspace', 'nora');
-  const skills = path.join(workspaceRoot, 'skills', 'workers');
+  const projectRoot = root;
+  const own = path.join(projectRoot, 'agents', 'leo');
+  const other = path.join(projectRoot, 'agents', 'nora');
+  const skills = path.join(projectRoot, 'skills', 'workers');
   fs.mkdirSync(repo, { recursive: true });
   fs.mkdirSync(own, { recursive: true });
   fs.mkdirSync(other, { recursive: true });
@@ -20,11 +20,11 @@ function mkProject() {
   fs.writeFileSync(path.join(own, 'note.txt'), 'own ok');
   fs.writeFileSync(path.join(other, 'secret.txt'), 'other secret');
   fs.writeFileSync(path.join(skills, 'nora.md'), 'role: worker');
-  fs.writeFileSync(path.join(workspaceRoot, 'project.db'), 'sqlite');
+  fs.writeFileSync(path.join(projectRoot, 'project.db'), 'sqlite');
   return {
     root,
     repo,
-    workspaceRoot,
+    projectRoot,
     own,
     other,
     skills,
@@ -32,43 +32,43 @@ function mkProject() {
       read: [repo, own],
       write: [repo, own],
       denied: [
-        path.join(workspaceRoot, 'workspace'),
-        path.join(workspaceRoot, 'responses'),
-        path.join(workspaceRoot, 'uploads'),
-        path.join(workspaceRoot, 'skills'),
-        path.join(workspaceRoot, 'state.json'),
-        path.join(workspaceRoot, 'orchestrator.log'),
-        path.join(workspaceRoot, 'project.db'),
+        path.join(projectRoot, 'agents'),
+        path.join(projectRoot, 'responses'),
+        path.join(projectRoot, 'uploads'),
+        path.join(projectRoot, 'skills'),
+        path.join(projectRoot, 'state.json'),
+        path.join(projectRoot, 'orchestrator.log'),
+        path.join(projectRoot, 'project.db'),
       ],
-      dbPath: path.join(workspaceRoot, 'project.db'),
+      dbPath: path.join(projectRoot, 'project.db'),
     },
     allowedBlind: {
       read: [repo],
       write: [repo],
       denied: [
-        path.join(workspaceRoot, 'workspace'),
-        path.join(workspaceRoot, 'responses'),
-        path.join(workspaceRoot, 'uploads'),
-        path.join(workspaceRoot, 'skills'),
-        path.join(workspaceRoot, 'state.json'),
-        path.join(workspaceRoot, 'orchestrator.log'),
-        path.join(workspaceRoot, 'project.db'),
+        path.join(projectRoot, 'agents'),
+        path.join(projectRoot, 'responses'),
+        path.join(projectRoot, 'uploads'),
+        path.join(projectRoot, 'skills'),
+        path.join(projectRoot, 'state.json'),
+        path.join(projectRoot, 'orchestrator.log'),
+        path.join(projectRoot, 'project.db'),
       ],
-      dbPath: path.join(workspaceRoot, 'project.db'),
+      dbPath: path.join(projectRoot, 'project.db'),
     },
     allowedManager: {
       read: [repo, own, skills],
       write: [repo, own, skills],
       denied: [
-        path.join(workspaceRoot, 'workspace'),
-        path.join(workspaceRoot, 'responses'),
-        path.join(workspaceRoot, 'uploads'),
-        path.join(workspaceRoot, 'skills'),
-        path.join(workspaceRoot, 'state.json'),
-        path.join(workspaceRoot, 'orchestrator.log'),
-        path.join(workspaceRoot, 'project.db'),
+        path.join(projectRoot, 'agents'),
+        path.join(projectRoot, 'responses'),
+        path.join(projectRoot, 'uploads'),
+        path.join(projectRoot, 'skills'),
+        path.join(projectRoot, 'state.json'),
+        path.join(projectRoot, 'orchestrator.log'),
+        path.join(projectRoot, 'project.db'),
       ],
-      dbPath: path.join(workspaceRoot, 'project.db'),
+      dbPath: path.join(projectRoot, 'project.db'),
     },
   };
 }
@@ -80,7 +80,7 @@ describe('agent filesystem allowlist', () => {
     assert.match(blocked, /overriding TBC_DB is not allowed/i);
   });
 
-  it('allows reading repo and own workspace but blocks other workspaces', async () => {
+  it('allows reading repo and own agent notes but blocks other agents', async () => {
     const p = mkProject();
     assert.match(executeRead({ file_path: path.join(p.repo, 'repo.txt') }, p.repo, p.allowedWorker), /repo ok/);
     assert.match(executeRead({ file_path: path.join(p.own, 'note.txt') }, p.repo, p.allowedWorker), /own ok/);
@@ -90,7 +90,7 @@ describe('agent filesystem allowlist', () => {
     assert.match(bashResult, /Operation not permitted|Blocked|access denied|Exit code: 1/i);
   });
 
-  it('blocks path traversal into another agent workspace', async () => {
+  it('blocks path traversal into another agent notes directory', async () => {
     const p = mkProject();
     const traversal = path.join(p.own, '..', 'nora', 'secret.txt');
     assert.match(executeRead({ file_path: traversal }, p.repo, p.allowedWorker), /access denied/i);
@@ -111,7 +111,7 @@ describe('agent filesystem allowlist', () => {
     assert.match(managerEdit, /Successfully edited/i);
   });
 
-  it('blind mode cannot read its own workspace notes', async () => {
+  it('blind mode cannot read its own agent notes', async () => {
     const p = mkProject();
     assert.match(executeRead({ file_path: path.join(p.own, 'note.txt') }, p.repo, p.allowedBlind), /access denied/i);
 
@@ -119,7 +119,7 @@ describe('agent filesystem allowlist', () => {
     assert.match(bashResult, /Operation not permitted|Blocked|access denied|Exit code: 1/i);
   });
 
-  it('blocks managers from reading worker private workspace', async () => {
+  it('blocks managers from reading worker private notes', async () => {
     const p = mkProject();
     assert.match(executeRead({ file_path: path.join(p.other, 'secret.txt') }, p.repo, p.allowedManager), /access denied/i);
 
@@ -129,17 +129,17 @@ describe('agent filesystem allowlist', () => {
 
   it('blocks raw project.db access from file tools and bash', async () => {
     const p = mkProject();
-    assert.match(executeRead({ file_path: path.join(p.workspaceRoot, 'project.db') }, p.repo, p.allowedWorker), /project database access is not allowed/i);
+    assert.match(executeRead({ file_path: path.join(p.projectRoot, 'project.db') }, p.repo, p.allowedWorker), /project database access is not allowed/i);
 
-    const bashByPath = await executeTool('Bash', { command: `cat ${JSON.stringify(path.join(p.workspaceRoot, 'project.db'))}` }, p.repo, 0, { TBC_DB: path.join(p.workspaceRoot, 'project.db') }, null, null, p.allowedWorker);
+    const bashByPath = await executeTool('Bash', { command: `cat ${JSON.stringify(path.join(p.projectRoot, 'project.db'))}` }, p.repo, 0, { TBC_DB: path.join(p.projectRoot, 'project.db') }, null, null, p.allowedWorker);
     assert.match(bashByPath, /project database access is not allowed/i);
 
     const envCommand = 'cat "$' + 'TBC_DB"'
-    const bashByEnv = await executeTool('Bash', { command: envCommand }, p.repo, 0, { TBC_DB: path.join(p.workspaceRoot, 'project.db') }, null, null, p.allowedWorker);
+    const bashByEnv = await executeTool('Bash', { command: envCommand }, p.repo, 0, { TBC_DB: path.join(p.projectRoot, 'project.db') }, null, null, p.allowedWorker);
     assert.match(bashByEnv, /project database access is not allowed/i);
   });
 
-  it('allows glob/grep inside own workspace and repo', async () => {
+  it('allows glob/grep inside own agent notes and repo', async () => {
     const p = mkProject();
     const globOwn = await executeTool('Glob', { pattern: '*.txt', path: p.own }, p.repo, 0, null, null, null, p.allowedWorker);
     const grepOwn = await executeTool('Grep', { pattern: 'own', path: p.own }, p.repo, 0, null, null, null, p.allowedWorker);
@@ -150,10 +150,10 @@ describe('agent filesystem allowlist', () => {
     assert.match(globRepo, /repo\.txt/);
   });
 
-  it('blocks glob/grep over denied workspace roots', () => {
+  it('blocks glob/grep over denied agent roots', () => {
     const p = mkProject();
-    const globDenied = executeTool('Glob', { pattern: '*.txt', path: path.join(p.workspaceRoot, 'workspace') }, p.repo, 0, null, null, null, p.allowedWorker);
-    const grepDenied = executeTool('Grep', { pattern: 'secret', path: path.join(p.workspaceRoot, 'workspace') }, p.repo, 0, null, null, null, p.allowedWorker);
+    const globDenied = executeTool('Glob', { pattern: '*.txt', path: path.join(p.projectRoot, 'agents') }, p.repo, 0, null, null, null, p.allowedWorker);
+    const grepDenied = executeTool('Grep', { pattern: 'secret', path: path.join(p.projectRoot, 'agents') }, p.repo, 0, null, null, null, p.allowedWorker);
     return Promise.all([globDenied, grepDenied]).then(([g1, g2]) => {
       assert.match(g1, /access denied/i);
       assert.match(g2, /access denied/i);

@@ -48,23 +48,35 @@ function MetaCard({ label, color, defaultOpen = false, children }) {
 }
 
 // Normalize schedule to _steps array format
+function normalizeStep(step) {
+  if (!step || typeof step !== 'object' || Array.isArray(step)) return null
+  if (step.delay !== undefined) {
+    return Object.keys(step).length === 1 && typeof step.delay === 'number'
+      ? { delay: step.delay }
+      : null
+  }
+  if (typeof step.agent === 'string' && step.agent.trim()) {
+    const { agent, ...rest } = step
+    if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null
+    return { [agent]: rest }
+  }
+  const keys = Object.keys(step)
+  if (keys.length === 1 && keys[0] !== 'delay') {
+    return step
+  }
+  return null
+}
+
 function normalizeSteps(schedule) {
   if (!schedule) return []
-  // New format: { _steps: [...] }
-  if (schedule._steps) return schedule._steps
-  // Legacy format: { agents: { leo: {...}, ... }, delay: 20 }
-  if (schedule.agents) {
-    const steps = []
-    if (schedule.delay) steps.push({ delay: schedule.delay })
-    for (const [name, value] of Object.entries(schedule.agents)) {
-      if (name === 'delay') continue
-      steps.push({ [name]: value })
-    }
-    return steps
-  }
-  // Array directly
-  if (Array.isArray(schedule)) return schedule
-  return []
+  const rawSteps = Array.isArray(schedule)
+    ? schedule
+    : Array.isArray(schedule._steps)
+      ? schedule._steps
+      : null
+  if (!rawSteps) return []
+  const steps = rawSteps.map(normalizeStep)
+  return steps.every(Boolean) ? steps : []
 }
 
 // Extract agent entries (name + value) from steps, skipping delays
@@ -87,7 +99,7 @@ export function getAgentTask(schedule, agentName) {
   const entry = entries.find(([name]) => name.toLowerCase() === agentName.toLowerCase())
   if (!entry) return null
   const value = entry[1]
-  return typeof value === 'string' ? value : value?.task || null
+  return typeof value === 'string' ? value : value?.prompt || value?.task || null
 }
 
 function ScheduleBody({ schedule }) {
@@ -120,7 +132,7 @@ function ScheduleBody({ schedule }) {
         const name = keys.find(k => k !== 'delay')
         if (!name) return null
         const value = step[name]
-        const task = typeof value === 'string' ? value : value.task || ''
+        const task = typeof value === 'string' ? value : (value.prompt || value.task || '')
         const vis = typeof value === 'object' ? value.visibility : null
         const visInfo = visConfig[vis || 'full']
         const VisIcon = visInfo?.icon
@@ -192,14 +204,23 @@ function ScheduleDiagram({ schedule }) {
 
 export function parseScheduleBlock(text) {
   if (!text) return null
-  const match = text.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/)
-  if (!match) return null
+  const startMarker = '<!-- SCHEDULE -->'
+  const endMarker = '<!-- /SCHEDULE -->'
+  const start = text.indexOf(startMarker)
+  if (start === -1) return null
+  const end = text.indexOf(endMarker, start + startMarker.length)
+  if (end === -1) return null
+  const rawText = text.slice(start + startMarker.length, end).trim()
+  if (!rawText) return null
   try {
-    const raw = JSON.parse(match[1])
-    // Normalize: array → { _steps }, object stays as-is (legacy)
-    if (Array.isArray(raw)) return { _steps: raw }
-    return raw
-  } catch { return null }
+    const raw = JSON.parse(rawText)
+    if (!Array.isArray(raw)) return null
+    const steps = raw.map(normalizeStep)
+    if (!steps.every(Boolean)) return null
+    return { _steps: steps }
+  } catch {
+    return null
+  }
 }
 
 export function stripScheduleBlock(text) {
