@@ -1428,57 +1428,28 @@ class ProjectRunner {
   }
 
   parseSchedule(resultText) {
-    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from manager response
-    // Supports both array and object formats
+    // Parse <!-- SCHEDULE --> ... <!-- /SCHEDULE --> from manager response.
+    // Canonical format only: a JSON array of steps.
     const match = resultText.match(/<!--\s*SCHEDULE\s*-->\s*([\[{][\s\S]*?[\]}])\s*<!--\s*\/SCHEDULE\s*-->/);
     if (!match) return null;
     const normalizeStep = (step) => {
-      if (!step || typeof step !== 'object' || Array.isArray(step)) return [];
-      if (step.delay !== undefined && Object.keys(step).length === 1) {
-        return [{ delay: step.delay }];
+      if (!step || typeof step !== 'object' || Array.isArray(step)) return null;
+      if (step.delay !== undefined) {
+        return Object.keys(step).length === 1 && typeof step.delay === 'number'
+          ? { delay: step.delay }
+          : null;
       }
-      if (typeof step.agent === 'string' && step.agent.trim()) {
-        const { agent, ...rest } = step;
-        return [{ [agent]: rest }];
-      }
-      return [step];
+      if (typeof step.agent !== 'string' || !step.agent.trim()) return null;
+      const { agent, ...rest } = step;
+      if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null;
+      return { [agent]: rest };
     };
     try {
       const raw = JSON.parse(match[1]);
-      
-      // Array format: [{ "delay": 20 }, { "leo": { ... } }, { "agent": "diana", ... }]
-      if (Array.isArray(raw)) {
-        return { _steps: raw.flatMap(normalizeStep) };
-      }
-      
-      // Object format with nested agents map
-      if (raw.agents) {
-        const steps = [];
-        const agents = raw.agents;
-        if (agents.delay) {
-          steps.push({ delay: agents.delay });
-        }
-        for (const [name, value] of Object.entries(agents)) {
-          if (name === 'delay') continue;
-          const payload = typeof value === 'object' && value ? { ...value } : value;
-          const agentDelay = typeof payload === 'object' ? payload.delay : null;
-          if (typeof payload === 'object' && payload) delete payload.delay;
-          steps.push({ [name]: (typeof payload === 'object' && Object.keys(payload).length === 1 && payload.task) ? payload.task : payload });
-          if (agentDelay) steps.push({ delay: agentDelay });
-        }
-        return { _steps: steps.flatMap(normalizeStep) };
-      }
-
-      if (raw && Array.isArray(raw._steps)) {
-        return { ...raw, _steps: raw._steps.flatMap(normalizeStep) };
-      }
-      
-      // Bare object with delay at top level
-      if (raw.delay !== undefined && Object.keys(raw).length === 1) {
-        return { _steps: [{ delay: raw.delay }] };
-      }
-      
-      return raw ? { _steps: normalizeStep(raw) } : null;
+      if (!Array.isArray(raw)) return null;
+      const steps = raw.map(normalizeStep);
+      if (steps.some(step => step === null)) return null;
+      return { _steps: steps };
     } catch (e) {
       log(`Failed to parse schedule: ${e.message}`, this.id);
       return null;

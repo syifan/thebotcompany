@@ -49,36 +49,28 @@ function MetaCard({ label, color, defaultOpen = false, children }) {
 
 // Normalize schedule to _steps array format
 function normalizeStep(step) {
-  if (!step || typeof step !== 'object' || Array.isArray(step)) return []
-  if (step.delay !== undefined && Object.keys(step).length === 1) return [{ delay: step.delay }]
-  if (typeof step.agent === 'string' && step.agent.trim()) {
-    const { agent, ...rest } = step
-    return [{ [agent]: rest }]
+  if (!step || typeof step !== 'object' || Array.isArray(step)) return null
+  if (step.delay !== undefined) {
+    return Object.keys(step).length === 1 && typeof step.delay === 'number'
+      ? { delay: step.delay }
+      : null
   }
-  return [step]
+  if (typeof step.agent !== 'string' || !step.agent.trim()) return null
+  const { agent, ...rest } = step
+  if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null
+  return { [agent]: rest }
 }
 
 function normalizeSteps(schedule) {
   if (!schedule) return []
-  // New format: { _steps: [...] }
-  if (schedule._steps) return schedule._steps.flatMap(normalizeStep)
-  // Object format: { agents: { leo: {...}, ... }, delay: 20 }
-  if (schedule.agents) {
-    const steps = []
-    if (schedule.delay) steps.push({ delay: schedule.delay })
-    for (const [name, value] of Object.entries(schedule.agents)) {
-      if (name === 'delay') continue
-      const payload = typeof value === 'object' && value ? { ...value } : value
-      const agentDelay = typeof payload === 'object' ? payload?.delay : null
-      if (typeof payload === 'object' && payload) delete payload.delay
-      steps.push({ [name]: payload })
-      if (agentDelay) steps.push({ delay: agentDelay })
-    }
-    return steps.flatMap(normalizeStep)
-  }
-  // Array directly
-  if (Array.isArray(schedule)) return schedule.flatMap(normalizeStep)
-  return normalizeStep(schedule)
+  const rawSteps = Array.isArray(schedule)
+    ? schedule
+    : Array.isArray(schedule._steps)
+      ? schedule._steps
+      : null
+  if (!rawSteps) return []
+  const steps = rawSteps.map(normalizeStep)
+  return steps.every(Boolean) ? steps : []
 }
 
 // Extract agent entries (name + value) from steps, skipping delays
@@ -210,11 +202,10 @@ export function parseScheduleBlock(text) {
   if (!match) return null
   try {
     const raw = JSON.parse(match[1])
-    // Normalize all supported shapes into the internal _steps format
-    if (Array.isArray(raw)) return { _steps: raw.flatMap(normalizeStep) }
-    if (raw && Array.isArray(raw._steps)) return { ...raw, _steps: raw._steps.flatMap(normalizeStep) }
-    if (raw && raw.agents) return { _steps: normalizeSteps(raw) }
-    return raw ? { _steps: normalizeStep(raw) } : null
+    if (!Array.isArray(raw)) return null
+    const steps = raw.map(normalizeStep)
+    if (!steps.every(Boolean)) return null
+    return { _steps: steps }
   } catch { return null }
 }
 
