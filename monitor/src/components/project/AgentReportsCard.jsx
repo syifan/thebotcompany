@@ -213,7 +213,7 @@ export default function AgentReportsCard({
             <>
               <div
                 className="py-2.5 bg-blue-50 dark:bg-blue-900/20 cursor-pointer transition-colors -mx-1 px-2 rounded"
-                onClick={() => { setFocusedReportId('live'); setReportsPanelOpen(true); }}
+                onClick={() => { setFocusedReportId('live'); setReportsPanelOpen('live'); }}
               >
                 <ReportCardHeader report={{
                   agent: liveAgentLog.agent,
@@ -244,7 +244,7 @@ export default function AgentReportsCard({
             <div
               key={comment.id}
               className="py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 cursor-pointer transition-colors -mx-1 px-1 rounded"
-              onClick={() => { setFocusedReportId(comment.id); setReportsPanelOpen(true); }}
+              onClick={() => { setFocusedReportId(comment.id); setReportsPanelOpen(comment.id); }}
             >
               <ReportCardHeader report={comment} />
               <div className="text-xs text-neutral-500 dark:text-neutral-400 break-words leading-relaxed pl-7">

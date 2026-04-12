@@ -47,6 +47,7 @@ function ReportSummary({ reportId, projectId, summary: initialSummary, className
 export default function ReportsPanel({
   open,
   onClose,
+  onSelectReport,
   comments,
   commentsLoading,
   loadMoreComments,
@@ -60,6 +61,7 @@ export default function ReportsPanel({
   const liveLogRef = useRef(null)
   const liveLogAtBottomRef = useRef(true)
   const reportsScrollRef = useRef(null)
+  const lastAutoScrolledReportRef = useRef(null)
 
   const onLiveLogScroll = useCallback((e) => {
     const el = e.currentTarget
@@ -71,6 +73,33 @@ export default function ReportsPanel({
       liveLogRef.current.scrollTop = liveLogRef.current.scrollHeight
     }
   }, [liveAgentLog])
+
+  useEffect(() => {
+    if (!open) lastAutoScrolledReportRef.current = null
+  }, [open])
+
+  useEffect(() => {
+    if (!open || !focusedReportId || !reportsScrollRef.current) return
+    if (lastAutoScrolledReportRef.current === focusedReportId) return
+
+    let retryTimer = null
+
+    const scrollToFocusedReport = () => {
+      const target = reportsScrollRef.current?.querySelector(`[data-report-id="${focusedReportId}"]`)
+      if (!target) {
+        if (commentsLoading) retryTimer = setTimeout(scrollToFocusedReport, 150)
+        return
+      }
+      target.scrollIntoView({ behavior: 'auto', block: 'start' })
+      lastAutoScrolledReportRef.current = focusedReportId
+    }
+
+    const frame = requestAnimationFrame(scrollToFocusedReport)
+    return () => {
+      cancelAnimationFrame(frame)
+      if (retryTimer) clearTimeout(retryTimer)
+    }
+  }, [open, focusedReportId, commentsLoading])
 
   return (
     <Panel id="reports" open={open} onClose={onClose}>
@@ -93,7 +122,11 @@ export default function ReportsPanel({
         <div ref={reportsScrollRef}>
           {liveAgentLog && (
             <>
-              <div data-report-id="live">
+              <div
+                data-report-id="live"
+                className={`rounded-lg transition-colors duration-700 ${focusedReportId === 'live' ? 'bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-300 dark:ring-blue-700 p-2 -m-2' : ''}`}
+                onClick={() => onSelectReport?.('live')}
+              >
                 <ReportCardHeader report={{
                   agent: liveAgentLog.agent,
                   model: liveAgentLog.model,
@@ -124,7 +157,10 @@ export default function ReportsPanel({
           {comments.map((comment, idx) => (
             <div key={comment.id} data-report-id={comment.id}>
               {idx > 0 && <Separator className="my-4" />}
-              <div className={`rounded-lg transition-colors duration-700 ${focusedReportId === comment.id ? 'bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-300 dark:ring-blue-700 p-2 -m-2' : ''}`}>
+              <div
+                className={`rounded-lg transition-colors duration-700 cursor-pointer ${focusedReportId === comment.id ? 'bg-blue-50 dark:bg-blue-950/30 ring-1 ring-blue-300 dark:ring-blue-700 p-2 -m-2' : ''}`}
+                onClick={() => onSelectReport?.(comment.id)}
+              >
                 <ReportCardHeader report={comment} />
                 <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} className="text-xs text-neutral-500 dark:text-neutral-400 italic block mb-1" />
                 <div className="text-sm text-neutral-700 dark:text-neutral-300 break-words overflow-x-auto">

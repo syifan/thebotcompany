@@ -124,20 +124,6 @@ export default function ProjectView({
   const [focusedReportId, setFocusedReportId] = useState(initialPathPanel.panel === 'reports' ? initialPathPanel.id : null)
   const [liveAgentLog, setLiveAgentLog] = useState(null)
 
-  // Scroll to focused report when panel opens
-  useEffect(() => {
-    const reportsPathOpen = parseProjectPanelPath(currentPath, selectedProject).panel === 'reports'
-    if ((reportsPanelOpen || reportsPathOpen) && focusedReportId) {
-      const timer = setTimeout(() => {
-        const el = document.querySelector(`[data-report-id="${focusedReportId}"]`)
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        const clearTimer = setTimeout(() => setFocusedReportId(null), 2000)
-        return () => clearTimeout(clearTimer)
-      }, 350)
-      return () => clearTimeout(timer)
-    }
-  }, [reportsPanelOpen, focusedReportId, currentPath, selectedProject])
-
   // Modals
   const [agentModal, setAgentModal] = useState({ open: initialPathPanel.panel === 'agent', agent: initialPathPanel.panel === 'agent' ? initialPathPanel.id : null, data: null, loading: false, tab: initialPathPanel.panel === 'agent' ? (initialPathPanel.tab || 'skill') : 'skill' })
   const [issueModal, setIssueModal] = useState({
@@ -255,6 +241,14 @@ export default function ProjectView({
       return next
     })
   }, [navigateProjectPath, shouldClearCurrentPanelPath])
+
+  const setAgentModalTab = useCallback((nextTab) => {
+    setAgentModal(prev => {
+      if (!prev.open || !prev.agent || prev.tab === nextTab) return prev
+      navigateProjectPath(['agent', prev.agent, nextTab === 'skill' ? null : nextTab])
+      return { ...prev, tab: nextTab }
+    })
+  }, [navigateProjectPath])
 
   const setProjectSettingsOpenWithUrl = useCallback((value) => {
     setProjectSettingsOpen(prev => {
@@ -695,12 +689,6 @@ export default function ProjectView({
     }
   }
 
-  useEffect(() => {
-    if (agentModal.open && agentModal.agent) {
-      navigateProjectPath(['agent', agentModal.agent, agentModal.tab === 'skill' ? null : agentModal.tab])
-    }
-  }, [agentModal.open, agentModal.agent, agentModal.tab, navigateProjectPath])
-
   const openBootstrapModal = async () => {
     if (!selectedProject) return
     navigateProjectPath(['bootstrap'])
@@ -936,7 +924,8 @@ export default function ProjectView({
     }
 
     if (panel === 'agent' && panelId) {
-      if (!agentModal.open || agentModal.agent !== panelId) {
+      const needsAgentData = agentModal.agent === panelId && !agentModal.loading && !agentModal.data
+      if (!agentModal.open || agentModal.agent !== panelId || needsAgentData) {
         openAgentModal(panelId, panelTab || 'skill')
         return
       }
@@ -1303,7 +1292,11 @@ export default function ProjectView({
         )}
       </div>
 
-      <AgentDetailPanel agentModal={{ ...agentModal, open: isAgentPanelOpen }} setAgentModal={setAgentModalWithUrl} />
+      <AgentDetailPanel
+        agentModal={{ ...agentModal, open: isAgentPanelOpen }}
+        setAgentModal={setAgentModalWithUrl}
+        onSelectTab={setAgentModalTab}
+      />
       <AgentSettingsModal agentSettingsModal={agentSettingsModal} setAgentSettingsModal={setAgentSettingsModal} saveAgentSettings={saveAgentSettings} />
       <BootstrapPanel bootstrapModal={{ ...bootstrapModal, open: isBootstrapPanelOpen }} setBootstrapModal={setBootstrapModalWithUrl} executeBootstrap={executeBootstrap} />
       <BudgetInfoModal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)} />
@@ -1343,6 +1336,7 @@ export default function ProjectView({
       <ReportsPanel
         open={isReportsPanelOpen}
         onClose={closeReportsPanel}
+        onSelectReport={openReportsPanel}
         comments={comments}
         commentsLoading={commentsLoading}
         loadMoreComments={loadMoreComments}
