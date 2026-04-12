@@ -6,7 +6,7 @@ import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-export default function AgentDetailPanel({ agentModal, setAgentModal }) {
+export default function AgentDetailPanel({ agentModal, setAgentModal, onSelectTab }) {
   return (
     <Panel id="agent-detail" open={agentModal.open} onClose={() => setAgentModal({ ...agentModal, open: false })}>
       <PanelHeader onClose={() => setAgentModal({ ...agentModal, open: false })}>
@@ -28,11 +28,11 @@ export default function AgentDetailPanel({ agentModal, setAgentModal }) {
             <div className="flex border-b border-neutral-200 dark:border-neutral-700">
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'skill' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                onClick={() => setAgentModal(prev => ({ ...prev, tab: 'skill' }))}
+                onClick={() => onSelectTab ? onSelectTab('skill') : setAgentModal(prev => ({ ...prev, tab: 'skill' }))}
               >Skill</button>
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${agentModal.tab === 'files' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                onClick={() => setAgentModal(prev => ({ ...prev, tab: 'files' }))}
+                onClick={() => onSelectTab ? onSelectTab('files') : setAgentModal(prev => ({ ...prev, tab: 'files' }))}
               >Files</button>
             </div>
             {agentModal.tab === 'skill' ? (

@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useLocation, useNavigate } from 'react-router-dom'
 import SegmentedControl from '@/components/ui/segmented-control'
 import StatusPill from '@/components/ui/status-pill'
 import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope } from 'lucide-react'
@@ -36,6 +37,36 @@ import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/contexts/NotificationContext'
 import { useToast } from '@/contexts/ToastContext'
 
+function getProjectBasePath(project) {
+  if (!project) return null
+  return project.repo ? `/github.com/${project.repo}` : `/${project.id}`
+}
+
+function buildProjectPath(project, segments = []) {
+  const projectBasePath = getProjectBasePath(project)
+  if (!projectBasePath) return null
+  const normalizedSegments = segments
+    .filter(segment => segment !== undefined && segment !== null && segment !== '')
+    .map(segment => encodeURIComponent(String(segment)))
+  return normalizedSegments.length ? `${projectBasePath}/${normalizedSegments.join('/')}` : projectBasePath
+}
+
+function parseProjectPanelPath(pathname, project) {
+  const projectBasePath = buildProjectPath(project)
+  if (!projectBasePath) return { panel: null, id: null, tab: null }
+  const path = pathname.replace(/\/+$/, '')
+  if (path === projectBasePath || !path.startsWith(`${projectBasePath}/`)) {
+    return { panel: null, id: null, tab: null }
+  }
+  const suffix = path.slice(projectBasePath.length + 1)
+  const [panel, rawId, rawTab] = suffix.split('/')
+  return {
+    panel: panel || null,
+    id: rawId ? decodeURIComponent(rawId) : null,
+    tab: rawTab ? decodeURIComponent(rawTab) : null,
+  }
+}
+
 export default function ProjectView({
   selectedProject,
   setSelectedProject,
@@ -54,6 +85,9 @@ export default function ProjectView({
   const { isWriteMode, handleLogout, setLoginModal, loginModal, loginInput, setLoginInput, handleLogin, authFetch } = useAuth()
   const { unreadCount } = useNotifications()
   const { showToast, toast, setToast } = useToast()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [currentPath, setCurrentPath] = useState(() => (typeof window !== 'undefined' ? window.location.pathname : ''))
 
   // Project-specific state
   const [logs, setLogs] = useState([])
@@ -85,39 +119,199 @@ export default function ProjectView({
   const [commentsHasMore, setCommentsHasMore] = useState(true)
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState(() => localStorage.getItem('selectedAgent') || null)
-  const [reportsPanelOpen, setReportsPanelOpen] = useState(false)
-  const [focusedReportId, setFocusedReportId] = useState(null)
+  const initialPathPanel = parseProjectPanelPath(currentPath, selectedProject)
+  const [reportsPanelOpen, setReportsPanelOpen] = useState(initialPathPanel.panel === 'reports')
+  const [focusedReportId, setFocusedReportId] = useState(initialPathPanel.panel === 'reports' ? initialPathPanel.id : null)
   const [liveAgentLog, setLiveAgentLog] = useState(null)
 
-  // Scroll to focused report when panel opens
-  useEffect(() => {
-    if (reportsPanelOpen && focusedReportId) {
-      const timer = setTimeout(() => {
-        const el = document.querySelector(`[data-report-id="${focusedReportId}"]`)
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        const clearTimer = setTimeout(() => setFocusedReportId(null), 2000)
-        return () => clearTimeout(clearTimer)
-      }, 350)
-      return () => clearTimeout(timer)
-    }
-  }, [reportsPanelOpen, focusedReportId])
-
   // Modals
-  const [agentModal, setAgentModal] = useState({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
-  const [issueModal, setIssueModal] = useState({ open: false, issue: null, comments: [], loading: false })
-  const [prModal, setPrModal] = useState({ open: false, pr: null, loading: false, error: null })
+  const [agentModal, setAgentModal] = useState({ open: initialPathPanel.panel === 'agent', agent: initialPathPanel.panel === 'agent' ? initialPathPanel.id : null, data: null, loading: false, tab: initialPathPanel.panel === 'agent' ? (initialPathPanel.tab || 'skill') : 'skill' })
+  const [issueModal, setIssueModal] = useState({
+    open: initialPathPanel.panel === 'issue',
+    issue: null,
+    comments: [],
+    loading: false,
+    requestedId: null,
+  })
+  const [prModal, setPrModal] = useState({
+    open: initialPathPanel.panel === 'pr',
+    pr: null,
+    loading: false,
+    error: null,
+    requestedNumber: null,
+  })
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(initialPathPanel.panel === 'settings')
   const [showApiKeyHelp, setShowApiKeyHelp] = useState(false)
-  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false)
-  const [chatPanelOpen, setChatPanelOpen] = useState(false)
-  const [chatSession, setChatSession] = useState(null)
+  const [projectSettingsOpen, setProjectSettingsOpen] = useState(initialPathPanel.panel === 'project-settings')
+  const [chatPanelOpen, setChatPanelOpen] = useState(initialPathPanel.panel === 'chat')
+  const [chatSession, setChatSession] = useState(initialPathPanel.panel === 'chat' ? (initialPathPanel.id === 'new' || !initialPathPanel.id ? { id: null, title: 'New Chat', _temp: true } : { id: initialPathPanel.id }) : null)
   const [chatRefreshToken, setChatRefreshToken] = useState(0)
+
+  const pathPanel = parseProjectPanelPath(currentPath, selectedProject)
+  const isSettingsPanelOpen = settingsOpen || pathPanel.panel === 'settings'
+  const isProjectSettingsPanelOpen = projectSettingsOpen || pathPanel.panel === 'project-settings'
+  const isReportsPanelOpen = reportsPanelOpen || pathPanel.panel === 'reports'
+  const isChatPanelOpen = chatPanelOpen || pathPanel.panel === 'chat'
+  const isIssuePanelOpen = issueModal.open || pathPanel.panel === 'issue'
+  const isPrPanelOpen = prModal.open || pathPanel.panel === 'pr'
+  const isAgentPanelOpen = agentModal.open || pathPanel.panel === 'agent'
+  const isBootstrapPanelOpen = bootstrapModal.open || pathPanel.panel === 'bootstrap'
+
+  const selectedProjectRef = useRef(null)
+  const previousProjectIdRef = useRef(null)
+  const issueRequestRef = useRef({ id: 0, controller: null, targetId: null })
+  const prRequestRef = useRef({ id: 0, controller: null, targetNumber: null })
+  useEffect(() => { selectedProjectRef.current = selectedProject }, [selectedProject])
+
+  const abortIssueRequest = useCallback(() => {
+    issueRequestRef.current.controller?.abort()
+    issueRequestRef.current.controller = null
+    issueRequestRef.current.targetId = null
+  }, [])
+
+  const abortPrRequest = useCallback(() => {
+    prRequestRef.current.controller?.abort()
+    prRequestRef.current.controller = null
+    prRequestRef.current.targetNumber = null
+  }, [])
+
+  const projectBasePath = getProjectBasePath(selectedProject)
+
+  const navigateProjectPath = useCallback((segments = []) => {
+    const next = buildProjectPath(selectedProject, segments)
+    if (!next) return
+    const livePath = typeof window !== 'undefined' ? window.location.pathname : currentPath
+    if (livePath !== next) {
+      setCurrentPath(next)
+      navigate(next, { replace: true })
+    }
+  }, [selectedProject, currentPath, navigate])
+
+  const shouldClearCurrentPanelPath = useCallback((panelName) => {
+    const livePath = typeof window !== 'undefined' ? window.location.pathname : currentPath
+    return parseProjectPanelPath(livePath, selectedProject).panel === panelName
+  }, [currentPath, selectedProject])
+
+  const clearPanelPathIfActive = useCallback((panelName) => {
+    if (shouldClearCurrentPanelPath(panelName)) navigateProjectPath()
+  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+
+  const setBootstrapModalWithUrl = useCallback((updater) => {
+    setBootstrapModal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (prev.open && !next.open && shouldClearCurrentPanelPath('bootstrap')) navigateProjectPath()
+      return next
+    })
+  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+
+  const setIssueModalWithUrl = useCallback((updater) => {
+    setIssueModal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (prev.open && !next.open) {
+        abortIssueRequest()
+        if (shouldClearCurrentPanelPath('issue')) navigateProjectPath()
+        return { ...next, requestedId: null, loading: false }
+      }
+      return next
+    })
+  }, [abortIssueRequest, navigateProjectPath, shouldClearCurrentPanelPath])
+
+  const setPrModalWithUrl = useCallback((updater) => {
+    setPrModal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (prev.open && !next.open) {
+        abortPrRequest()
+        if (shouldClearCurrentPanelPath('pr')) navigateProjectPath()
+        return { ...next, requestedNumber: null, loading: false, error: null }
+      }
+      return next
+    })
+  }, [abortPrRequest, navigateProjectPath, shouldClearCurrentPanelPath])
+
+  const setAgentModalWithUrl = useCallback((updater) => {
+    setAgentModal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (prev.open && !next.open && shouldClearCurrentPanelPath('agent')) navigateProjectPath()
+      return next
+    })
+  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+
+  const setAgentModalTab = useCallback((nextTab) => {
+    setAgentModal(prev => {
+      if (!prev.open || !prev.agent || prev.tab === nextTab) return prev
+      navigateProjectPath(['agent', prev.agent, nextTab === 'skill' ? null : nextTab])
+      return { ...prev, tab: nextTab }
+    })
+  }, [navigateProjectPath])
+
+  const setProjectSettingsOpenWithUrl = useCallback((value) => {
+    setProjectSettingsOpen(prev => {
+      const next = typeof value === 'function' ? value(prev) : value
+      if (prev && !next && shouldClearCurrentPanelPath('project-settings')) navigateProjectPath()
+      return next
+    })
+  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+
+  const closeSidebarPanels = useCallback(() => {
+    abortIssueRequest()
+    abortPrRequest()
+    setSettingsOpen(false)
+    setProjectSettingsOpen(false)
+    setBootstrapModal(prev => ({ ...prev, open: false }))
+    setReportsPanelOpen(false)
+    setChatPanelOpen(false)
+    setIssueModal(prev => ({ ...prev, open: false, loading: false, requestedId: null }))
+    setPrModal(prev => ({ ...prev, open: false, loading: false, error: null, requestedNumber: null }))
+    setAgentModal(prev => ({ ...prev, open: false }))
+  }, [abortIssueRequest, abortPrRequest])
+
+  const openSettingsPanel = useCallback(() => {
+    setSettingsOpen(true)
+    navigateProjectPath(['settings'])
+  }, [navigateProjectPath])
+
+  const closeSettingsPanel = useCallback(() => {
+    setSettingsOpen(false)
+    clearPanelPathIfActive('settings')
+  }, [clearPanelPathIfActive])
+
+  const openProjectSettingsPanel = useCallback(() => {
+    setProjectSettingsOpen(true)
+    navigateProjectPath(['project-settings'])
+  }, [navigateProjectPath])
+
+  const closeProjectSettingsPanel = useCallback(() => {
+    setProjectSettingsOpen(false)
+    clearPanelPathIfActive('project-settings')
+  }, [clearPanelPathIfActive])
+
+  const openReportsPanel = useCallback((reportId = null) => {
+    setFocusedReportId(reportId)
+    setReportsPanelOpen(true)
+    navigateProjectPath(['reports', reportId])
+  }, [navigateProjectPath])
+
+  const closeReportsPanel = useCallback(() => {
+    setReportsPanelOpen(false)
+    clearPanelPathIfActive('reports')
+  }, [clearPanelPathIfActive])
+
+  const openChatPanel = useCallback((session) => {
+    setChatSession(session)
+    setChatPanelOpen(true)
+    navigateProjectPath(['chat', session?.id ?? 'new'])
+  }, [navigateProjectPath])
+
+  const closeChatPanel = useCallback(() => {
+    setChatPanelOpen(false)
+    clearPanelPathIfActive('chat')
+  }, [clearPanelPathIfActive])
 
   // Project settings (token state now managed inside ProjectSettingsPanel)
 
@@ -130,8 +324,16 @@ export default function ProjectView({
     try { return JSON.parse(localStorage.getItem('tbc_project_notifs') || '{}') } catch { return {} }
   })
 
-  const selectedProjectRef = useRef(null)
-  useEffect(() => { selectedProjectRef.current = selectedProject }, [selectedProject])
+  useEffect(() => {
+    setCurrentPath(typeof window !== 'undefined' ? window.location.pathname : location.pathname)
+  }, [location.pathname])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onPopState = () => setCurrentPath(window.location.pathname)
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
 
@@ -215,16 +417,25 @@ export default function ProjectView({
   // Fetch on project change
   useEffect(() => {
     if (selectedProject) {
-      // Reset state for new project — close all side panels
-      closeAllPanels()
-      setChatPanelOpen(false)
-      setChatSession(null)
-      setIssueModal({ open: false, issue: null, comments: [], loading: false })
-      setReportsPanelOpen(false)
-      setAgentModal({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
-      setCreateIssueModal(prev => ({ ...prev, open: false }))
-      setProjectSettingsOpen(false)
-      setSettingsOpen(false)
+      const previousProjectId = previousProjectIdRef.current
+      const switchedProjects = previousProjectId && previousProjectId !== selectedProject.id
+      previousProjectIdRef.current = selectedProject.id
+
+      if (switchedProjects) {
+        abortIssueRequest()
+        abortPrRequest()
+        closeAllPanels()
+        setChatPanelOpen(false)
+        setChatSession(null)
+        setIssueModal({ open: false, issue: null, comments: [], loading: false, requestedId: null })
+        setReportsPanelOpen(false)
+        setAgentModal({ open: false, agent: null, data: null, loading: false, tab: 'skill' })
+        setCreateIssueModal(prev => ({ ...prev, open: false }))
+        setProjectSettingsOpen(false)
+        setSettingsOpen(false)
+        setPrModal({ open: false, pr: null, loading: false, error: null, requestedNumber: null })
+      }
+
       setLogs([])
       setAgents({ workers: [], managers: [] })
       setPrFilter('open')
@@ -233,7 +444,6 @@ export default function ProjectView({
       setPrs([])
       setIssues([])
       setIssueFilter('open')
-      setPrModal({ open: false, pr: null, loading: false, error: null })
 
       fetchProjectData(true)
       const savedAgent = localStorage.getItem('selectedAgent')
@@ -278,7 +488,7 @@ export default function ProjectView({
         evtSource.close()
       }
     }
-  }, [selectedProject?.id])
+  }, [selectedProject?.id, abortIssueRequest, abortPrRequest])
 
   useEffect(() => {
     if (!selectedProject) return
@@ -438,15 +648,16 @@ export default function ProjectView({
     fetchComments(1, null, false)
   }
 
-  const openAgentModal = async (agentName) => {
+  const openAgentModal = async (agentName, nextTab = 'skill') => {
     if (!selectedProject) return
-    setAgentModal({ open: true, agent: agentName, data: null, loading: true, tab: 'skill' })
+    navigateProjectPath(['agent', agentName, nextTab === 'skill' ? null : nextTab])
+    setAgentModal({ open: true, agent: agentName, data: null, loading: true, tab: nextTab })
     try {
       const res = await fetch(projectApi(`/agents/${agentName}`))
       const data = await res.json()
-      setAgentModal({ open: true, agent: agentName, data, loading: false, tab: 'skill' })
+      setAgentModal({ open: true, agent: agentName, data, loading: false, tab: nextTab })
     } catch {
-      setAgentModal({ open: true, agent: agentName, data: null, loading: false, tab: 'skill' })
+      setAgentModal({ open: true, agent: agentName, data: null, loading: false, tab: nextTab })
     }
   }
 
@@ -480,6 +691,7 @@ export default function ProjectView({
 
   const openBootstrapModal = async () => {
     if (!selectedProject) return
+    navigateProjectPath(['bootstrap'])
     setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
     try {
       const res = await authFetch(projectApi('/bootstrap'))
@@ -511,6 +723,7 @@ export default function ProjectView({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+      navigateProjectPath()
       await fetchGlobalStatus()
       await fetchProjectData()
       fetchComments(1, selectedAgent, false)
@@ -546,27 +759,81 @@ export default function ProjectView({
   }
 
   const openIssueModal = async (issueId) => {
-    if (!selectedProject) return
-    setIssueModal({ open: true, issue: null, comments: [], loading: true })
+    const currentProject = selectedProjectRef.current
+    if (!currentProject) return
+    const requestedId = String(issueId)
+    const expectedPath = buildProjectPath(currentProject, ['issue', requestedId])
+    abortIssueRequest()
+    const controller = new AbortController()
+    const requestId = issueRequestRef.current.id + 1
+    issueRequestRef.current = { id: requestId, controller, targetId: requestedId }
+    setIssueModal(prev => ({
+      ...prev,
+      open: true,
+      issue: null,
+      comments: [],
+      loading: true,
+      requestedId,
+    }))
+    navigateProjectPath(['issue', issueId])
     try {
-      const res = await fetch(projectApi(`/issues/${issueId}`))
+      const res = await fetch(`/api/projects/${currentProject.id}/issues/${requestedId}`, { signal: controller.signal })
       const data = await res.json()
-      setIssueModal({ open: true, issue: data.issue, comments: data.comments || [], loading: false })
-    } catch {
-      setIssueModal({ open: true, issue: null, comments: [], loading: false })
+      if (!res.ok) throw new Error(data.error || 'Failed to load issue')
+      if (issueRequestRef.current.id !== requestId) return
+      if (selectedProjectRef.current?.id !== currentProject.id) return
+      if (typeof window !== 'undefined' && window.location.pathname !== expectedPath) return
+      setIssueModal({
+        open: true,
+        issue: data.issue,
+        comments: data.comments || [],
+        loading: false,
+        requestedId,
+      })
+    } catch (err) {
+      if (err.name === 'AbortError') return
+      if (issueRequestRef.current.id !== requestId) return
+      if (selectedProjectRef.current?.id !== currentProject.id) return
+      if (typeof window !== 'undefined' && window.location.pathname !== expectedPath) return
+      setIssueModal({
+        open: true,
+        issue: null,
+        comments: [],
+        loading: false,
+        requestedId,
+      })
+    } finally {
+      if (issueRequestRef.current.id === requestId) issueRequestRef.current.controller = null
     }
   }
 
   const openPRModal = async (prId) => {
-    if (!selectedProject) return
-    setPrModal({ open: true, pr: null, loading: true, error: null })
+    const currentProject = selectedProjectRef.current
+    if (!currentProject) return
+    const requestedNumber = String(prId)
+    const expectedPath = buildProjectPath(currentProject, ['pr', requestedNumber])
+    abortPrRequest()
+    const controller = new AbortController()
+    const requestId = prRequestRef.current.id + 1
+    prRequestRef.current = { id: requestId, controller, targetNumber: requestedNumber }
+    setPrModal({ open: true, pr: null, loading: true, error: null, requestedNumber })
+    navigateProjectPath(['pr', prId])
     try {
-      const res = await fetch(projectApi(`/prs/${prId}`))
+      const res = await fetch(`/api/projects/${currentProject.id}/prs/${requestedNumber}`, { signal: controller.signal })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load PR')
-      setPrModal({ open: true, pr: data.pr, loading: false, error: null })
+      if (prRequestRef.current.id !== requestId) return
+      if (selectedProjectRef.current?.id !== currentProject.id) return
+      if (typeof window !== 'undefined' && window.location.pathname !== expectedPath) return
+      setPrModal({ open: true, pr: data.pr, loading: false, error: null, requestedNumber })
     } catch (err) {
-      setPrModal({ open: true, pr: null, loading: false, error: err.message })
+      if (err.name === 'AbortError') return
+      if (prRequestRef.current.id !== requestId) return
+      if (selectedProjectRef.current?.id !== currentProject.id) return
+      if (typeof window !== 'undefined' && window.location.pathname !== expectedPath) return
+      setPrModal({ open: true, pr: null, loading: false, error: err.message, requestedNumber })
+    } finally {
+      if (prRequestRef.current.id === requestId) prRequestRef.current.controller = null
     }
   }
 
@@ -603,6 +870,95 @@ export default function ProjectView({
       console.error('Failed to remove project:', err)
     }
   }
+
+  useEffect(() => {
+    if (!selectedProject || !projectBasePath) return
+
+    const { panel, id: panelId, tab: panelTab } = parseProjectPanelPath(currentPath, selectedProject)
+    if (!panel) {
+      closeSidebarPanels()
+      return
+    }
+
+    if (panel === 'settings') {
+      if (!settingsOpen) setSettingsOpen(true)
+      return
+    }
+
+    if (panel === 'project-settings') {
+      if (!projectSettingsOpen) setProjectSettingsOpen(true)
+      return
+    }
+
+    if (panel === 'bootstrap') {
+      if (!bootstrapModal.open) openBootstrapModal()
+      return
+    }
+
+    if (panel === 'reports') {
+      if (panelId && focusedReportId !== panelId) setFocusedReportId(panelId)
+      if (!reportsPanelOpen) setReportsPanelOpen(true)
+      return
+    }
+
+    if (panel === 'chat') {
+      const nextSessionId = panelId || 'new'
+      const nextSession = nextSessionId === 'new' ? { id: null, title: 'New Chat', _temp: true } : { id: nextSessionId }
+      if (!chatPanelOpen || String(chatSession?.id ?? 'new') !== String(nextSessionId)) {
+        setChatSession(nextSession)
+        setChatPanelOpen(true)
+      }
+      return
+    }
+
+    const activeIssueId = issueRequestRef.current.targetId ?? issueModal.requestedId
+    if (panel === 'issue' && panelId && (!issueModal.open || String(activeIssueId) !== String(panelId))) {
+      openIssueModal(panelId)
+      return
+    }
+
+    const activePrNumber = prRequestRef.current.targetNumber ?? prModal.requestedNumber
+    if (panel === 'pr' && panelId && (!prModal.open || String(activePrNumber) !== String(panelId))) {
+      openPRModal(panelId)
+      return
+    }
+
+    if (panel === 'agent' && panelId) {
+      const needsAgentData = agentModal.agent === panelId && !agentModal.loading && !agentModal.data
+      if (!agentModal.open || agentModal.agent !== panelId || needsAgentData) {
+        openAgentModal(panelId, panelTab || 'skill')
+        return
+      }
+      if ((panelTab || 'skill') !== agentModal.tab) {
+        setAgentModal(prev => ({ ...prev, tab: panelTab || 'skill' }))
+      }
+    }
+  }, [
+    selectedProject,
+    projectBasePath,
+    currentPath,
+    closeSidebarPanels,
+    settingsOpen,
+    projectSettingsOpen,
+    bootstrapModal.open,
+    reportsPanelOpen,
+    focusedReportId,
+    chatPanelOpen,
+    chatSession?.id,
+    issueModal.open,
+    issueModal.requestedId,
+    prModal.open,
+    prModal.requestedNumber,
+    agentModal.open,
+    agentModal.agent,
+    agentModal.tab,
+    openBootstrapModal,
+  ])
+
+  useEffect(() => () => {
+    abortIssueRequest()
+    abortPrRequest()
+  }, [abortIssueRequest, abortPrRequest])
 
   // Project notification settings helpers
   const getProjSetting = (section) => {
@@ -661,7 +1017,7 @@ export default function ProjectView({
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
               <button
-                onClick={() => setProjectSettingsOpen(true)}
+                onClick={openProjectSettingsPanel}
                 className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
                 title="Project Settings"
               >
@@ -807,8 +1163,8 @@ export default function ProjectView({
               {isWriteMode && <ChatCard
                 selectedProject={selectedProject}
                 refreshToken={chatRefreshToken}
-                onOpenChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
-                onNewChat={(session) => { setChatSession(session); setChatPanelOpen(true) }}
+                onOpenChat={openChatPanel}
+                onNewChat={openChatPanel}
               />}
 
               <AgentReportsCard
@@ -818,7 +1174,7 @@ export default function ProjectView({
                 liveAgentLog={liveAgentLog}
                 selectedProject={selectedProject}
                 setFocusedReportId={setFocusedReportId}
-                setReportsPanelOpen={setReportsPanelOpen}
+                setReportsPanelOpen={openReportsPanel}
               />
 
               <DashboardWidget icon={GitPullRequest} title={`Agent PRs (${prs.length})`}>
@@ -936,9 +1292,13 @@ export default function ProjectView({
         )}
       </div>
 
-      <AgentDetailPanel agentModal={agentModal} setAgentModal={setAgentModal} />
+      <AgentDetailPanel
+        agentModal={{ ...agentModal, open: isAgentPanelOpen }}
+        setAgentModal={setAgentModalWithUrl}
+        onSelectTab={setAgentModalTab}
+      />
       <AgentSettingsModal agentSettingsModal={agentSettingsModal} setAgentSettingsModal={setAgentSettingsModal} saveAgentSettings={saveAgentSettings} />
-      <BootstrapPanel bootstrapModal={bootstrapModal} setBootstrapModal={setBootstrapModal} executeBootstrap={executeBootstrap} />
+      <BootstrapPanel bootstrapModal={{ ...bootstrapModal, open: isBootstrapPanelOpen }} setBootstrapModal={setBootstrapModalWithUrl} executeBootstrap={executeBootstrap} />
       <BudgetInfoModal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)} />
       <IntervalInfoModal open={intervalInfoModal} onClose={() => setIntervalInfoModal(false)} />
       <TimeoutInfoModal open={timeoutInfoModal} onClose={() => setTimeoutInfoModal(false)} />
@@ -952,29 +1312,31 @@ export default function ProjectView({
       <ApiKeyHelpModal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)} />
       <CreateIssueModal createIssueModal={createIssueModal} setCreateIssueModal={setCreateIssueModal} createIssue={createIssue} agents={agents} modKey={modKey} />
       <IssueDetailPanel
-        issueModal={issueModal}
-        setIssueModal={setIssueModal}
+        issueModal={{ ...issueModal, open: isIssuePanelOpen }}
+        setIssueModal={setIssueModalWithUrl}
         isWriteMode={isWriteMode}
         authFetch={authFetch}
         projectApi={projectApi}
         submitIssueComment={submitIssueComment}
         modKey={modKey}
       />
-      <PRDetailPanel prModal={prModal} setPrModal={setPrModal} />
+      <PRDetailPanel prModal={{ ...prModal, open: isPrPanelOpen }} setPrModal={setPrModalWithUrl} />
       <ChatPanel
-        open={chatPanelOpen}
-        onClose={() => setChatPanelOpen(false)}
+        open={isChatPanelOpen}
+        onClose={closeChatPanel}
         selectedProject={selectedProject}
         chatSession={chatSession}
         onSessionCreated={(session) => {
           setChatRefreshToken(t => t + 1)
           setChatSession(session)
+          navigateProjectPath(['chat', session?.id ?? 'new'])
         }}
         modelTiers={config?.tiers || {}}
       />
       <ReportsPanel
-        open={reportsPanelOpen}
-        onClose={() => setReportsPanelOpen(false)}
+        open={isReportsPanelOpen}
+        onClose={closeReportsPanel}
+        onSelectReport={openReportsPanel}
         comments={comments}
         commentsLoading={commentsLoading}
         loadMoreComments={loadMoreComments}
@@ -993,16 +1355,16 @@ export default function ProjectView({
         handleLogin={handleLogin}
       />
       <SettingsPanel
-        settingsOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        settingsOpen={isSettingsPanelOpen}
+        onClose={closeSettingsPanel}
         theme={theme}
         setTheme={setTheme}
         setShowApiKeyHelp={setShowApiKeyHelp}
       />
       <ProjectSettingsPanel
         selectedProject={selectedProject}
-        projectSettingsOpen={projectSettingsOpen}
-        setProjectSettingsOpen={setProjectSettingsOpen}
+        projectSettingsOpen={isProjectSettingsPanelOpen}
+        setProjectSettingsOpen={setProjectSettingsOpenWithUrl}
         setProjSetting={setProjSetting}
         notifUseGlobal={notifUseGlobal}
         projNotifSettings={projNotifSettings}

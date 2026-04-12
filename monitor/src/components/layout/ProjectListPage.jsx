@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import StatusPill from '@/components/ui/status-pill'
 import { Bell, Unlock, Lock, Settings, Plus, Folder, BellOff } from 'lucide-react'
 import { PanelSlot } from '@/components/ui/panel'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Footer from '@/components/layout/Footer'
 import SleepCountdown from '@/components/layout/SleepCountdown'
 import SettingsPanel from '@/components/panels/SettingsPanel'
@@ -25,10 +26,48 @@ export default function ProjectListPage({
 }) {
   const { isWriteMode, handleLogout, setLoginModal, loginModal, loginInput, setLoginInput, handleLogin, authFetch } = useAuth()
   const { unreadCount } = useNotifications()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const [showArchived, setShowArchived] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showApiKeyHelp, setShowApiKeyHelp] = useState(false)
+  const pendingPanelPathRef = useRef(null)
+
+  const navigateListPath = useCallback((pathname) => {
+    const livePath = typeof window !== 'undefined' ? window.location.pathname : location.pathname
+    if (livePath !== pathname) navigate(pathname, { replace: true })
+  }, [location.pathname, navigate])
+
+  const clearListPathIfActive = useCallback((pathname) => {
+    const livePath = typeof window !== 'undefined' ? window.location.pathname : location.pathname
+    if (pendingPanelPathRef.current && pendingPanelPathRef.current !== pathname) return
+    if (livePath === pathname) navigate('/', { replace: true })
+  }, [location.pathname, navigate])
+
+  const openSettingsPanel = useCallback(() => {
+    pendingPanelPathRef.current = '/settings'
+    setSettingsOpen(true)
+    setNotifCenter(false)
+    navigateListPath('/settings')
+  }, [setNotifCenter, navigateListPath])
+
+  const closeSettingsPanel = useCallback(() => {
+    setSettingsOpen(false)
+    clearListPathIfActive('/settings')
+  }, [clearListPathIfActive])
+
+  const openNotificationsPanel = useCallback(() => {
+    pendingPanelPathRef.current = '/notifications'
+    setNotifCenter(true)
+    setSettingsOpen(false)
+    navigateListPath('/notifications')
+  }, [setNotifCenter, navigateListPath])
+
+  const closeNotificationsPanel = useCallback(() => {
+    setNotifCenter(false)
+    clearListPathIfActive('/notifications')
+  }, [clearListPathIfActive])
 
   // Add project modal state
   const [addProjectModal, setAddProjectModal] = useState({
@@ -168,6 +207,26 @@ export default function ProjectListPage({
     }
   }
 
+  useEffect(() => {
+    if (location.pathname === '/settings') {
+      pendingPanelPathRef.current = '/settings'
+      setSettingsOpen(true)
+      setNotifCenter(false)
+      return
+    }
+
+    if (location.pathname === '/notifications') {
+      pendingPanelPathRef.current = '/notifications'
+      setNotifCenter(true)
+      setSettingsOpen(false)
+      return
+    }
+
+    pendingPanelPathRef.current = null
+    setSettingsOpen(false)
+    setNotifCenter(false)
+  }, [location.pathname, setNotifCenter])
+
   return (
     <div className="flex min-h-screen">
     <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6">
@@ -180,7 +239,7 @@ export default function ProjectListPage({
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setNotifCenter(true)}
+                onClick={openNotificationsPanel}
                 className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
                 title="Notification Center"
               >
@@ -199,7 +258,7 @@ export default function ProjectListPage({
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
               <button
-                onClick={() => setSettingsOpen(true)}
+                onClick={openSettingsPanel}
                 className="px-2 py-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
                 title="Settings"
               >
@@ -319,7 +378,7 @@ export default function ProjectListPage({
 
       <SettingsPanel
         settingsOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={closeSettingsPanel}
         theme={theme}
         setTheme={setTheme}
         setShowApiKeyHelp={setShowApiKeyHelp}
@@ -327,7 +386,7 @@ export default function ProjectListPage({
 
       <NotificationPanel
         open={notifCenter}
-        onClose={() => setNotifCenter(false)}
+        onClose={closeNotificationsPanel}
       />
 
       <ApiKeyHelpModal open={showApiKeyHelp} onClose={() => setShowApiKeyHelp(false)} />

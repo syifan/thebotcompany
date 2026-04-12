@@ -3,7 +3,8 @@ import { createPortal } from "react-dom"
 
 // Global panel state
 let _activePanelId = null
-let _renderedId = null
+let _activePanelKey = null
+let _renderedKey = null
 let _animate = false
 const _closers = {}
 const _listeners = new Set()
@@ -12,33 +13,29 @@ function _notify() {
   _listeners.forEach(fn => fn({}))
 }
 
-function _register(id, onClose) {
-  if (_activePanelId && _activePanelId !== id && _closers[_activePanelId]) {
-    const prevClose = _closers[_activePanelId]
+function _register(key, id, onClose) {
+  if (_activePanelKey && _activePanelKey !== key && _closers[_activePanelKey]) {
+    const prevClose = _closers[_activePanelKey]
     setTimeout(() => prevClose(), 0)
   }
-  _closers[id] = onClose
+  _closers[key] = onClose
+  _activePanelKey = key
   _activePanelId = id
-  _renderedId = id
-  _animate = false
+  _renderedKey = key
+  _animate = true
   _notify()
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      _animate = true
-      _notify()
-    })
-  })
 }
 
-function _unregister(id) {
-  delete _closers[id]
-  if (_activePanelId === id) {
+function _unregister(key) {
+  delete _closers[key]
+  if (_activePanelKey === key) {
+    _activePanelKey = null
     _activePanelId = null
     _animate = false
     _notify()
     setTimeout(() => {
-      if (!_activePanelId) {
-        _renderedId = null
+      if (!_activePanelKey) {
+        _renderedKey = null
         _notify()
       }
     }, 300)
@@ -47,6 +44,7 @@ function _unregister(id) {
 
 // Ref to the PanelSlot DOM node
 let _slotRef = null
+let _slotKey = null
 
 function usePanelOpen() {
   const [, forceUpdate] = React.useState({})
@@ -63,7 +61,7 @@ function usePanelState() {
     _listeners.add(forceUpdate)
     return () => _listeners.delete(forceUpdate)
   }, [])
-  return { activePanelId: _activePanelId, renderedId: _renderedId, animate: _animate }
+  return { activePanelId: _activePanelId, activePanelKey: _activePanelKey, renderedKey: _renderedKey, animate: _animate }
 }
 
 /**
@@ -72,32 +70,34 @@ function usePanelState() {
 function Panel({ open, onClose, children, id: propId }) {
   const idRef = React.useRef(propId || Math.random().toString(36).slice(2))
   const id = idRef.current
+  const keyRef = React.useRef(Symbol(id))
+  const key = keyRef.current
   const onCloseRef = React.useRef(onClose)
   onCloseRef.current = onClose
 
-  const { renderedId, animate, activePanelId } = usePanelState()
+  const { renderedKey, animate, activePanelKey } = usePanelState()
 
   React.useEffect(() => {
     if (open) {
-      _register(id, () => onCloseRef.current?.())
+      _register(key, id, () => onCloseRef.current?.())
       // Lock body scroll on mobile when panel is open (full-screen overlay)
       const isMobile = window.innerWidth < 768
       if (isMobile) document.body.style.overflow = 'hidden'
     } else {
-      _unregister(id)
-      if (!_activePanelId) document.body.style.overflow = ''
+      _unregister(key)
+      if (!_activePanelKey) document.body.style.overflow = ''
     }
-  }, [open, id])
+  }, [open, id, key])
 
   React.useEffect(() => {
     return () => {
-      _unregister(id)
-      if (!_activePanelId) document.body.style.overflow = ''
+      _unregister(key)
+      if (!_activePanelKey) document.body.style.overflow = ''
     }
-  }, [id])
+  }, [key])
 
-  const isActive = renderedId === id
-  const shouldAnimate = animate && activePanelId === id
+  const isActive = renderedKey === key
+  const shouldAnimate = animate && activePanelKey === key
 
   if (!isActive) return null
 
@@ -142,19 +142,29 @@ function Panel({ open, onClose, children, id: propId }) {
  */
 function PanelSlot() {
   const ref = React.useRef(null)
-  const { renderedId, animate, activePanelId } = usePanelState()
-  const shouldAnimate = animate && activePanelId === renderedId
+  const keyRef = React.useRef(Symbol('panel-slot'))
+  const key = keyRef.current
+  const { renderedKey, animate, activePanelKey } = usePanelState()
+  const shouldAnimate = animate && activePanelKey === renderedKey
 
   React.useEffect(() => {
+    _slotKey = key
     _slotRef = ref.current
-    return () => { _slotRef = null }
-  }, [])
+    _notify()
+    return () => {
+      if (_slotKey === key) {
+        _slotRef = null
+        _slotKey = null
+        _notify()
+      }
+    }
+  }, [key])
 
   return (
     <div
       ref={ref}
       className={`hidden md:block shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden h-screen sticky top-0 transition-[width] duration-300 ease-in-out ${
-        renderedId && shouldAnimate ? 'w-[min(35vw,560px)] min-w-[380px]' : 'w-0'
+        renderedKey && shouldAnimate ? 'w-[min(35vw,560px)] min-w-[380px]' : 'w-0'
       }`}
     />
   )
@@ -184,11 +194,12 @@ function PanelProvider({ children }) {
 }
 
 function closeAllPanels() {
-  if (_activePanelId && _closers[_activePanelId]) {
-    _closers[_activePanelId]()
+  if (_activePanelKey && _closers[_activePanelKey]) {
+    _closers[_activePanelKey]()
   }
+  _activePanelKey = null
   _activePanelId = null
-  _renderedId = null
+  _renderedKey = null
   _animate = false
   _notify()
 }

@@ -64,17 +64,22 @@ function App() {
     return `/${project.id}`
   }
 
+  const isRootSidebarPath = (pathname) => pathname === '/settings' || pathname === '/notifications'
+
+  const findProjectForPath = (projectList, pathname) => {
+    const normalized = pathname.replace(/\/+$/, '') || '/'
+    return [...projectList]
+      .sort((a, b) => projectToPath(b).length - projectToPath(a).length)
+      .find(project => {
+        const basePath = projectToPath(project)
+        return normalized === basePath || normalized.startsWith(`${basePath}/`)
+      }) || null
+  }
+
   const selectProjectFromPath = (projectList) => {
     const path = location.pathname
-    if (path === '/' || !path) return
-    const match = path.match(/^\/github\.com\/([^/]+\/[^/]+)/)
-    if (match) {
-      const repo = match[1]
-      const project = projectList.find(p => p.repo === repo || p.id === repo)
-      if (project) { setSelectedProject(project); return }
-    }
-    const id = path.slice(1)
-    const project = projectList.find(p => p.id === id)
+    if (path === '/' || !path || isRootSidebarPath(path)) return
+    const project = findProjectForPath(projectList, path)
     if (project) setSelectedProject(project)
   }
 
@@ -92,7 +97,7 @@ function App() {
       setGlobalUptime(data.uptime)
       setProjects(data.projects)
       
-      if (location.pathname !== '/') {
+      if (location.pathname !== '/' && !isRootSidebarPath(location.pathname)) {
         setSelectedProject(prev => {
           if (!prev) return prev
           const updated = data.projects.find(p => p.id === prev.id)
@@ -163,12 +168,12 @@ function App() {
 
   // Handle browser back/forward
   useEffect(() => {
-    if (location.pathname === '/') {
+    if (location.pathname === '/' || isRootSidebarPath(location.pathname)) {
       setSelectedProject(null)
     } else if (!selectedProject) {
       selectProjectFromPath(projects)
     }
-  }, [location.pathname])
+  }, [location.pathname, selectedProject, projects])
 
   const selectProject = (project) => {
     setSelectedProject(project)
@@ -181,7 +186,7 @@ function App() {
   }
 
   // Loading state: URL has a project path but we haven't resolved it yet
-  const hasProjectInUrl = location.pathname !== '/' && location.pathname.length > 1
+  const hasProjectInUrl = location.pathname !== '/' && location.pathname.length > 1 && !isRootSidebarPath(location.pathname)
   if (!selectedProject && hasProjectInUrl && projects.length === 0) {
     return (
       <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
@@ -201,7 +206,11 @@ function App() {
           theme={theme}
           setTheme={setTheme}
         />
-      } />
+      }>
+        <Route index element={null} />
+        <Route path="settings" element={null} />
+        <Route path="notifications" element={null} />
+      </Route>
       <Route path="*" element={
         <ProjectView
           selectedProject={selectedProject}
