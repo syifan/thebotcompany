@@ -37,9 +37,11 @@ test.describe('Bootstrap panel', () => {
 
     await expect(page.getByRole('heading', { name: 'Bootstrap Workspace' })).toBeVisible({ timeout: 5000 })
 
-    // Click Cancel button inside the bootstrap panel
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    // Wait for preview to load and Cancel button to appear, then click it
+    const cancelBtn = page.getByRole('button', { name: 'Cancel' })
+    await expect(cancelBtn).toBeVisible({ timeout: 5000 })
+    await cancelBtn.click()
 
-    await expect(page.getByRole('heading', { name: 'Bootstrap Workspace' })).not.toBeVisible({ timeout: 3000 })
+    await expect(page.getByRole('heading', { name: 'Bootstrap Workspace' })).not.toBeVisible({ timeout: 5000 })
   })
 })

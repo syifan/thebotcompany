@@ -32,7 +32,7 @@ export default function IssuesSidebar({
         />
       }
     >
-        <div className="space-y-2 flex-1 overflow-y-auto">
+        <div className="space-y-2">
           {filteredIssues.map((issue) => (
             <div key={issue.id}
               onClick={() => openIssueModal(issue.id)}

@@ -891,7 +891,10 @@ export default function ProjectView({
     }
 
     if (panel === 'bootstrap') {
-      if (!bootstrapModal.open) openBootstrapModal()
+      // Guard with live URL check: navigateProjectPath() inside setBootstrapModalWithUrl
+      // updates window.location synchronously but React Router state (currentPath) lags
+      // one render. Without this guard, the effect re-opens the modal on that stale render.
+      if (!bootstrapModal.open && shouldClearCurrentPanelPath('bootstrap')) openBootstrapModal()
       return
     }
 
@@ -953,6 +956,7 @@ export default function ProjectView({
     agentModal.agent,
     agentModal.tab,
     openBootstrapModal,
+    shouldClearCurrentPanelPath,
   ])
 
   useEffect(() => () => {
@@ -983,7 +987,7 @@ export default function ProjectView({
 
   return (
     <div className="flex h-screen overflow-hidden">
-    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6 max-w-screen-2xl mx-auto overflow-y-auto">
+    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6 max-w-screen-2xl mx-auto overflow-y-auto overflow-x-hidden">
       <div>
         {/* Header */}
         <div className="mb-6 space-y-3">
@@ -1130,7 +1134,7 @@ export default function ProjectView({
             )}
 
             {/* Row 1: State, Cost & Budget, Config */}
-            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(22.5em, 1fr))" }}>
               <OrchestratorStateCard
                 selectedProject={selectedProject}
                 globalUptime={globalUptime}

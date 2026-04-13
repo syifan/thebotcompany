@@ -204,11 +204,12 @@ export default function AgentReportsCard({
       icon={MessageSquare}
       title="Agent Reports"
       headerRight={<span className="text-sm font-normal text-neutral-500 dark:text-neutral-400">{comments.length} loaded</span>}
+      contentOnScroll={(e) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.target
+        if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
+      }}
     >
-        <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto overflow-x-hidden h-full" onScroll={(e) => {
-          const { scrollTop, scrollHeight, clientHeight } = e.target
-          if (scrollHeight - scrollTop - clientHeight < 100) loadMoreComments()
-        }}>
+        <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
           {liveAgentLog && (
             <>
               <div

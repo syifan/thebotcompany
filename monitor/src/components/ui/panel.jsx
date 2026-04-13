@@ -146,6 +146,22 @@ function PanelSlot() {
   const key = keyRef.current
   const { renderedKey, animate, activePanelKey } = usePanelState()
   const shouldAnimate = animate && activePanelKey === renderedKey
+  const [panelWidth, setPanelWidth] = React.useState(() => {
+    if (typeof window === 'undefined') return 560
+    const saved = Number(window.localStorage.getItem('tbc.panelWidth'))
+    return Number.isFinite(saved) && saved > 0 ? saved : 560
+  })
+  const [viewportWidth, setViewportWidth] = React.useState(() => typeof window === 'undefined' ? 1440 : window.innerWidth)
+  const [isDragging, setIsDragging] = React.useState(false)
+
+  const getClampedWidth = React.useCallback((width) => {
+    if (typeof window === 'undefined') return Math.max(380, Math.min(width, 560))
+    const maxWidth = Math.min(Math.floor(window.innerWidth * 0.8), 960)
+    return Math.max(380, Math.min(width, maxWidth))
+  }, [])
+
+  const minInlineMainWidth = 42 * 16
+  const shouldOverlay = renderedKey && viewportWidth < panelWidth + minInlineMainWidth
 
   React.useEffect(() => {
     _slotKey = key
@@ -160,13 +176,71 @@ function PanelSlot() {
     }
   }, [key])
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('tbc.panelWidth', String(panelWidth))
+  }, [panelWidth])
+
+  React.useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (event) => {
+      const nextWidth = getClampedWidth(window.innerWidth - event.clientX)
+      setPanelWidth(nextWidth)
+    }
+
+    const stopDragging = () => setIsDragging(false)
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', stopDragging)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', stopDragging)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [getClampedWidth, isDragging])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth)
+      setPanelWidth(current => getClampedWidth(current))
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [getClampedWidth])
+
+  const isOpen = renderedKey && shouldAnimate
+
   return (
-    <div
-      ref={ref}
-      className={`hidden md:block shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden h-screen sticky top-0 transition-[width] duration-300 ease-in-out ${
-        renderedKey && shouldAnimate ? 'w-[min(35vw,560px)] min-w-[380px]' : 'w-0'
-      }`}
-    />
+    <>
+      {shouldOverlay && isOpen && (
+        <div className="hidden md:block fixed inset-0 z-40 bg-black/10" onClick={closeAllPanels} />
+      )}
+      <div
+        className={`hidden md:block border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden transition-[width] duration-300 ease-in-out ${
+          isDragging ? 'transition-none' : ''
+        } ${shouldOverlay ? 'fixed right-0 top-0 z-50 h-screen shadow-2xl' : 'relative shrink-0 h-screen sticky top-0'}`}
+        style={{ width: isOpen ? `${panelWidth}px` : '0px' }}
+      >
+        {renderedKey && (
+          <button
+            type="button"
+            aria-label="Resize side panel"
+            onMouseDown={(event) => {
+              event.preventDefault()
+              setIsDragging(true)
+            }}
+            className="absolute left-0 top-0 bottom-0 w-2 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-blue-500/10 active:bg-blue-500/20"
+          />
+        )}
+        <div ref={ref} className="w-full h-full" />
+      </div>
+    </>
   )
 }
 
