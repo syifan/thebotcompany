@@ -15,8 +15,6 @@ Valid format — emit this literal structure inside the comment tags:
 [
   {
     "agent": "iris",
-    "issue": 7,
-    "title": "Short task title",
     "task": "Exact worker instructions here",
     "visibility": "focused"
   },
@@ -37,7 +35,6 @@ Rules:
 - Each step must be exactly one of:
   - **Agent step**: must include both `agent` (string) and `task` (string). Missing `task` causes the entire schedule to be rejected.
   - **Delay step**: must have **only** the `delay` key (a number). Extra keys on a delay step cause rejection.
-- `issue` and `title` are optional on agent steps.
 - `visibility` is optional on agent steps. Values: `"full"` (default), `"focused"` (cannot read issues, can create/comment), `"blind"` (no issue tracker access, no agent notes).
 - Each agent step schedules exactly one agent.
 
