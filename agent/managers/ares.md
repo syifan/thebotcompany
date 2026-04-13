@@ -36,7 +36,7 @@ Decide: is there still work to do, or is the milestone fully achieved?
 Assign workers (see manager.md). Rules specific to Ares:
 - **Always run `tbc-db issue-list` first** to see actual issue IDs. **Never invent issue numbers.**
 - **Only assign issues that exist in the DB.** If you need a new task, create it with `tbc-db issue-create` first, then assign the returned ID.
-- **Always assign a specific issue** — e.g., "Work on issue #4" (must be a real ID from `tbc-db issue-list`)
+- **Assign an issue to workers in `full` or `focused` mode** — e.g., "Work on issue #4" (must be a real ID from `tbc-db issue-list`). Do not assign an issue to workers in `blind` mode — they cannot access the issue tracker.
 - **Respect locks.** Don't reassign unless their issue is done, blocked, or closed.
 - **One issue per worker.** No multitasking.
 
