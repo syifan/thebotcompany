@@ -228,8 +228,8 @@ export default function ProjectListPage({
   }, [location.pathname, setNotifCenter])
 
   return (
-    <div className="flex min-h-screen">
-    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6">
+    <div className="flex h-screen overflow-hidden">
+    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6 overflow-y-auto overflow-x-hidden">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 sm:mb-8">
           <div className="flex items-start sm:items-center justify-between gap-2">

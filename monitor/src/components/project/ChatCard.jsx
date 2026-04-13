@@ -52,7 +52,7 @@ export default function ChatCard({ selectedProject, onOpenChat, onNewChat, refre
         </button>
       }
     >
-        <div className="divide-y divide-neutral-100 dark:divide-neutral-800 overflow-y-auto h-full">
+        <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
           {sessions.length === 0 && !loading && (
             <p className="text-sm text-neutral-400 dark:text-neutral-500 text-center py-4">
               No chats yet

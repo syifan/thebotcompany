@@ -46,9 +46,22 @@ export default function HumanInterventionCard({
           ]}
         />
       }
-      contentClassName="flex flex-col"
+      footer={isWriteMode && (
+        <>
+          <Separator className="mx-6 mb-2 shrink-0" />
+          <div className="px-6 pb-6 shrink-0">
+            <Button
+              onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}
+              size="sm"
+              className="w-full dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100"
+            >
+              New Intervention
+            </Button>
+          </div>
+        </>
+      )}
     >
-        <div className="flex-1 overflow-y-auto space-y-3">
+        <div className="space-y-3">
           {/* Needs your attention — agents asking for help */}
           {toHuman.length > 0 && (
             <div>
@@ -82,18 +95,6 @@ export default function HumanInterventionCard({
           )}
         </div>
 
-        {isWriteMode && (
-          <>
-            <Separator className="my-2 shrink-0" />
-            <Button
-              onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}
-              size="sm"
-              className="w-full dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-100"
-            >
-              New Intervention
-            </Button>
-          </>
-        )}
     </DashboardWidget>
   )
 }
