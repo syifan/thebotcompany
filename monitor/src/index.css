@@ -96,7 +96,17 @@ body {
   color: #f5f5f5;
 }
 
-/* ---- Auto-hide scrollbars (Mac-style: hidden until hover) ---- */
+/* ---- Overlay scrollbars: float over content, don't consume layout space ---- */
+
+/* Use overlay instead of auto so scrollbars don't shrink content area.
+   `overflow: overlay` is deprecated but still works in Chrome/Safari/Edge. */
+@supports (overflow: overlay) {
+  .overflow-y-auto { overflow-y: overlay !important; }
+  .overflow-x-auto { overflow-x: overlay !important; }
+  .overflow-auto   { overflow:   overlay !important; }
+}
+
+/* Auto-hide scrollbar thumbs: transparent until hover (all browsers) */
 
 /* WebKit / Blink (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
