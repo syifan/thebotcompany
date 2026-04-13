@@ -11,6 +11,18 @@ import { useToast } from '@/contexts/ToastContext'
 // Add Credential Wizard
 // ---------------------------------------------------------------------------
 
+function formatCooldown(cooldownMs) {
+  const ms = Math.max(0, Number(cooldownMs) || 0)
+  if (!ms) return null
+  const totalSeconds = Math.ceil(ms / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m left`
+  if (minutes > 0) return `${minutes}m ${seconds}s left`
+  return `${seconds}s left`
+}
+
 function CustomCredentialFields({
   token,
   setToken,
@@ -651,6 +663,7 @@ export default function SettingsPanel({
   const { showToast } = useToast()
 
   const [keys, setKeys] = useState([])
+  const [, setNowTick] = useState(0)
   const [allowCustomProvider, setAllowCustomProvider] = useState(true)
   const [showWizard, setShowWizard] = useState(false)
   const [editingCustomKey, setEditingCustomKey] = useState(null)
@@ -665,6 +678,13 @@ export default function SettingsPanel({
   }
 
   useEffect(() => { fetchKeys() }, [])
+
+  useEffect(() => {
+    const hasCooldown = keys.some(key => (key.cooldownMs || 0) > 0)
+    if (!hasCooldown) return
+    const id = window.setInterval(() => setNowTick(tick => tick + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [keys])
 
   const handleRemoveKey = async (id) => {
     try {
@@ -903,7 +923,7 @@ export default function SettingsPanel({
                     </span>
                     <code className="text-xs text-neutral-400 dark:text-neutral-500 truncate">{key.preview}</code>
                     {key.rateLimited && (
-                      <span className="text-xs text-amber-500">rate limited</span>
+                      <span className="text-xs text-amber-500">rate limited{key.cooldownMs ? `, ${formatCooldown(key.cooldownMs)}` : ''}</span>
                     )}
                   </div>
                   {key.provider === 'custom' && key.customConfig && (

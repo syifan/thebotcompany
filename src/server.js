@@ -20,7 +20,7 @@ import { buildCustomTierMap, resolveProviderRuntime } from './providers/custom-c
 import { startOAuthLogin, submitManualCode, checkOAuthStatus, getAccessToken as getOAuthAccessToken, clearCredentials as clearOAuthCredentials, listOAuthProviders, loadCredentials as loadOAuthCredentials } from './oauth.js';
 import {
   loadKeyPool, addKey, addOAuthKey, removeKey, updateKey, reorderKeys,
-  getKeyPoolSafe, resolveKeyForProject, markRateLimited, migrateFromEnv,
+  getKeyPoolSafe, resolveKeyForProject, markRateLimited, markKeySucceeded, migrateFromEnv,
   detectTokenProvider as detectTokenProviderFromPool,
 } from './key-pool.js';
 import webpush from 'web-push';
@@ -2331,6 +2331,10 @@ class ProjectRunner {
         this.currentAgentUsage = usage;
       },
     });
+
+    if (result.success && resolvedKeyId) {
+      markKeySucceeded(resolvedKeyId);
+    }
 
     return this._postProcessAgentRun(agent, config, {
       resultText: result.resultText,

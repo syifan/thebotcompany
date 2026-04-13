@@ -20,6 +20,7 @@ const {
   getKeyPoolSafe,
   resolveKeyForProject,
   markRateLimited,
+  markKeySucceeded,
   isRateLimited,
   getRateLimitCooldown,
   detectTokenProvider,
@@ -31,6 +32,7 @@ describe('Key Pool', () => {
   beforeEach(() => {
     // Clean pool file before each test
     try { fs.unlinkSync(poolPath); } catch {}
+    loadKeyPool();
   });
 
   afterEach(() => {
@@ -40,7 +42,7 @@ describe('Key Pool', () => {
   describe('loadKeyPool / saveKeyPool', () => {
     it('returns empty pool when file does not exist', () => {
       const pool = loadKeyPool();
-      assert.deepStrictEqual(pool, { keys: [] });
+      assert.deepStrictEqual(pool, { keys: [], rateLimits: {} });
     });
 
     it('round-trips a pool', () => {
@@ -148,11 +150,62 @@ describe('Key Pool', () => {
     });
 
     it('expires rate limits', () => {
-      markRateLimited('key-2', 1); // 1ms cooldown
-      // wait a tick
-      const start = Date.now();
-      while (Date.now() - start < 5) {} // busy wait 5ms
-      assert.strictEqual(isRateLimited('key-2'), false);
+      const originalNow = Date.now;
+      let now = 1_000_000;
+      Date.now = () => now;
+      try {
+        markRateLimited('key-2', 1_000);
+        assert.strictEqual(isRateLimited('key-2'), true);
+        now += 1_001;
+        assert.strictEqual(isRateLimited('key-2'), false);
+      } finally {
+        Date.now = originalNow;
+      }
+    });
+
+    it('uses Fibonacci backoff capped at one day when retry time is unknown', () => {
+      markRateLimited('key-fib', null);
+      const first = getRateLimitCooldown('key-fib');
+      markRateLimited('key-fib', null);
+      const second = getRateLimitCooldown('key-fib');
+      markRateLimited('key-fib', null);
+      const third = getRateLimitCooldown('key-fib');
+
+      assert.ok(first > 295_000 && first <= 301_000);
+      assert.ok(second > 475_000 && second <= 481_000);
+      assert.ok(third > 775_000 && third <= 781_000);
+
+      for (let i = 0; i < 20; i++) markRateLimited('key-fib', null);
+      const capped = getRateLimitCooldown('key-fib');
+      assert.ok(capped > 23 * 60 * 60_000);
+      assert.ok(capped <= 24 * 60 * 60_000);
+    });
+
+    it('never shortens an existing cooldown and resets after success', () => {
+      markRateLimited('key-sticky', 10 * 60_000);
+      const original = getRateLimitCooldown('key-sticky');
+      markRateLimited('key-sticky', 60_000);
+      const afterShorterRetry = getRateLimitCooldown('key-sticky');
+
+      assert.ok(afterShorterRetry >= original - 1_000);
+      assert.strictEqual(isRateLimited('key-sticky'), true);
+
+      markKeySucceeded('key-sticky');
+      assert.strictEqual(isRateLimited('key-sticky'), false);
+      assert.strictEqual(getRateLimitCooldown('key-sticky'), 0);
+    });
+
+    it('persists retry state in key-pool.json', () => {
+      markRateLimited('key-persist', null);
+      const saved = JSON.parse(fs.readFileSync(poolPath, 'utf-8'));
+      const persisted = saved.rateLimits['key-persist'];
+      assert.ok(persisted);
+      assert.ok(persisted.retryAt > Date.now());
+      assert.strictEqual(persisted.unknownCount, 1);
+
+      markKeySucceeded('key-persist');
+      const cleared = JSON.parse(fs.readFileSync(poolPath, 'utf-8'));
+      assert.strictEqual(cleared.rateLimits['key-persist'], undefined);
     });
   });
 
