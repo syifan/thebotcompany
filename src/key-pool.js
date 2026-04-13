@@ -196,72 +196,54 @@ export function getKeyPoolSafe() {
  * Resolve the API key to use for a project.
  *
  * @param {object} projectConfig - Project config from config.yaml
- * @param {string|null} providerHint - Detected provider from model/env
+ * @param {string|null} providerHint - Retained for compatibility; pool selection follows global key order
  * @param {function|null} getOAuthToken - Async fn to get OAuth access token: (authFile) => token
  * @returns {Promise<{token: string, provider: string, keyId: string}|null>}
  */
-export async function resolveKeyForProject(projectConfig, providerHint, getOAuthToken) {
+export async function resolveKeyForProject(projectConfig, _providerHint, getOAuthToken) {
   const pool = loadKeyPool();
   const sorted = pool.keys
-    .filter(k => k.enabled)
+    .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const keySelection = projectConfig?.keySelection;
+  const pinnedKeyId = keySelection?.keyId || null;
 
   // If project references a specific key from the pool, try it first
-  if (keySelection?.keyId) {
-    const selected = sorted.find(k => k.id === keySelection.keyId);
-    if (selected && !isRateLimited(selected.id)) {
-      const token = await resolveToken(selected, getOAuthToken);
-      if (token) {
-        return {
-          token,
-          provider: selected.provider,
-          keyId: selected.id,
-          type: selected.type || 'api_key',
-          customConfig: selected.provider === 'custom' ? selected.customConfig : undefined,
-        };
-      }
+  if (pinnedKeyId) {
+    const selected = sorted.find(k => k.id === pinnedKeyId);
+    if (selected && selected.enabled && !isRateLimited(selected.id)) {
+      const resolved = await resolveKeyEntry(selected, getOAuthToken);
+      if (resolved) return resolved;
     }
     // If fallback is disabled, return null (project waits)
     if (keySelection.fallback === false) return null;
   }
 
-  // Use global pool order — prefer keys matching provider hint, then any available
-  const candidates = sorted.filter(k => !isRateLimited(k.id) && !(keySelection?.keyId && k.id === keySelection.keyId));
-
-  // First pass: prefer keys matching the provider hint
-  if (providerHint) {
-    for (const key of candidates) {
-      if (key.provider !== providerHint) continue;
-      const token = await resolveToken(key, getOAuthToken);
-      if (token) {
-        return {
-          token,
-          provider: key.provider,
-          keyId: key.id,
-          type: key.type || 'api_key',
-          customConfig: key.provider === 'custom' ? key.customConfig : undefined,
-        };
-      }
-    }
-  }
-
-  // Second pass: any available key (cross-provider fallback)
-  for (const key of candidates) {
-    const token = await resolveToken(key, getOAuthToken);
-    if (token) {
-      return {
-        token,
-        provider: key.provider,
-        keyId: key.id,
-        type: key.type || 'api_key',
-        customConfig: key.provider === 'custom' ? key.customConfig : undefined,
-      };
-    }
+  // Use global pool order for both initial selection and retries.
+  // Disabled and cooled-down keys are skipped; retries simply re-enter the pool
+  // from the top so the next available key wins regardless of provider.
+  for (const key of sorted) {
+    if (!key.enabled) continue;
+    if (isRateLimited(key.id)) continue;
+    if (pinnedKeyId && key.id === pinnedKeyId) continue;
+    const resolved = await resolveKeyEntry(key, getOAuthToken);
+    if (resolved) return resolved;
   }
 
   return null;
+}
+
+async function resolveKeyEntry(key, getOAuthToken) {
+  const token = await resolveToken(key, getOAuthToken);
+  if (!token) return null;
+  return {
+    token,
+    provider: key.provider,
+    keyId: key.id,
+    type: key.type || 'api_key',
+    customConfig: key.provider === 'custom' ? key.customConfig : undefined,
+  };
 }
 
 async function resolveToken(key, getOAuthToken) {

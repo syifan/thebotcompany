@@ -965,50 +965,23 @@ export async function runAgentWithAPI(opts) {
           }
           const status = err.status || err.code || 0;
           const isRetryable = status === 429 || status === 503 || status === 401 || /rate.limit|usage.limit|overloaded|unavailable|quota|authentication_error|invalid.*api.key/i.test(err.message);
-          if (isRetryable && attempt < MAX_RETRIES) {
-            // Parse cooldown from error message (supports "~162 min", "30s", "2 hours", etc.)
+          if (isRetryable) {
+            // Mark the current key unavailable, then fail this agent call.
+            // The outer orchestrator retry loop will start fresh from the top
+            // of the globally ordered key pool and skip cooled-down keys.
             const cooldownMs = parseRetryCooldown(err.message);
 
-            // Mark key as rate-limited with actual cooldown duration
             if (onRateLimited && keyId) {
               onRateLimited(keyId, cooldownMs);
               log(`Key ${keyId} rate-limited for ${Math.ceil(cooldownMs / 60_000)}m`);
             }
 
-            // Try to get a new token from the key pool (will skip rate-limited keys)
-            if (resolveNewToken) {
-              try {
-                const newKey = await resolveNewToken();
-                if (newKey?.token && newKey.token !== token) {
-                  token = newKey.token;
-                  keyId = newKey.keyId;
-                  if (keyId && !keysUsed.includes(keyId)) keysUsed.push(keyId);
-                  isOAuth = newKey.type === 'oauth';
-                  customConfig = newKey.customConfig || null;
-                  // If the fallback key resolved a different model (provider change), update
-                  if (newKey.model) {
-                    const { piModel: newPiModel } = resolveModel(newKey.model, newKey.provider);
-                    piModel = newPiModel;
-                    if (newKey.reasoningEffort !== undefined) reasoningEffort = newKey.reasoningEffort;
-                    keyProvider = newKey.provider;
-                    log(`Rotated to key ${keyId} (${newKey.provider}), model → ${newKey.model}`);
-                  } else {
-                    log(`Rotated to key ${keyId} after rate limit`);
-                  }
-                  continue; // retry immediately with new key — no sleep needed
-                }
-              } catch {}
-            }
-
-            // No fallback key available — wait out the cooldown (capped at 5 min per retry)
-            const waitMs = Math.min(cooldownMs, 5 * 60_000);
-            const waitSec = Math.ceil(waitMs / 1000);
-            log(`No fallback key, retrying in ${waitSec}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
-            await new Promise(r => setTimeout(r, waitMs));
-            if (aborted) {
-              return makeResult(false, lastResultText || (abortReason === 'timeout' ? 'Agent timed out' : 'Agent was terminated'), { timedOut: abortReason === 'timeout' });
-            }
-            continue;
+            return makeResult(false, err.message, {
+              provider: keyProvider || provider,
+              keyId,
+              keyIdTried: keyId,
+              retryable: true,
+            });
           }
           // Context length exceeded — emergency compact and retry once
           const isContextError = /context_length_exceeded|context.window|too.many.tokens|maximum.context/i.test(err.message);

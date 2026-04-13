@@ -43,6 +43,19 @@ export default function ProjectSettingsPanel({
   // Detect stale pinned key (disabled or deleted)
   const pinnedKeyStale = selectedKeyId && (!selectedKey || !selectedKey.enabled)
   const effectiveKey = (selectedKey && selectedKey.enabled) ? selectedKey : defaultKey
+  const hasModelOverrides = (models = {}) => !!(models.high || models.mid || models.low || models.xlow)
+
+  const clearModelOverrides = async () => {
+    const res = await authFetch(projectApi('/models'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ models: {} })
+    })
+    if (!res.ok) return false
+    const d = await res.json()
+    if (d.config) setSelectedProject(prev => ({ ...prev, config: d.config }))
+    return true
+  }
 
   const handleKeyChange = async (keyId) => {
     setSaving(true)
@@ -58,7 +71,12 @@ export default function ProjectSettingsPanel({
       if (res.ok) {
         const d = await res.json()
         setKeySelection(d.keySelection || null)
-        setToast(keyId ? 'Key selection updated' : 'Using global default')
+        if (!keyId) {
+          await clearModelOverrides()
+          setToast('Using global default, model overrides cleared')
+        } else {
+          setToast('Key selection updated')
+        }
       }
     } catch {}
     setSaving(false)

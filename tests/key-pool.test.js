@@ -13,6 +13,7 @@ const {
   loadKeyPool,
   saveKeyPool,
   addKey,
+  addOAuthKey,
   removeKey,
   updateKey,
   reorderKeys,
@@ -211,13 +212,57 @@ describe('Key Pool', () => {
       assert.strictEqual(result.keyId, enabled.id);
     });
 
-    it('matches provider hint', async () => {
-      addKey({ label: 'Anthropic', token: 'sk-ant-ant', provider: 'anthropic' });
-      const openai = addKey({ label: 'OpenAI', token: 'sk-proj-oai', provider: 'openai' });
-      const result = await resolveKeyForProject({}, 'openai', null);
+    it('retries from the top of the global pool across providers', async () => {
+      const disabled = addKey({ label: 'Disabled', token: 'sk-ant-disabled', provider: 'anthropic' });
+      const anthropic = addKey({ label: 'Anthropic', token: 'sk-ant-live', provider: 'anthropic' });
+      const openai = addKey({ label: 'OpenAI Codex', token: 'sk-proj-oai', provider: 'openai-codex' });
+
+      updateKey(disabled.id, { enabled: false });
+
+      const first = await resolveKeyForProject({}, null, null);
+      assert.ok(first);
+      assert.strictEqual(first.keyId, anthropic.id);
+
+      markRateLimited(anthropic.id, 60_000);
+
+      // Simulate a retry after the anthropic key failed. The selector should
+      // re-scan from the beginning of the pool and land on the next available key.
+      const result = await resolveKeyForProject({}, 'anthropic', null);
       assert.ok(result);
       assert.strictEqual(result.keyId, openai.id);
-      assert.strictEqual(result.provider, 'openai');
+      assert.strictEqual(result.provider, 'openai-codex');
+    });
+
+    it('skips cooled-down keys without attempting to resolve them', async () => {
+      const cooled = addOAuthKey({ label: 'OAuth key', provider: 'openai-codex', authFile: '/tmp/oauth.json' });
+      const fallback = addKey({ label: 'Fallback', token: 'sk-ant-fallback', provider: 'anthropic' });
+
+      markRateLimited(cooled.id, 60_000);
+
+      let oauthAttempts = 0;
+      const result = await resolveKeyForProject({}, null, async () => {
+        oauthAttempts++;
+        return 'oauth-token';
+      });
+
+      assert.ok(result);
+      assert.strictEqual(result.keyId, fallback.id);
+      assert.strictEqual(oauthAttempts, 0);
+    });
+
+    it('preserves explicit key pinning even when an earlier global key exists', async () => {
+      addKey({ label: 'Global First', token: 'sk-ant-global', provider: 'anthropic' });
+      const pinned = addKey({ label: 'Pinned OpenAI', token: 'sk-proj-pinned', provider: 'openai-codex' });
+
+      const result = await resolveKeyForProject(
+        { keySelection: { keyId: pinned.id, fallback: true } },
+        'anthropic',
+        null
+      );
+
+      assert.ok(result);
+      assert.strictEqual(result.keyId, pinned.id);
+      assert.strictEqual(result.provider, 'openai-codex');
     });
   });
 
