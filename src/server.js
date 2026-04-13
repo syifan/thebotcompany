@@ -1441,7 +1441,7 @@ class ProjectRunner {
       }
       if (typeof step.agent !== 'string' || !step.agent.trim()) return null;
       const { agent, ...rest } = step;
-      if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null;
+      if (!Object.prototype.hasOwnProperty.call(rest, 'task')) return null;
       return { [agent]: rest };
     };
     try {

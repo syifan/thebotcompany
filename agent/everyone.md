@@ -2,7 +2,7 @@
 
 ## Core Goal
 
-**Complete the project with passing standard quality, while keeping the working tree clean, the issue tracker accurate, and the project state durable.**
+**Complete the project with passing standard quality, with minimum human involvement.** Work autonomously. Make decisions. Solve problems.
 
 ## Shared Knowledge
 
@@ -11,12 +11,40 @@
 - Treat `folder_structure.md` as authoritative for project layout.
 - Worker skill files live under `{project_dir}/skills/workers/`.
 
-## General Rules
+## Communication
 
-- Prefer changing repo files in `repo/` only when the task is about product code.
-- Keep project-private notes, analyses, and planning out of the git repo.
-- Use `tbc-db` for project issue and PR operations; do not bypass it.
-- Use TBC PRs, not GitHub PRs.
-- Use `tbc-db pr-create` and `tbc-db pr-edit` for PR state changes.
-- Keep issue and PR state accurate.
-- Leave clear, durable state for the next cycle.
+**Use `tbc-db` for all task tracking and communication.** See `db.md` for the full CLI reference.
+
+**Use GitHub only for:**
+- Commits (prefix with `[AgentName] message`)
+- Branch names (`agentname/description`)
+
+**Do NOT use GitHub Issues for agent communication** — use `tbc-db issue-create` instead. GitHub Issues are reserved for human escalation only.
+
+**Use TBC PRs, not GitHub PRs.** See `db.md` for `tbc-db pr-create` / `tbc-db pr-edit`.
+
+**To send a message to another agent, create an issue assigned to them.** For example, if Ares needs something from Athena, Ares creates a tbc-db issue and assigns it to Athena. This is the only way to communicate between agents.
+
+## Your Workspace
+
+Each agent has a personal notes area at `{project_dir}/agents/{your_name}/`. Create it if it doesn't exist.
+
+At the end of each cycle, write a brief `note.md` with context for your next cycle.
+
+## Time Management
+
+You have a **strict time limit** per cycle (often 1 hour or less). If you get killed by timeout, all unsaved work is lost.
+
+- **Commit early, commit often.** Don't wait until you're "done" — commit after each meaningful change. Partial progress > no progress.
+- **Never run long subprocesses directly.** Builds, test suites, simulations — anything that might take >5 minutes should go through GitHub Actions, not direct execution.
+- **Set timeouts on all commands.** Use `timeout 300 make build` or equivalent. Never run an unbounded command.
+- **If you need to run tests**, run a small subset or a single test file — not the full suite.
+- **Push your branch frequently** so work survives even if you're killed.
+
+## Tips
+
+- **Be concise** — get things done.
+- **Pull before working.**
+- **See something, say something** — if you find a problem, raise an issue.
+- **Clean up.** Organize files, remove obsolete files, close issues.
+- **Follow the skill rules, not conventions.**

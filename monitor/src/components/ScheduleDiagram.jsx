@@ -57,7 +57,7 @@ function normalizeStep(step) {
   }
   if (typeof step.agent === 'string' && step.agent.trim()) {
     const { agent, ...rest } = step
-    if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null
+    if (!Object.prototype.hasOwnProperty.call(rest, 'task')) return null
     return { [agent]: rest }
   }
   const keys = Object.keys(step)
@@ -99,7 +99,7 @@ export function getAgentTask(schedule, agentName) {
   const entry = entries.find(([name]) => name.toLowerCase() === agentName.toLowerCase())
   if (!entry) return null
   const value = entry[1]
-  return typeof value === 'string' ? value : value?.prompt || value?.task || null
+  return typeof value === 'string' ? value : value?.task || null
 }
 
 function ScheduleBody({ schedule }) {
@@ -132,7 +132,7 @@ function ScheduleBody({ schedule }) {
         const name = keys.find(k => k !== 'delay')
         if (!name) return null
         const value = step[name]
-        const task = typeof value === 'string' ? value : (value.prompt || value.task || '')
+        const task = typeof value === 'string' ? value : (value.task || '')
         const vis = typeof value === 'object' ? value.visibility : null
         const visInfo = visConfig[vis || 'full']
         const VisIcon = visInfo?.icon
