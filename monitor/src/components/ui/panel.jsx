@@ -160,7 +160,7 @@ function PanelSlot() {
     return Math.max(380, Math.min(width, maxWidth))
   }, [])
 
-  const minInlineMainWidth = 56 * 16
+  const minInlineMainWidth = 42 * 16
   const shouldOverlay = renderedKey && viewportWidth < panelWidth + minInlineMainWidth
 
   React.useEffect(() => {
