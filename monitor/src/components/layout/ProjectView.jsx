@@ -983,7 +983,7 @@ export default function ProjectView({
 
   return (
     <div className="flex h-screen overflow-hidden">
-    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6 max-w-screen-2xl mx-auto overflow-y-auto">
+    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6 max-w-screen-2xl mx-auto overflow-y-auto overflow-x-hidden">
       <div>
         {/* Header */}
         <div className="mb-6 space-y-3">
