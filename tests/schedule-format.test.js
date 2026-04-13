@@ -71,10 +71,10 @@ function loadFrontendParseScheduleBlock() {
 describe('strict schedule directive format', () => {
   it('accepts only the canonical array-of-steps format in the backend parser', () => {
     const parseSchedule = loadServerParseSchedule();
-    const canonical = `<!-- SCHEDULE -->\n[\n  {"agent":"diana","issue":2,"title":"Research","prompt":"Do it"},\n  {"delay":20}\n]\n<!-- /SCHEDULE -->`;
+    const canonical = `<!-- SCHEDULE -->\n[\n  {"agent":"diana","issue":2,"title":"Research","task":"Do it"},\n  {"delay":20}\n]\n<!-- /SCHEDULE -->`;
     assert.equal(JSON.stringify(parseSchedule(canonical)), JSON.stringify({
       _steps: [
-        { diana: { issue: 2, title: 'Research', prompt: 'Do it' } },
+        { diana: { issue: 2, title: 'Research', task: 'Do it' } },
         { delay: 20 },
       ],
     }));

@@ -66,7 +66,13 @@ Feel free to adjust the roadmap as you learn more. If a milestone turns out to b
 
 Then schedule (and hire) workers to dig deeper into areas that need investigation.
  
-Your workers should work in blind mode. You should also not trust what other agents say. Do your own evaluation.
+Your workers should work in blind mode — set `"visibility": "blind"` on each agent step:
+
+```json
+{"agent": "leo", "task": "Investigate the auth module", "visibility": "blind"}
+```
+
+You should also not trust what other agents say. Do your own evaluation.
 
 Once you have your own workers' report read worker reports. 
 
