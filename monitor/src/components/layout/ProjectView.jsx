@@ -993,7 +993,14 @@ export default function ProjectView({
         <div className="mb-6 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500 dark:text-neutral-400 shrink-0 px-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label="All Projects"
+                onClick={goToProjectList}
+                className="text-neutral-500 dark:text-neutral-400 shrink-0 min-w-10 h-10 px-2"
+              >
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline ml-1">All Projects</span>
               </Button>
