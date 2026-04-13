@@ -22,7 +22,7 @@ Valid format — emit this literal structure inside the comment tags:
     "delay": 20
   },
   {
-    "agent": "ares",
+    "agent": "kai",
     "task": "Another worker's instructions"
   }
 ]
