@@ -95,3 +95,36 @@ body {
 .dark .prose h1, .dark .prose h2, .dark .prose h3, .dark .prose h4 {
   color: #f5f5f5;
 }
+
+/* ---- Auto-hide scrollbars (Mac-style: hidden until hover) ---- */
+
+/* WebKit / Blink (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+.dark *:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+.dark *:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
