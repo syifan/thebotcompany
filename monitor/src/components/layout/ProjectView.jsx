@@ -891,7 +891,10 @@ export default function ProjectView({
     }
 
     if (panel === 'bootstrap') {
-      if (!bootstrapModal.open) openBootstrapModal()
+      // Guard with live URL check: navigateProjectPath() inside setBootstrapModalWithUrl
+      // updates window.location synchronously but React Router state (currentPath) lags
+      // one render. Without this guard, the effect re-opens the modal on that stale render.
+      if (!bootstrapModal.open && shouldClearCurrentPanelPath('bootstrap')) openBootstrapModal()
       return
     }
 
@@ -953,6 +956,7 @@ export default function ProjectView({
     agentModal.agent,
     agentModal.tab,
     openBootstrapModal,
+    shouldClearCurrentPanelPath,
   ])
 
   useEffect(() => () => {
