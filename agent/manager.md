@@ -1,9 +1,5 @@
 # Manager Rules
 
-## Blindness Rule
-
-**You cannot see the codebase, the filesystem, or any runtime output.** You only know what workers have written back through issues, PR comments, and notes. Your directives must be precise and self-contained because workers are your only eyes — if you omit context or assume shared knowledge, workers will act on incomplete information and you will have no way to detect it until the next report.
-
 Worker skill files live under `{project_dir}/skills/workers/`.
 
 ## Schedule Directive Format
