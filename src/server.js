@@ -96,17 +96,36 @@ const MODEL_TIERS = {
   },
 };
 
+function inferProviderFromModel(model) {
+  const raw = String(model || '').trim().toLowerCase();
+  if (!raw) return null;
+  if (raw.startsWith('openai-codex/')) return 'openai-codex';
+  if (raw.startsWith('openai/')) return 'openai';
+  if (raw.startsWith('anthropic/')) return 'anthropic';
+  if (raw.startsWith('google/') || raw.startsWith('gemini/')) return 'google';
+  if (raw.startsWith('minimax/')) return 'minimax';
+  if (raw.startsWith('claude-')) return 'anthropic';
+  if (raw.startsWith('gpt-') || raw.startsWith('o1') || raw.startsWith('o3') || raw.startsWith('o4')) return 'openai';
+  if (raw.startsWith('gemini-')) return 'google';
+  return null;
+}
+
 function resolveModelTier(tierOrModel, provider, projectModels) {
   const tier = (tierOrModel || '').toLowerCase().trim();
-  // Project-level model overrides take priority
+  // Project-level model overrides take priority only when compatible with the
+  // currently selected provider.
   if (projectModels && projectModels[tier]) {
     const override = projectModels[tier];
-    // Support "model@effort" format (e.g. "gpt-5.3-codex@xhigh")
-    if (override.includes('@')) {
-      const [model, reasoningEffort] = override.split('@', 2);
-      return { model, reasoningEffort };
+    const overrideModel = override.includes('@') ? override.split('@', 2)[0] : override;
+    const overrideProvider = inferProviderFromModel(overrideModel);
+    if (!overrideProvider || overrideProvider === provider) {
+      // Support "model@effort" format (e.g. "gpt-5.3-codex@xhigh")
+      if (override.includes('@')) {
+        const [model, reasoningEffort] = override.split('@', 2);
+        return { model, reasoningEffort };
+      }
+      return { model: override };
     }
-    return { model: override };
   }
   const tiers = MODEL_TIERS[provider];
   if (tiers && tiers[tier]) {
@@ -2278,7 +2297,7 @@ class ProjectRunner {
       keyId: resolvedKeyId,
       onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),
       resolveNewToken: async () => {
-        const newKey = await resolveKeyForProject(config, providerHint, oauthTokenGetter);
+        const newKey = await resolveKeyForProject(config, null, oauthTokenGetter);
         if (newKey?.provider) {
           const newRuntimeSelection = getProviderRuntimeSelection({
             provider: newKey.provider,

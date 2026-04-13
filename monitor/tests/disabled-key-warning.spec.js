@@ -175,4 +175,72 @@ test.describe('Project pinned to disabled key', () => {
     const selectedText = await select.evaluate(el => el.options[el.selectedIndex]?.text || '')
     expect(selectedText).toContain('DisabledKey')
   })
+
+  test('clears model overrides when switching from fixed key to global default', async ({ page }) => {
+    await setupMocks(page)
+
+    let savedModelsBody = null
+
+    await page.route('**/api/keys', route =>
+      route.fulfill({ json: { keys: [ENABLED_KEY], allowCustomProvider: false } })
+    )
+
+    const projBase = `**/api/projects/${PROJECT_REPO}`
+    await page.route(`${projBase}/chats`, route =>
+      route.fulfill({ json: { sessions: [] } })
+    )
+    await page.route(`${projBase}/config`, route =>
+      route.fulfill({
+        json: {
+          config: {
+            cycleIntervalMs: 0,
+            agentTimeoutMs: 600000,
+            model: 'mid',
+            budgetPer24h: 100,
+            models: { high: 'claude-opus-4-6', mid: 'claude-sonnet-4-6' },
+          },
+          keySelection: { keyId: ENABLED_KEY.id, fallback: false },
+          provider: 'anthropic',
+          tiers: { high: 'claude-opus-4-6', mid: 'claude-sonnet-4-6' },
+          allTiers: { anthropic: { high: 'claude-opus-4-6', mid: 'claude-sonnet-4-6' } },
+          availableModels: { anthropic: ['claude-opus-4-6', 'claude-sonnet-4-6'] },
+          keyPool: { keys: [ENABLED_KEY] },
+        }
+      })
+    )
+    await page.route(`${projBase}/token`, async route => {
+      await route.request().postDataJSON()
+      await route.fulfill({ json: { keySelection: null } })
+    })
+    await page.route(`${projBase}/models`, async route => {
+      savedModelsBody = await route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          config: {
+            cycleIntervalMs: 0,
+            agentTimeoutMs: 600000,
+            model: 'mid',
+            budgetPer24h: 100,
+            models: {},
+          }
+        }
+      })
+    })
+
+    await page.goto(`/github.com/${PROJECT_ID}`)
+    await page.waitForLoadState('networkidle')
+
+    const settingsButton = page.locator('button[title="Project Settings"]')
+    await settingsButton.waitFor({ timeout: 10000 })
+    await settingsButton.click()
+
+    await expect(page.getByRole('heading', { name: 'Project Settings' })).toBeVisible({ timeout: 5000 })
+
+    const select = page.locator('select').filter({ has: page.locator('option', { hasText: 'WorkingKey' }) }).last()
+    await expect(select).toBeVisible({ timeout: 5000 })
+    await select.selectOption('')
+
+    await expect.poll(() => savedModelsBody).not.toBeNull()
+    expect(savedModelsBody).toEqual({ models: {} })
+  })
 })

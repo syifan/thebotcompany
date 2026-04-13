@@ -169,7 +169,7 @@ function EditCustomCredentialCard({ credential, authFetch, onComplete, onCancel 
 }
 
 function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders }) {
-  const [step, setStep] = useState('provider') // provider → method → action → label
+  const [step, setStep] = useState('provider') // provider → method → action → oauth_callback → label
   const [selectedProvider, setSelectedProvider] = useState(null)
   const [selectedMethod, setSelectedMethod] = useState(null) // 'api_key' | 'oauth'
   const [token, setToken] = useState('')
@@ -344,6 +344,7 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders
     if (selectedMethod === 'oauth') {
       const startOAuth = async () => {
         setOauthState('starting')
+        setPasteUrl('')
         try {
           // Open blank window synchronously for popup blocker avoidance
           const authWindow = window.open('about:blank', '_blank')
@@ -357,6 +358,7 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders
           setFlowId(data.flowId)
           setAuthUrl(data.authorization_url)
           setOauthState('waiting')
+          setStep('oauth_callback')
 
           if (authWindow && data.authorization_url) {
             authWindow.location.href = data.authorization_url
@@ -378,38 +380,9 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders
           setTimeout(() => {
             clearInterval(pollInterval)
             setOauthState(prev => prev === 'success' ? prev : prev === 'waiting' ? 'paste' : prev)
-          }, 30000) // After 30s, suggest paste
+          }, 30000)
         } catch {
           setOauthState('error')
-        }
-      }
-
-      const submitPasteUrl = async () => {
-        if (!pasteUrl || !flowId) return
-        setSaving(true)
-        try {
-          const res = await authFetch('/api/oauth/submit-code', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ flowId, code: pasteUrl })
-          })
-          const data = await res.json()
-          if (data.success) {
-            setOauthState('success')
-          } else {
-            setOauthState('error')
-          }
-        } catch {
-          setOauthState('error')
-        }
-        setSaving(false)
-      }
-
-      // If OAuth completed, go to label step
-      if (oauthState === 'success') {
-        // Small delay then move to label
-        if (step === 'action') {
-          setTimeout(() => setStep('label'), 500)
         }
       }
 
@@ -421,87 +394,150 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders
                 setOauthState('idle')
                 providerDef?.methods.length > 1 ? setStep('method') : setStep('provider')
               }} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><ArrowLeft className="w-4 h-4" /></button>
-              <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Step 3: {providerDef?.label} — OAuth Sign-In</h4>
+              <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Step 3: {providerDef?.label} — Open Sign-In Page</h4>
             </div>
             <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><X className="w-4 h-4" /></button>
           </div>
 
-          {oauthState === 'idle' && (
-            <button
-              onClick={startOAuth}
-              className="w-full px-3 py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-            >
-              Open Sign-In Page
-            </button>
-          )}
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-600 dark:text-neutral-400 space-y-2">
+              <p>What to expect:</p>
+              <ol className="list-decimal ml-4 space-y-1">
+                <li>A browser tab will open to OpenAI sign-in.</li>
+                <li>Sign in with the ChatGPT account that has the subscription.</li>
+                <li>After approval, OpenAI will redirect to a <code className="bg-white dark:bg-neutral-700 px-1 rounded">http://localhost...</code> URL.</li>
+                <li>If you are using TBC remotely, copy that full localhost URL, then paste it in the next step.</li>
+              </ol>
+              <p className="text-neutral-500 dark:text-neutral-500">Seeing a localhost page fail to load is expected. We only need the final URL.</p>
+            </div>
 
-          {oauthState === 'starting' && (
-            <p className="text-sm text-blue-500 animate-pulse">Starting sign-in...</p>
-          )}
+            {oauthState === 'starting' ? (
+              <p className="text-sm text-blue-500 animate-pulse">Starting sign-in...</p>
+            ) : (
+              <button
+                onClick={startOAuth}
+                className="w-full px-3 py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+              >
+                Open Sign-In Page
+              </button>
+            )}
+
+            {oauthState === 'error' && (
+              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+                <p className="text-xs text-red-700 dark:text-red-300">Failed to start sign-in. Please try again.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+  }
+
+  if (step === 'oauth_callback') {
+    const submitPasteUrl = async () => {
+      if (!pasteUrl || !flowId) return
+      setSaving(true)
+      try {
+        const res = await authFetch('/api/oauth/submit-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ flowId, code: pasteUrl })
+        })
+        const data = await res.json()
+        if (data.success) {
+          setOauthState('success')
+          setTimeout(() => setStep('label'), 300)
+        } else {
+          setOauthState('error')
+        }
+      } catch {
+        setOauthState('error')
+      }
+      setSaving(false)
+    }
+
+    return (
+      <div className="border border-blue-200 dark:border-blue-800 rounded-lg p-3 bg-blue-50/50 dark:bg-blue-950/20">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setStep('action')} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><ArrowLeft className="w-4 h-4" /></button>
+            <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Step 4: {providerDef?.label} — Paste Callback URL</h4>
+          </div>
+          <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800">
+            <p className="text-xs text-blue-700 dark:text-blue-300 mb-1">
+              Finish sign-in in the browser, then paste the full redirect URL from the address bar here.
+            </p>
+            {authUrl && (
+              <p className="text-xs text-blue-500 dark:text-blue-400">
+                If no window opened, <a href={authUrl} target="_blank" rel="noopener noreferrer" className="underline">click here</a>.
+              </p>
+            )}
+          </div>
+
+          <div className="p-3 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs text-neutral-600 dark:text-neutral-400 space-y-2">
+            <p><strong>Paste the final URL</strong> that starts with <code className="bg-white dark:bg-neutral-700 px-1 rounded">http://localhost</code>.</p>
+            <p>If the localhost page shows an error, that's fine. Copy the URL anyway.</p>
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Paste redirect URL here..."
+              value={pasteUrl}
+              onChange={e => setPasteUrl(e.target.value)}
+              autoFocus
+              className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
+            />
+            <button
+              onClick={submitPasteUrl}
+              disabled={!pasteUrl || saving || !flowId}
+              className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 whitespace-nowrap"
+            >
+              {saving ? 'Verifying...' : 'Submit'}
+            </button>
+          </div>
 
           {(oauthState === 'waiting' || oauthState === 'paste') && (
-            <div className="space-y-3">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800">
-                <p className="text-xs text-blue-700 dark:text-blue-300 mb-1">
-                  A browser tab should have opened. Complete sign-in there.
-                </p>
-                {authUrl && (
-                  <p className="text-xs text-blue-500 dark:text-blue-400">
-                    If no window opened,{' '}
-                    <a href={authUrl} target="_blank" rel="noopener noreferrer" className="underline">click here</a>.
-                  </p>
-                )}
-              </div>
-
-              <div className="border-t border-neutral-200 dark:border-neutral-700 pt-3">
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">
-                  <strong>Remote access?</strong> After signing in, copy the URL from the browser address bar (it will start with <code className="bg-neutral-100 dark:bg-neutral-700 px-1 rounded">http://localhost</code> and may show an error — that's OK) and paste it below:
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Paste redirect URL here..."
-                    value={pasteUrl}
-                    onChange={e => setPasteUrl(e.target.value)}
-                    className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
-                  />
-                  <button
-                    onClick={submitPasteUrl}
-                    disabled={!pasteUrl || saving}
-                    className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 whitespace-nowrap"
-                  >
-                    {saving ? 'Verifying...' : 'Submit'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">Waiting for sign-in completion. You can either paste the callback URL now or wait for automatic detection.</p>
           )}
 
           {oauthState === 'success' && (
-            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800">
-              <p className="text-sm text-green-700 dark:text-green-300">Sign-in successful! Setting up credential...</p>
+            <div className="space-y-2">
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800">
+                <p className="text-sm text-green-700 dark:text-green-300">Sign-in successful. Continue when you're ready.</p>
+              </div>
+              <button
+                onClick={() => setStep('label')}
+                className="w-full px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+              >
+                Continue
+              </button>
             </div>
           )}
 
           {oauthState === 'error' && (
             <div className="space-y-2">
               <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
-                <p className="text-xs text-red-700 dark:text-red-300">Sign-in failed. Please try again.</p>
+                <p className="text-xs text-red-700 dark:text-red-300">Sign-in failed. Please check the pasted URL and try again.</p>
               </div>
               <button
-                onClick={() => { setOauthState('idle'); setPasteUrl('') }}
+                onClick={() => { setOauthState('waiting'); setPasteUrl('') }}
                 className="w-full px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600"
               >
-                Retry
+                Retry Paste
               </button>
             </div>
           )}
         </div>
-      )
-    }
+      </div>
+    )
   }
 
-  // Step 4: Label + save
+  // Step 4/5: Label + save
   if (step === 'label') {
     const handleSave = async () => {
       setSaving(true)
@@ -561,8 +597,8 @@ function AddCredentialWizard({ onComplete, onCancel, authFetch, excludeProviders
       <div className="border border-blue-200 dark:border-blue-800 rounded-lg p-3 bg-blue-50/50 dark:bg-blue-950/20">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <button onClick={() => setStep('action')} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><ArrowLeft className="w-4 h-4" /></button>
-            <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Step 4: Name This Credential</h4>
+            <button onClick={() => setStep(selectedMethod === 'oauth' ? 'oauth_callback' : 'action')} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><ArrowLeft className="w-4 h-4" /></button>
+            <h4 className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 uppercase">Step {selectedMethod === 'oauth' ? '5' : '4'}: Name This Credential</h4>
           </div>
           <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"><X className="w-4 h-4" /></button>
         </div>
