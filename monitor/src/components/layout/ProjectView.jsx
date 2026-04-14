@@ -998,8 +998,7 @@ export default function ProjectView({
                 aria-label="All Projects"
                 onClick={(event) => {
                   event.preventDefault()
-                  setSelectedProject(null)
-                  window.location.assign('/')
+                  goToProjectList()
                 }}
                 className="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500 dark:text-neutral-400 shrink-0 min-w-10 h-10 px-2"
               >

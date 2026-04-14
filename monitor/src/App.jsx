@@ -13,6 +13,11 @@ import ProjectView from '@/components/layout/ProjectView'
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [browserLocation, setBrowserLocation] = useState(() => ({
+    pathname: typeof window !== 'undefined' ? window.location.pathname : location.pathname,
+    search: typeof window !== 'undefined' ? window.location.search : location.search,
+    hash: typeof window !== 'undefined' ? window.location.hash : location.hash,
+  }))
 
   // Truly global state: projects list
   const [projects, setProjects] = useState([])
@@ -64,6 +69,30 @@ function App() {
     return `/${project.id}`
   }
 
+  const syncBrowserLocationTo = (to) => {
+    if (typeof window === 'undefined') return
+    const url = new URL(to, window.location.origin)
+    setBrowserLocation({
+      pathname: url.pathname,
+      search: url.search,
+      hash: url.hash,
+    })
+  }
+
+  const effectiveLocation = (
+    browserLocation.pathname !== location.pathname ||
+    browserLocation.search !== location.search ||
+    browserLocation.hash !== location.hash
+  )
+    ? {
+        ...location,
+        pathname: browserLocation.pathname,
+        search: browserLocation.search,
+        hash: browserLocation.hash,
+        key: `${browserLocation.pathname}${browserLocation.search}${browserLocation.hash}`,
+      }
+    : location
+
   const isRootSidebarPath = (pathname) => pathname === '/settings' || pathname === '/notifications'
 
   const findProjectForPath = (projectList, pathname) => {
@@ -76,8 +105,8 @@ function App() {
       }) || null
   }
 
-  const selectProjectFromPath = (projectList) => {
-    const path = location.pathname
+  const selectProjectFromPath = (projectList, pathname = effectiveLocation.pathname) => {
+    const path = pathname
     if (path === '/' || !path || isRootSidebarPath(path)) return
     const project = findProjectForPath(projectList, path)
     if (project) setSelectedProject(project)
@@ -97,7 +126,7 @@ function App() {
       setGlobalUptime(data.uptime)
       setProjects(data.projects)
       
-      if (location.pathname !== '/' && !isRootSidebarPath(location.pathname)) {
+      if (effectiveLocation.pathname !== '/' && !isRootSidebarPath(effectiveLocation.pathname)) {
         setSelectedProject(prev => {
           if (!prev) return prev
           const updated = data.projects.find(p => p.id === prev.id)
@@ -129,7 +158,7 @@ function App() {
         setGlobalUptime(data.uptime)
         setProjects(data.projects)
         setLastUpdate(new Date())
-        selectProjectFromPath(data.projects)
+        selectProjectFromPath(data.projects, effectiveLocation.pathname)
       } catch (err) {
         setError(err.message)
       }
@@ -166,27 +195,51 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    setBrowserLocation({
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    })
+  }, [location.pathname, location.search, location.hash])
+
   // Handle browser back/forward
   useEffect(() => {
-    if (location.pathname === '/' || isRootSidebarPath(location.pathname)) {
+    if (effectiveLocation.pathname === '/' || isRootSidebarPath(effectiveLocation.pathname)) {
       setSelectedProject(null)
     } else if (!selectedProject) {
-      selectProjectFromPath(projects)
+      selectProjectFromPath(projects, effectiveLocation.pathname)
     }
-  }, [location.pathname, selectedProject, projects])
+  }, [effectiveLocation.pathname, selectedProject, projects])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const syncBrowserLocation = () => {
+      setBrowserLocation({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+      })
+    }
+    window.addEventListener('popstate', syncBrowserLocation)
+    return () => window.removeEventListener('popstate', syncBrowserLocation)
+  }, [])
 
   const selectProject = (project) => {
+    const nextPath = projectToPath(project)
     setSelectedProject(project)
-    navigate(projectToPath(project))
+    syncBrowserLocationTo(nextPath)
+    navigate(nextPath)
   }
 
   const goToProjectList = () => {
     setSelectedProject(null)
+    syncBrowserLocationTo('/')
     navigate('/')
   }
 
   // Loading state: URL has a project path but we haven't resolved it yet
-  const hasProjectInUrl = location.pathname !== '/' && location.pathname.length > 1 && !isRootSidebarPath(location.pathname)
+  const hasProjectInUrl = effectiveLocation.pathname !== '/' && effectiveLocation.pathname.length > 1 && !isRootSidebarPath(effectiveLocation.pathname)
   if (!selectedProject && hasProjectInUrl && projects.length === 0) {
     return (
       <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
@@ -196,7 +249,7 @@ function App() {
   }
 
   return (
-    <Routes>
+    <Routes location={effectiveLocation}>
       <Route path="/" element={
         <ProjectListPage
           projects={projects}
