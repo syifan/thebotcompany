@@ -100,9 +100,13 @@ function getChatDb(agentDir) {
       role TEXT NOT NULL,
       content TEXT DEFAULT '',
       tool_calls TEXT DEFAULT NULL,
+      success INTEGER DEFAULT NULL,
       created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
   `);
+  try {
+    db.prepare('ALTER TABLE chat_messages ADD COLUMN success INTEGER DEFAULT NULL').run();
+  } catch {}
 
   return db;
 }
@@ -158,12 +162,13 @@ export function deleteSession(agentDir, chatId) {
   }
 }
 
-export function saveMessage(agentDir, sessionId, role, content, toolCalls = null) {
+export function saveMessage(agentDir, sessionId, role, content, toolCalls = null, opts = {}) {
   const db = getChatDb(agentDir);
   try {
+    const success = opts.success === undefined || opts.success === null ? null : (opts.success ? 1 : 0);
     db.prepare(
-      'INSERT INTO chat_messages (session_id, role, content, tool_calls) VALUES (?, ?, ?, ?)'
-    ).run(sessionId, role, content, toolCalls ? JSON.stringify(toolCalls) : null);
+      'INSERT INTO chat_messages (session_id, role, content, tool_calls, success) VALUES (?, ?, ?, ?, ?)'
+    ).run(sessionId, role, content, toolCalls ? JSON.stringify(toolCalls) : null, success);
     db.prepare(
       "UPDATE chat_sessions SET updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?"
     ).run(sessionId);
@@ -475,7 +480,8 @@ export async function streamChatMessage(opts) {
               if (fullAssistantText || assistantText) {
                 saveMessage(agentDir, chatId, 'assistant',
                   (fullAssistantText + assistantText).trim() + `\n\n⚠️ Error: ${errMsg}`,
-                  allToolCalls.length > 0 ? allToolCalls : null);
+                  allToolCalls.length > 0 ? allToolCalls : null,
+                  { success: false });
               }
               sseWrite({ type: 'error', content: errMsg });
               sseWrite({ type: 'done' });
@@ -585,7 +591,7 @@ export async function streamChatMessage(opts) {
     }
 
     // Save final assistant message
-    saveMessage(agentDir, chatId, 'assistant', fullAssistantText, allToolCalls.length > 0 ? allToolCalls : null);
+    saveMessage(agentDir, chatId, 'assistant', fullAssistantText, allToolCalls.length > 0 ? allToolCalls : null, { success: true });
 
   } catch (err) {
     console.error(`[Chat] Error (session ${chatId}): ${err.message}`);
@@ -598,7 +604,8 @@ export async function streamChatMessage(opts) {
     if (fullAssistantText) {
       saveMessage(agentDir, chatId, 'assistant',
         fullAssistantText.trim() + `\n\n⚠️ Error: ${err.message}`,
-        allToolCalls.length > 0 ? allToolCalls : null);
+        allToolCalls.length > 0 ? allToolCalls : null,
+        { success: false });
     }
     sseWrite({ type: 'error', content: err.message });
   }

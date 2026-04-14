@@ -1,10 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Loader2, Paperclip, X } from 'lucide-react'
+import { Send, Loader2, Plus, X } from 'lucide-react'
 import { Panel, PanelHeader } from '@/components/ui/panel'
 import { useAuth } from '@/hooks/useAuth'
 import { AgentContentBlocks, buildChatAssistantBlocks } from '@/components/ui/agent-text-blocks'
 
 function MessageBubble({ msg }) {
+  if (msg.role === 'error') {
+    return (
+      <div className="flex justify-start mb-3">
+        <div className="max-w-[90%] bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900 rounded-2xl rounded-bl-sm px-3 py-2 text-sm whitespace-pre-wrap break-words">
+          {msg.content}
+        </div>
+      </div>
+    )
+  }
+
   if (msg.role === 'user') {
     // Images stored in tool_calls field for user messages (from DB), or in images field (from local state)
     const images = msg.images || (msg.tool_calls ? (typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls) : null)
@@ -19,8 +29,11 @@ function MessageBubble({ msg }) {
             </div>
           )}
           {msg.content && (
-            <div className="bg-blue-500 text-white rounded-2xl rounded-br-sm px-3 py-2 text-sm">
+            <div className={`rounded-2xl rounded-br-sm px-3 py-2 text-sm ${msg.failed ? 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900' : 'bg-blue-500 text-white'}`}>
               {msg.content}
+              {msg.failed && (
+                <div className="mt-1 text-[11px] opacity-80">Failed to send{msg.error ? `: ${msg.error}` : ''}</div>
+              )}
             </div>
           )}
         </div>
@@ -43,11 +56,82 @@ function MessageBubble({ msg }) {
   )
 }
 
-export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated, modelTiers = {} }) {
+function buildCustomModelOptions(customConfig) {
+  if (!customConfig) return []
+  const options = []
+  const seen = new Set()
+  const pushOption = (id, label = id) => {
+    if (!id || seen.has(id)) return
+    seen.add(id)
+    options.push({ id, name: label })
+  }
+
+  pushOption(customConfig.defaultModel, customConfig.defaultModel)
+  ;['high', 'mid', 'low', 'xlow'].forEach(tier => {
+    const tierModel = customConfig.tiers?.[tier]?.model
+    if (tierModel) pushOption(tierModel, `${tierModel} (${tier})`)
+  })
+
+  return options
+}
+
+function getModelOptionsForKey(key, availableModels = {}) {
+  if (!key) return []
+  if (key.provider === 'custom') return buildCustomModelOptions(key.customConfig)
+  return availableModels[key.provider] || []
+}
+
+function formatSendErrorMessage({ error, statusCode, source, cooldownMs }) {
+  if (source === 'local_cooldown') {
+    return `This key is currently rate limited by TBC${cooldownMs ? ` for about ${Math.ceil(cooldownMs / 60_000)}m` : ''}.`
+  }
+  if (source === 'provider_429' || statusCode === 429) {
+    return `Provider returned a 429/rate-limit error.${error ? `\n\n${error}` : ''}`
+  }
+  if (statusCode >= 500) {
+    return `Server error (${statusCode}).${error ? `\n\n${error}` : ''}`
+  }
+  return error || 'Failed to send message.'
+}
+
+function mergeServerMessages(serverMessages = [], localMessages = []) {
+  const pendingMessages = localMessages.filter(msg => msg?.pending)
+  if (pendingMessages.length === 0) return serverMessages
+
+  const getServerImages = (server) => {
+    if (server?.images) return server.images
+    if (Array.isArray(server?.tool_calls)) return server.tool_calls
+    if (typeof server?.tool_calls === 'string') {
+      try {
+        return JSON.parse(server.tool_calls || '[]')
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+
+  const unreconciledPending = pendingMessages.filter(pending => {
+    return !serverMessages.some(server => {
+      if (server?.role !== pending?.role) return false
+      if ((server?.content || '') !== (pending?.content || '')) return false
+
+      const serverImages = JSON.stringify(getServerImages(server))
+      const pendingImages = JSON.stringify(pending?.images || [])
+      return serverImages === pendingImages
+    })
+  })
+
+  if (unreconciledPending.length === 0) return serverMessages
+  return [...serverMessages, ...unreconciledPending]
+}
+
+export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated, chatConfig = {} }) {
   const { authFetch } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
-  const [modelTier, setModelTier] = useState(chatSession?.model_tier || 'high')
+  const [selectedKeyId, setSelectedKeyId] = useState('auto')
+  const [selectedModel, setSelectedModel] = useState('auto')
   const [attachedImages, setAttachedImages] = useState([]) // [{ file, preview, uploaded: { filename, url, mimeType } }]
   const fileInputRef = useRef(null)
   const [streaming, setStreaming] = useState(false)
@@ -57,6 +141,9 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   const [reconnecting, setReconnecting] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const keyOptions = (chatConfig.keyPool?.keys || []).filter(key => key.enabled)
+  const selectedKey = selectedKeyId !== 'auto' ? keyOptions.find(key => key.id === selectedKeyId) || null : null
+  const modelOptions = getModelOptionsForKey(selectedKey, chatConfig.availableModels)
 
   // Load messages when session changes
   useEffect(() => {
@@ -74,7 +161,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         const res = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
         if (cancelled) return
         const data = await res.json()
-        if (data.session?.messages) setMessages(data.session.messages)
+        if (data.session?.messages) setMessages(prev => mergeServerMessages(data.session.messages, prev))
 
         // If backend is NOT streaming, ensure frontend streaming state is cleared
         if (!data.streaming) {
@@ -130,7 +217,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                   case 'done':
                     const finalRes = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
                     const finalData = await finalRes.json()
-                    if (finalData.session?.messages) setMessages(finalData.session.messages)
+                    if (finalData.session?.messages) setMessages(prev => mergeServerMessages(finalData.session.messages, prev))
                     setStreaming(false)
                     setStreamingText(''); setStreamingBlocks([])
                     setStreamingToolCalls([])
@@ -157,8 +244,8 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         const res = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
         if (!res.ok) return
         const data = await res.json()
-        if (data.session?.messages && data.session.messages.length !== messages.length) {
-          setMessages(data.session.messages)
+        if (data.session?.messages) {
+          setMessages(prev => mergeServerMessages(data.session.messages, prev))
         }
         // If backend started streaming (from another device), show content and reconnect
         if (data.streaming && !streaming) {
@@ -196,7 +283,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                   else if (evt.type === 'done') {
                     const fr = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
                     const fd = await fr.json()
-                    if (fd.session?.messages) setMessages(fd.session.messages)
+                    if (fd.session?.messages) setMessages(prev => mergeServerMessages(fd.session.messages, prev))
                     setStreaming(false)
                     setStreamingBlocks([])
                     setStreamingText('')
@@ -228,18 +315,27 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
   useEffect(() => { scrollToBottom() }, [messages, streamingText, streamingToolCalls])
 
-  // Reset streaming state and sync model tier when panel opens
+  // Reset streaming state and chat selectors when panel opens
   useEffect(() => {
     if (open) {
       setStreaming(false)
       setStreamingBlocks([])
       setStreamingText(''); setStreamingToolCalls([])
-      if (chatSession?.model_tier) setModelTier(chatSession.model_tier)
+      setSelectedKeyId('auto')
+      setSelectedModel('auto')
       if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 350)
     }
   }, [open, chatSession?.id])
 
-
+  useEffect(() => {
+    if (selectedKeyId === 'auto') {
+      if (selectedModel !== 'auto') setSelectedModel('auto')
+      return
+    }
+    if (selectedModel !== 'auto' && !modelOptions.some(model => model.id === selectedModel)) {
+      setSelectedModel('auto')
+    }
+  }, [selectedKeyId, selectedModel, modelOptions])
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || [])
@@ -274,12 +370,12 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   const resizeInput = (el) => {
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px'
   }
 
   const resetInputHeight = () => {
     if (!inputRef.current) return
-    inputRef.current.style.height = '38px'
+    inputRef.current.style.height = 'auto'
   }
 
   const sendMessage = async () => {
@@ -313,11 +409,13 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     }
 
     const userMsg = input.trim()
+    const uploadedImages = attachedImages.filter(a => a.uploaded)
+    const imageUrls = uploadedImages.map(a => a.uploaded.url)
+    const optimisticId = `pending-${Date.now()}`
     setInput('')
     resetInputHeight()
-    const imageUrls = attachedImages.filter(a => a.uploaded).map(a => a.uploaded.url)
     setAttachedImages([])
-    setMessages(prev => [...prev, { role: 'user', content: userMsg, images: imageUrls }])
+    setMessages(prev => [...prev, { id: optimisticId, role: 'user', content: userMsg, images: imageUrls, pending: true }])
     setStreaming(true)
     setStreamingText(''); setStreamingBlocks([])
     setStreamingToolCalls([])
@@ -328,19 +426,35 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMsg,
-          modelTier,
-          images: attachedImages.filter(a => a.uploaded).map(a => ({
+          keyId: selectedKeyId !== 'auto' ? selectedKeyId : null,
+          model: selectedModel !== 'auto' ? selectedModel : null,
+          images: uploadedImages.map(a => ({
             filename: a.uploaded.filename,
             mimeType: a.uploaded.mimeType,
           })),
         }),
       })
 
+      if (!response.ok) {
+        let errorData = null
+        let errorMessage = 'Failed to send message'
+        try {
+          errorData = await response.json()
+          if (errorData?.error) errorMessage = errorData.error
+        } catch {}
+        const err = new Error(errorMessage)
+        err.hardFailure = true
+        err.statusCode = response.status
+        err.payload = errorData || { error: errorMessage, statusCode: response.status }
+        throw err
+      }
+
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let accText = ''
       let accToolCalls = []
+      let streamErrored = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -386,12 +500,20 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                 break
 
               case 'error':
-                accText += `\n\n⚠️ Error: ${data.content}`
-                setStreamingText(accText)
-                setStreamingBlocks(prev => [...prev, { type: 'text', content: `\n\n⚠️ Error: ${data.content}` }])
+                streamErrored = true
+                try {
+                  const errRes = await fetch(`/api/projects/${selectedProject.id}/chats/${activeSession.id}`)
+                  const errData = await errRes.json()
+                  if (errData.session?.messages) {
+                    setMessages(errData.session.messages)
+                  }
+                } catch {
+                  setMessages(prev => prev.map(msg => msg.id === optimisticId ? { ...msg, pending: false, failed: true, error: data.content } : msg))
+                }
                 break
 
               case 'done':
+                setMessages(prev => prev.map(msg => msg.id === optimisticId ? { ...msg, pending: false } : msg))
                 // Finalize — add assistant message with ordered blocks
                 if (accText || accToolCalls.length > 0) {
                   setMessages(prev => [...prev, {
@@ -400,6 +522,9 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                     tool_calls: accToolCalls.length > 0 ? accToolCalls : null,
                   }])
                 }
+                if (streamErrored && !accText && accToolCalls.length === 0) {
+                  setStreamingText('')
+                }
                 // cleared
                 break
             }
@@ -407,14 +532,43 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         }
       }
     } catch (err) {
-      // Connection lost — backend continues processing in background.
-      // Reload saved state and check if still streaming to reconnect.
-      setReconnecting(true)
-      try {
-        const res = await fetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}`)
+      if (err?.hardFailure) {
+        resizeInput(inputRef.current)
+        const formattedError = formatSendErrorMessage(err.payload || { error: err.message, statusCode: err.statusCode || 500 })
+        try {
+          const errRes = await fetch(`/api/projects/${selectedProject.id}/chats/${activeSession.id}`)
+          const errData = await errRes.json()
+          if (errData.session?.messages) {
+            const hasStoredError = errData.session.messages.some(msg => msg.role === 'assistant' && (msg.content || '').trim() === formattedError.trim())
+            if (hasStoredError) {
+              setMessages(errData.session.messages)
+            } else {
+              setMessages([
+                ...errData.session.messages,
+                { role: 'assistant', content: formattedError, success: false },
+              ])
+            }
+          } else {
+            setMessages(prev => [
+              ...prev.map(msg => msg.id === optimisticId ? { ...msg, pending: false, failed: true, error: err.message || 'Failed to send message' } : msg),
+              { role: 'assistant', content: formattedError },
+            ])
+          }
+        } catch {
+          setMessages(prev => [
+            ...prev.map(msg => msg.id === optimisticId ? { ...msg, pending: false, failed: true, error: err.message || 'Failed to send message' } : msg),
+            { role: 'assistant', content: formattedError },
+          ])
+        }
+      } else {
+        // Connection lost — backend continues processing in background.
+        // Reload saved state and check if still streaming to reconnect.
+        setReconnecting(true)
+        try {
+          const res = await fetch(`/api/projects/${selectedProject.id}/chats/${activeSession.id}`)
         if (res.ok) {
           const data = await res.json()
-          if (data.session?.messages) setMessages(data.session.messages)
+          if (data.session?.messages) setMessages(prev => mergeServerMessages(data.session.messages, prev))
           if (data.streaming && data.streamingContent) {
             // Still streaming — show current content and reconnect
             setStreamingText(data.streamingContent.text || '')
@@ -456,6 +610,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         }
       } catch {}
       setReconnecting(false)
+      }
     } finally {
       setStreaming(false)
       setStreamingText(''); setStreamingBlocks([])
@@ -515,24 +670,9 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
           </div>
         )}
 
+
         {/* Model selector + Input area */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 p-3 bg-white dark:bg-neutral-800">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] text-neutral-400 dark:text-neutral-500">Model</span>
-            <select
-              value={modelTier}
-              onChange={(e) => setModelTier(e.target.value)}
-              className="px-2 py-0.5 text-xs bg-neutral-100 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              {['high', 'mid', 'low', 'xlow'].map(tier => {
-                const info = modelTiers[tier]
-                const label = info?.model
-                  ? `${tier.charAt(0).toUpperCase() + tier.slice(1)} — ${info.model}${info.reasoningEffort ? ` (${info.reasoningEffort})` : ''}`
-                  : tier.charAt(0).toUpperCase() + tier.slice(1)
-                return <option key={tier} value={tier}>{label}</option>
-              })}
-            </select>
-          </div>
           {/* Image previews */}
           {attachedImages.length > 0 && (
             <div className="flex gap-2 mb-2 overflow-x-auto">
@@ -546,15 +686,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               ))}
             </div>
           )}
-          <div className="flex items-center gap-2">
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={streaming}
-              className="p-3 rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600 disabled:opacity-50 transition-colors shrink-0"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
+          <div className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-3 shadow-sm">
             <textarea
               ref={inputRef}
               value={input}
@@ -563,17 +695,58 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               placeholder="Type a message..."
               disabled={streaming}
               rows={1}
-              className="flex-1 resize-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-base text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 max-h-32 overflow-y-auto"
-              style={{ minHeight: '38px' }}
+              className="w-full resize-none bg-transparent px-0 py-0 text-base text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none disabled:opacity-50 max-h-40 overflow-y-auto"
+              style={{ minHeight: '1.5rem' }}
               onInput={(e) => resizeInput(e.target)}
             />
-            <button
-              onClick={sendMessage}
-              disabled={streaming || !input.trim()}
-              className="p-3 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-            >
-              {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-            </button>
+            <div className="mt-3 flex items-center gap-2 sm:gap-3">
+              <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={streaming}
+                className="h-9 w-9 flex items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-50 transition-colors shrink-0"
+                title="Attach images"
+                aria-label="Attach images"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+              <div className="min-w-0 flex-1 flex items-center gap-2">
+                <select
+                  value={selectedKeyId}
+                  onChange={(e) => setSelectedKeyId(e.target.value)}
+                  className="min-w-0 flex-1 px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  title="Key"
+                  aria-label="Key"
+                >
+                  <option value="auto">Key: Auto</option>
+                  {keyOptions.map(key => (
+                    <option key={key.id} value={key.id}>{key.label} — {key.provider}</option>
+                  ))}
+                </select>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={selectedKeyId === 'auto'}
+                  className="min-w-0 flex-1 px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                  title="Model"
+                  aria-label="Model"
+                >
+                  <option value="auto">Model: Auto</option>
+                  {modelOptions.map(model => (
+                    <option key={model.id} value={model.id}>{model.name || model.id}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={sendMessage}
+                disabled={streaming || !input.trim()}
+                className="h-10 w-10 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+                title="Send"
+                aria-label="Send"
+              >
+                {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
         </div>
       </div>

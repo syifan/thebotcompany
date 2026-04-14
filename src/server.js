@@ -145,6 +145,32 @@ function getProviderRuntimeSelection({ provider, modelTier, keyResult, projectMo
   });
 }
 
+function parseExplicitModelSelection(model) {
+  const value = typeof model === 'string' ? model.trim() : '';
+  if (!value) return { model: null, reasoningEffort: null };
+  if (value.includes('@')) {
+    const [selectedModel, reasoningEffort] = value.split('@', 2);
+    return {
+      model: selectedModel || null,
+      reasoningEffort: reasoningEffort || null,
+    };
+  }
+  return { model: value, reasoningEffort: null };
+}
+
+function formatStoredChatErrorMessage({ error, statusCode, source, cooldownMs }) {
+  if (source === 'local_cooldown') {
+    return `This key is currently rate limited by TBC${cooldownMs ? ` for about ${Math.ceil(cooldownMs / 60_000)}m` : ''}.`;
+  }
+  if (source === 'provider_429' || statusCode === 429) {
+    return `Provider returned a 429/rate-limit error.${error ? `\n\n${error}` : ''}`;
+  }
+  if ((statusCode || 0) >= 500) {
+    return `Server error (${statusCode}).${error ? `\n\n${error}` : ''}`;
+  }
+  return error || 'Failed to send message.';
+}
+
 function detectProviderFromToken(token) {
   if (!token) return 'anthropic';
   const p = detectTokenProvider(token);
@@ -4094,40 +4120,89 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', async () => {
+        const respondChatError = (statusCode, payload) => {
+          try {
+            chatSaveMessage(runner.chatsDir, chatId, 'assistant', formatStoredChatErrorMessage({
+              error: payload.error,
+              statusCode,
+              source: payload.source || 'server',
+              cooldownMs: payload.cooldownMs || 0,
+            }), null, { success: false });
+          } catch {}
+          res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(payload));
+        };
         try {
           const data = JSON.parse(body);
           if (!data.message?.trim()) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Message is required' }));
+            respondChatError(400, { error: 'Message is required', source: 'validation' });
             return;
           }
 
-          // Resolve API key
+          // Save user message once for this send attempt
+          const imageUrls = (data.images || []).map(img => `/api/projects/${projectId}/uploads/${img.filename}`);
+          chatSaveMessage(runner.chatsDir, chatId, 'user', data.message.trim(), imageUrls.length > 0 ? imageUrls : null);
+
+          // Resolve API key / model selection
           const config = runner.loadConfig();
           const oauthTokenGetter = async (authFile, provider) => {
             return getOAuthAccessToken(provider, runner.id);
           };
-          const keyResult = await resolveKeyForProject(config, null, oauthTokenGetter);
-          if (!keyResult?.token) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'No API key configured. Add one in Settings > Credentials.' }));
+          const explicitKeyId = typeof data.keyId === 'string' && data.keyId.trim() ? data.keyId.trim() : null;
+          const { model: explicitModel, reasoningEffort: explicitReasoningEffort } = parseExplicitModelSelection(data.model);
+          if (explicitModel && !explicitKeyId) {
+            respondChatError(400, { error: 'Select a key before selecting a specific model.', source: 'validation' });
             return;
           }
 
-          // Resolve model from request's model tier (frontend sends it with each message)
+          const selectedKeySafe = explicitKeyId
+            ? (getKeyPoolSafe().keys || []).find(key => key.id === explicitKeyId) || null
+            : null;
+          if (explicitKeyId && !selectedKeySafe) {
+            respondChatError(404, { error: 'Selected API key was not found.', errorType: 'key_not_found', source: 'local_selection' });
+            return;
+          }
+          if (selectedKeySafe && !selectedKeySafe.enabled) {
+            respondChatError(400, { error: 'Selected API key is disabled.', errorType: 'key_disabled', source: 'local_selection' });
+            return;
+          }
+          if (selectedKeySafe?.rateLimited) {
+            respondChatError(429, {
+              error: `Selected API key is currently rate limited${selectedKeySafe.cooldownMs ? ` for about ${Math.ceil(selectedKeySafe.cooldownMs / 60_000)}m` : ''}.`,
+              errorType: 'key_rate_limited',
+              source: 'local_cooldown',
+              cooldownMs: selectedKeySafe.cooldownMs || 0,
+            });
+            return;
+          }
+
+          const keyConfig = explicitKeyId
+            ? { ...config, keySelection: { keyId: explicitKeyId, fallback: false } }
+            : config;
+          const keyResult = await resolveKeyForProject(keyConfig, null, oauthTokenGetter);
+          if (!keyResult?.token) {
+            respondChatError(400, { error: explicitKeyId ? 'Selected API key is unavailable.' : 'No API key configured. Add one in Settings > Credentials.', source: explicitKeyId ? 'local_selection' : 'configuration' });
+            return;
+          }
+          if (explicitKeyId && keyResult.keyId !== explicitKeyId) {
+            respondChatError(400, { error: 'Selected API key is unavailable.', errorType: 'key_unavailable', source: 'local_selection' });
+            return;
+          }
+
           const modelTier = data.modelTier || 'high';
           const providerHint = keyResult.provider || detectProviderFromToken(keyResult.token);
-          const runtimeSelection = getProviderRuntimeSelection({
-            provider: providerHint,
-            modelTier,
-            keyResult,
-            projectModels: config.models,
-          });
-
-          // Save user message once (before any retry/fallback)
-          // Save user message with image references
-          const imageUrls = (data.images || []).map(img => `/api/projects/${projectId}/uploads/${img.filename}`);
-          chatSaveMessage(runner.chatsDir, chatId, 'user', data.message.trim(), imageUrls.length > 0 ? imageUrls : null);
+          const runtimeSelection = explicitModel
+            ? {
+                selectedModel: explicitModel,
+                reasoningEffort: explicitReasoningEffort,
+                customConfig: keyResult.customConfig || null,
+              }
+            : getProviderRuntimeSelection({
+                provider: providerHint,
+                modelTier,
+                keyResult,
+                projectModels: config.models,
+              });
 
           // SSE headers
           res.writeHead(200, {
@@ -4155,12 +4230,20 @@ const server = http.createServer(async (req, res) => {
           try {
             await streamChatMessage(chatOpts);
           } catch (chatErr) {
-            // Check if rate-limited — try fallback key
+            // Check if rate-limited — try fallback key only in auto-key mode
             const isRateLimit = /rate.limit|usage.limit|quota|429/i.test(chatErr.message);
             if (isRateLimit && keyResult.keyId) {
               const cooldownMs = parseSummarizeCooldown(chatErr.message);
               markRateLimited(keyResult.keyId, cooldownMs);
               log(`Chat: marked key ${keyResult.keyId} rate-limited for ${Math.ceil(cooldownMs / 60_000)}m`, runner.id);
+
+              if (explicitKeyId) {
+                chatErr.errorType = 'provider_rate_limited';
+                chatErr.source = 'provider_429';
+                chatErr.cooldownMs = cooldownMs;
+                chatErr.statusCode = 429;
+                throw chatErr;
+              }
 
               // Try fallback key
               const fallbackKey = await resolveKeyForProject(config, null, oauthTokenGetter);
@@ -4189,11 +4272,28 @@ const server = http.createServer(async (req, res) => {
 
           res.end();
         } catch (e) {
+          const errorPayload = {
+            error: e.message,
+            errorType: e.errorType || null,
+            source: e.source || 'server',
+            statusCode: e.statusCode || 500,
+            cooldownMs: e.cooldownMs || 0,
+          };
+          try {
+            chatSaveMessage(runner.chatsDir, chatId, 'assistant', formatStoredChatErrorMessage(errorPayload), null, { success: false });
+          } catch {}
           if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message }));
+            res.writeHead(errorPayload.statusCode, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(errorPayload));
           } else {
-            res.write(`data: ${JSON.stringify({ type: 'error', content: e.message })}\n\n`);
+            res.write(`data: ${JSON.stringify({
+              type: 'error',
+              content: errorPayload.error,
+              errorType: errorPayload.errorType,
+              source: errorPayload.source,
+              statusCode: errorPayload.statusCode,
+              cooldownMs: errorPayload.cooldownMs,
+            })}\n\n`);
             res.end();
           }
         }

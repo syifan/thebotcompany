@@ -1343,7 +1343,10 @@ export default function ProjectView({
           setChatSession(session)
           navigateProjectPath(['chat', session?.id ?? 'new'])
         }}
-        modelTiers={config?.tiers || {}}
+        chatConfig={{
+          keyPool: config?.keyPool || null,
+          availableModels: config?.availableModels || {},
+        }}
       />
       <ReportsPanel
         open={isReportsPanelOpen}

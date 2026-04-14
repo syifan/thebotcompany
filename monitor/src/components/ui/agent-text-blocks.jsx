@@ -20,12 +20,15 @@ export function ThinkingBlock({ children, timestamp }) {
   )
 }
 
-export function ResponseBlock({ content, timestamp }) {
+export function ResponseBlock({ content, timestamp, failed = false }) {
   if (!content || !String(content).trim()) return null
   return (
     <div>
       <Timestamp value={timestamp} />
-      <div className="rounded-2xl rounded-bl-sm bg-neutral-100 dark:bg-neutral-800 px-3 py-2 text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      <div className={failed
+        ? "rounded-2xl rounded-bl-sm border border-red-200 dark:border-red-900 bg-red-100 dark:bg-red-950/40 px-3 py-2 text-sm prose prose-sm prose-red dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+        : "rounded-2xl rounded-bl-sm bg-neutral-100 dark:bg-neutral-800 px-3 py-2 text-sm prose prose-sm prose-neutral dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"}
+      >
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </div>
     </div>
@@ -57,7 +60,7 @@ export function buildChatAssistantBlocks(message) {
   }))
 
   if (message?.content && String(message.content).trim()) {
-    blocks.push({ type: 'response', content: message.content })
+    blocks.push({ type: 'response', content: message.content, failed: message?.success === 0 || message?.success === false })
   }
 
   return blocks
@@ -147,7 +150,7 @@ export function AgentContentBlocks({ blocks = [], showTimestamps = true }) {
             </div>
           )
         }
-        return <ResponseBlock key={block.id || index} content={block.content} timestamp={showTimestamps ? block.timestamp : null} />
+        return <ResponseBlock key={block.id || index} content={block.content} failed={block.failed} timestamp={showTimestamps ? block.timestamp : null} />
       })}
     </div>
   )
