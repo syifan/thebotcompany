@@ -336,7 +336,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     const isNearBottom = distanceFromBottom <= 12
     const hasOverflow = container.scrollHeight > container.clientHeight + 12
     shouldStickToBottomRef.current = isNearBottom
-    setShowScrollToBottom(hasOverflow)
+    setShowScrollToBottom(hasOverflow && !isNearBottom)
   }, [])
 
   const scrollToBottom = useCallback(() => {
@@ -351,11 +351,53 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     const container = messagesContainerRef.current
     if (!container) return
 
+    let touchStartY = null
+
     const handleScroll = () => updateScrollToBottomVisibility()
+    const handleWheel = (event) => {
+      if (event.deltaY < 0) {
+        shouldStickToBottomRef.current = false
+        setShowScrollToBottom(true)
+      }
+    }
+    const handlePointerDown = () => {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+      if (distanceFromBottom > 12) {
+        shouldStickToBottomRef.current = false
+      }
+    }
+    const handleTouchStart = (event) => {
+      touchStartY = event.touches?.[0]?.clientY ?? null
+    }
+    const handleTouchMove = (event) => {
+      const touchY = event.touches?.[0]?.clientY
+      if (touchStartY !== null && touchY !== undefined && touchY > touchStartY + 4) {
+        shouldStickToBottomRef.current = false
+        setShowScrollToBottom(true)
+      }
+    }
+    const handleTouchEnd = () => {
+      touchStartY = null
+    }
+
     container.addEventListener('scroll', handleScroll, { passive: true })
+    container.addEventListener('wheel', handleWheel, { passive: true })
+    container.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    container.addEventListener('touchstart', handleTouchStart, { passive: true })
+    container.addEventListener('touchmove', handleTouchMove, { passive: true })
+    container.addEventListener('touchend', handleTouchEnd, { passive: true })
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true })
     updateScrollToBottomVisibility()
 
-    return () => container.removeEventListener('scroll', handleScroll)
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      container.removeEventListener('wheel', handleWheel)
+      container.removeEventListener('pointerdown', handlePointerDown)
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchcancel', handleTouchEnd)
+    }
   }, [open, chatSession?.id, updateScrollToBottomVisibility])
 
   useEffect(() => {
