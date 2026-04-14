@@ -8,7 +8,7 @@ test.describe('Project navigation', () => {
     await page.goto(`/github.com/${PROJECT_ID}`)
     await page.waitForLoadState('networkidle')
 
-    await page.getByRole('button', { name: /All Projects/ }).click()
+    await page.getByLabel('All Projects').click()
 
     await expect(page).toHaveURL('/')
     await expect(page.getByText(PROJECT_REPO).first()).toBeVisible({ timeout: 5000 })
