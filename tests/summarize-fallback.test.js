@@ -109,9 +109,18 @@ describe('Summarize fallback', () => {
     });
 
     it('key becomes available after cooldown expires', () => {
-      const key = addKey({ label: 'Test', token: 'sk-proj-test', provider: 'openai-codex' });
-      markRateLimited(key.id, 0);
-      assert.ok(!isRateLimited(key.id), 'Key should NOT be rate-limited after 0ms cooldown');
+      const originalNow = Date.now;
+      let now = 1_000_000;
+      Date.now = () => now;
+      try {
+        const key = addKey({ label: 'Test', token: 'sk-proj-test', provider: 'openai-codex' });
+        markRateLimited(key.id, 1_000);
+        assert.ok(isRateLimited(key.id), 'Key should be rate-limited during cooldown');
+        now += 1_001;
+        assert.ok(!isRateLimited(key.id), 'Key should NOT be rate-limited after cooldown expires');
+      } finally {
+        Date.now = originalNow;
+      }
     });
   });
 

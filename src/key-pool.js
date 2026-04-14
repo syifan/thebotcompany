@@ -18,27 +18,98 @@ const POOL_PATH = path.join(TBC_HOME, 'key-pool.json');
 // In-memory rate limit tracking
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, number>} keyId → cooldown-until timestamp */
+const MAX_UNKNOWN_BACKOFF_MS = 24 * 60 * 60_000;
+const UNKNOWN_BACKOFF_FIB_MINUTES = [5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1440];
+
+/** @type {Map<string, { retryAt: number, unknownCount: number }>} */
 const _rateLimits = new Map();
 
-export function markRateLimited(keyId, cooldownMs = 5 * 60_000) {
-  _rateLimits.set(keyId, Date.now() + cooldownMs);
+function getUnknownBackoffMs(unknownCount = 0) {
+  const index = Math.max(0, Math.min(unknownCount, UNKNOWN_BACKOFF_FIB_MINUTES.length - 1));
+  return Math.min(UNKNOWN_BACKOFF_FIB_MINUTES[index] * 60_000, MAX_UNKNOWN_BACKOFF_MS);
+}
+
+function readKeyPoolRaw() {
+  try {
+    const raw = fs.readFileSync(POOL_PATH, 'utf-8');
+    const pool = JSON.parse(raw);
+    if (!Array.isArray(pool.keys)) pool.keys = [];
+    if (!pool.rateLimits || typeof pool.rateLimits !== 'object') pool.rateLimits = {};
+    return pool;
+  } catch {
+    return { keys: [], rateLimits: {} };
+  }
+}
+
+function persistRateLimits() {
+  const pool = readKeyPoolRaw();
+  const serialized = {};
+  for (const [keyId, entry] of _rateLimits.entries()) {
+    if ((entry.retryAt || 0) > Date.now() || (entry.unknownCount || 0) > 0) {
+      serialized[keyId] = {
+        retryAt: entry.retryAt || 0,
+        unknownCount: entry.unknownCount || 0,
+      };
+    }
+  }
+  pool.rateLimits = serialized;
+  saveKeyPool(pool);
+}
+
+function hydrateRateLimits(pool) {
+  _rateLimits.clear();
+  const saved = pool?.rateLimits && typeof pool.rateLimits === 'object' ? pool.rateLimits : {};
+  for (const [keyId, entry] of Object.entries(saved)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const retryAt = Number(entry.retryAt) || 0;
+    const unknownCount = Number(entry.unknownCount) || 0;
+    if (retryAt > Date.now() || unknownCount > 0) {
+      _rateLimits.set(keyId, { retryAt, unknownCount });
+    }
+  }
+}
+
+function getRateLimitEntry(keyId) {
+  const entry = _rateLimits.get(keyId);
+  if (!entry) return null;
+  if (Date.now() >= entry.retryAt) {
+    if (entry.unknownCount > 0) {
+      _rateLimits.set(keyId, { retryAt: 0, unknownCount: entry.unknownCount });
+    } else {
+      _rateLimits.delete(keyId);
+    }
+    persistRateLimits();
+    return null;
+  }
+  return entry;
+}
+
+export function markRateLimited(keyId, cooldownMs = null) {
+  const existing = _rateLimits.get(keyId) || { retryAt: 0, unknownCount: 0 };
+  const parsed = Number(cooldownMs);
+  const hasKnownCooldown = Number.isFinite(parsed) && parsed > 0;
+  const effectiveMs = hasKnownCooldown ? Math.max(1000, parsed) : getUnknownBackoffMs(existing.unknownCount || 0);
+  const retryAt = Math.max(existing.retryAt || 0, Date.now() + effectiveMs);
+  _rateLimits.set(keyId, {
+    retryAt,
+    unknownCount: hasKnownCooldown ? (existing.unknownCount || 0) : (existing.unknownCount || 0) + 1,
+  });
+  persistRateLimits();
+}
+
+export function markKeySucceeded(keyId) {
+  _rateLimits.delete(keyId);
+  persistRateLimits();
 }
 
 export function isRateLimited(keyId) {
-  const until = _rateLimits.get(keyId);
-  if (!until) return false;
-  if (Date.now() >= until) {
-    _rateLimits.delete(keyId);
-    return false;
-  }
-  return true;
+  return !!getRateLimitEntry(keyId);
 }
 
 export function getRateLimitCooldown(keyId) {
-  const until = _rateLimits.get(keyId);
-  if (!until || Date.now() >= until) return 0;
-  return until - Date.now();
+  const entry = getRateLimitEntry(keyId);
+  if (!entry) return 0;
+  return Math.max(0, entry.retryAt - Date.now());
 }
 
 // ---------------------------------------------------------------------------
@@ -46,20 +117,19 @@ export function getRateLimitCooldown(keyId) {
 // ---------------------------------------------------------------------------
 
 export function loadKeyPool() {
-  try {
-    const raw = fs.readFileSync(POOL_PATH, 'utf-8');
-    const pool = JSON.parse(raw);
-    if (!Array.isArray(pool.keys)) pool.keys = [];
-    return pool;
-  } catch {
-    return { keys: [] };
-  }
+  const pool = readKeyPoolRaw();
+  hydrateRateLimits(pool);
+  return pool;
 }
 
 export function saveKeyPool(pool) {
   fs.mkdirSync(TBC_HOME, { recursive: true });
   const tmp = POOL_PATH + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(pool, null, 2), { mode: 0o600 });
+  const data = {
+    ...pool,
+    rateLimits: pool.rateLimits && typeof pool.rateLimits === 'object' ? pool.rateLimits : {},
+  };
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, POOL_PATH);
 }
 

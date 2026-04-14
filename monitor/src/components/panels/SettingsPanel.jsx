@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { Sun, Moon, Monitor, Info, ChevronUp, ChevronDown, Trash2, Plus, X, ChevronRight, ArrowLeft } from 'lucide-react'
+import { DndContext, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Sun, Moon, Monitor, Info, ChevronUp, ChevronDown, Trash2, Plus, X, ChevronRight, ArrowLeft, GripVertical } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import ProviderSelector, { PROVIDERS, ProviderBadge } from '@/components/ui/ProviderSelector'
 
@@ -10,6 +13,154 @@ import { useToast } from '@/contexts/ToastContext'
 // ---------------------------------------------------------------------------
 // Add Credential Wizard
 // ---------------------------------------------------------------------------
+
+function formatCooldown(cooldownMs) {
+  const ms = Math.max(0, Number(cooldownMs) || 0)
+  if (!ms) return null
+  const totalSeconds = Math.ceil(ms / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m left`
+  if (minutes > 0) return `${minutes}m ${seconds}s left`
+  return `${seconds}s left`
+}
+
+function SortableCredentialRow({
+  keyItem,
+  idx,
+  keysLength,
+  editingLabel,
+  editLabelValue,
+  setEditLabelValue,
+  handleSaveLabel,
+  setEditingLabel,
+  setEditingCustomKey,
+  handleReorder,
+  handleToggleEnabled,
+  handleRemoveKey,
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: keyItem.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-xl border p-3 ${
+        keyItem.enabled
+          ? keyItem.rateLimited
+            ? 'border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20'
+            : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50'
+          : 'border-neutral-200 dark:border-neutral-700 bg-neutral-100/50 dark:bg-neutral-900/50 opacity-70'
+      } ${isDragging ? 'shadow-lg ring-2 ring-blue-400/40' : ''}`}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          className="mt-0.5 p-1 -ml-1 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 touch-none cursor-grab active:cursor-grabbing shrink-0"
+          aria-label={`Reorder ${keyItem.label}`}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">{idx + 1}.</span>
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                  !keyItem.enabled ? 'bg-neutral-300 dark:bg-neutral-600' :
+                  keyItem.rateLimited ? 'bg-amber-400 animate-pulse' :
+                  'bg-green-400'
+                }`} />
+                {editingLabel === keyItem.id ? (
+                  <input
+                    type="text"
+                    value={editLabelValue}
+                    onChange={e => setEditLabelValue(e.target.value)}
+                    onBlur={() => handleSaveLabel(keyItem.id)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveLabel(keyItem.id); if (e.key === 'Escape') setEditingLabel(null) }}
+                    autoFocus
+                    className="text-sm font-medium w-full px-2 py-1 bg-white dark:bg-neutral-700 border border-blue-400 rounded"
+                  />
+                ) : (
+                  <button
+                    onClick={() => { setEditingLabel(keyItem.id); setEditLabelValue(keyItem.label) }}
+                    className="text-sm font-medium text-neutral-800 dark:text-neutral-200 hover:text-blue-500 dark:hover:text-blue-400 truncate block text-left"
+                    title="Click to edit label"
+                  >
+                    {keyItem.label}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <ProviderBadge provider={keyItem.provider} />
+                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                  keyItem.type === 'oauth'
+                    ? 'text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/30'
+                    : 'text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800'
+                }`}>
+                  {keyItem.type === 'oauth' ? 'OAuth' : 'API Key'}
+                </span>
+                <code className="text-xs text-neutral-400 dark:text-neutral-500 break-all sm:truncate">{keyItem.preview}</code>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                <span className={keyItem.enabled ? 'text-green-600 dark:text-green-400' : 'text-neutral-500 dark:text-neutral-400'}>
+                  {keyItem.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+                {keyItem.rateLimited && (
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">
+                    Rate limited{keyItem.cooldownMs ? `, ${formatCooldown(keyItem.cooldownMs)}` : ''}
+                  </span>
+                )}
+              </div>
+
+              {keyItem.provider === 'custom' && keyItem.customConfig && (
+                <div className="mt-2 text-[11px] text-neutral-500 dark:text-neutral-400 break-all sm:truncate">
+                  {keyItem.customConfig.apiStyle} · {keyItem.customConfig.baseUrl} · {keyItem.customConfig.defaultModel}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0 pt-0.5">
+              <button onClick={() => handleReorder(keyItem.id, 'up')} disabled={idx === 0} className="p-1.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30" title="Move up"><ChevronUp className="w-4 h-4" /></button>
+              <button onClick={() => handleReorder(keyItem.id, 'down')} disabled={idx === keysLength - 1} className="p-1.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30" title="Move down"><ChevronDown className="w-4 h-4" /></button>
+              <button onClick={() => handleRemoveKey(keyItem.id)} className="p-1.5 text-red-400 hover:text-red-600 dark:hover:text-red-300" title="Remove"><Trash2 className="w-4 h-4" /></button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {keyItem.provider === 'custom' && (
+              <button
+                onClick={() => setEditingCustomKey(keyItem)}
+                className="px-2.5 py-1 text-xs rounded-md border border-cyan-200 text-cyan-700 hover:text-cyan-800 dark:border-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
+              >
+                Edit
+              </button>
+            )}
+            <button
+              onClick={() => handleToggleEnabled(keyItem.id, !keyItem.enabled)}
+              className={`px-2.5 py-1 text-xs rounded-md border ${
+                keyItem.enabled
+                  ? 'border-amber-200 text-amber-700 hover:text-amber-800 dark:border-amber-800 dark:text-amber-400'
+                  : 'border-green-200 text-green-700 hover:text-green-800 dark:border-green-800 dark:text-green-400'
+              }`}
+            >
+              {keyItem.enabled ? 'Disable' : 'Enable'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function CustomCredentialFields({
   token,
@@ -651,7 +802,13 @@ export default function SettingsPanel({
   const { showToast } = useToast()
 
   const [keys, setKeys] = useState([])
+  const [, setNowTick] = useState(0)
   const [allowCustomProvider, setAllowCustomProvider] = useState(true)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
   const [showWizard, setShowWizard] = useState(false)
   const [editingCustomKey, setEditingCustomKey] = useState(null)
   const [editingLabel, setEditingLabel] = useState(null)
@@ -665,6 +822,13 @@ export default function SettingsPanel({
   }
 
   useEffect(() => { fetchKeys() }, [])
+
+  useEffect(() => {
+    const hasCooldown = keys.some(key => (key.cooldownMs || 0) > 0)
+    if (!hasCooldown) return
+    const id = window.setInterval(() => setNowTick(tick => tick + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [keys])
 
   const handleRemoveKey = async (id) => {
     try {
@@ -691,28 +855,42 @@ export default function SettingsPanel({
     } catch {}
   }
 
+  const persistReorder = async (nextKeys, fallbackKeys = keys) => {
+    setKeys(nextKeys)
+    try {
+      const res = await authFetch('/api/keys/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds: nextKeys.map(k => k.id) })
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setKeys(d.keys || [])
+      } else {
+        throw new Error()
+      }
+    } catch {
+      setKeys(fallbackKeys)
+    }
+  }
+
   const handleReorder = async (id, direction) => {
     const idx = keys.findIndex(k => k.id === id)
     if (idx < 0) return
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1
     if (swapIdx < 0 || swapIdx >= keys.length) return
-    const newOrder = [...keys]
-    const tmp = newOrder[idx]
-    newOrder[idx] = newOrder[swapIdx]
-    newOrder[swapIdx] = tmp
-    const orderedIds = newOrder.map(k => k.id)
-    setKeys(newOrder)
-    try {
-      const res = await authFetch('/api/keys/reorder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderedIds })
-      })
-      if (res.ok) {
-        const d = await res.json()
-        setKeys(d.keys || [])
-      }
-    } catch {}
+    const nextKeys = arrayMove(keys, idx, swapIdx)
+    await persistReorder(nextKeys, keys)
+  }
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = keys.findIndex(k => k.id === active.id)
+    const newIndex = keys.findIndex(k => k.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const nextKeys = arrayMove(keys, oldIndex, newIndex)
+    await persistReorder(nextKeys, keys)
   }
 
   const handleSaveLabel = async (id) => {
@@ -855,80 +1033,31 @@ export default function SettingsPanel({
 
           {/* Credential list */}
           <div className="space-y-1">
-            {keys.map((key, idx) => (
-              <div
-                key={key.id}
-                className={`flex items-center gap-2 p-2 rounded-lg border ${
-                  key.enabled
-                    ? key.rateLimited
-                      ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
-                      : 'border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50'
-                    : 'border-neutral-200 dark:border-neutral-700 bg-neutral-100/50 dark:bg-neutral-900/50 opacity-60'
-                }`}
-              >
-                <span className="text-xs text-neutral-400 dark:text-neutral-500 w-4 text-right shrink-0">{idx + 1}.</span>
-                <span className={`w-2 h-2 rounded-full shrink-0 ${
-                  !key.enabled ? 'bg-neutral-300 dark:bg-neutral-600' :
-                  key.rateLimited ? 'bg-amber-400 animate-pulse' :
-                  'bg-green-400'
-                }`} />
-                <div className="flex-1 min-w-0">
-                  {editingLabel === key.id ? (
-                    <input
-                      type="text"
-                      value={editLabelValue}
-                      onChange={e => setEditLabelValue(e.target.value)}
-                      onBlur={() => handleSaveLabel(key.id)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleSaveLabel(key.id); if (e.key === 'Escape') setEditingLabel(null); }}
-                      autoFocus
-                      className="text-xs font-medium w-full px-1 py-0.5 bg-white dark:bg-neutral-700 border border-blue-400 rounded"
-                    />
-                  ) : (
-                    <button
-                      onClick={() => { setEditingLabel(key.id); setEditLabelValue(key.label); }}
-                      className="text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:text-blue-500 dark:hover:text-blue-400 truncate block text-left"
-                      title="Click to edit label"
-                    >
-                      {key.label}
-                    </button>
-                  )}
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <ProviderBadge provider={key.provider} />
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                      key.type === 'oauth'
-                        ? 'text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/30'
-                        : 'text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800'
-                    }`}>
-                      {key.type === 'oauth' ? 'OAuth' : 'API Key'}
-                    </span>
-                    <code className="text-xs text-neutral-400 dark:text-neutral-500 truncate">{key.preview}</code>
-                    {key.rateLimited && (
-                      <span className="text-xs text-amber-500">rate limited</span>
-                    )}
+            {keys.length > 0 ? (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={keys.map(key => key.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {keys.map((key, idx) => (
+                      <SortableCredentialRow
+                        key={key.id}
+                        keyItem={key}
+                        idx={idx}
+                        keysLength={keys.length}
+                        editingLabel={editingLabel}
+                        editLabelValue={editLabelValue}
+                        setEditLabelValue={setEditLabelValue}
+                        handleSaveLabel={handleSaveLabel}
+                        setEditingLabel={setEditingLabel}
+                        setEditingCustomKey={setEditingCustomKey}
+                        handleReorder={handleReorder}
+                        handleToggleEnabled={handleToggleEnabled}
+                        handleRemoveKey={handleRemoveKey}
+                      />
+                    ))}
                   </div>
-                  {key.provider === 'custom' && key.customConfig && (
-                    <div className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                      {key.customConfig.apiStyle} · {key.customConfig.baseUrl} · {key.customConfig.defaultModel}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-0.5 shrink-0">
-                  {key.provider === 'custom' && (
-                    <button
-                      onClick={() => setEditingCustomKey(key)}
-                      className="px-2 py-0.5 text-xs rounded text-cyan-700 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200"
-                    >
-                      Edit
-                    </button>
-                  )}
-                  <button onClick={() => handleReorder(key.id, 'up')} disabled={idx === 0} className="p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => handleReorder(key.id, 'down')} disabled={idx === keys.length - 1} className="p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-30" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => handleToggleEnabled(key.id, !key.enabled)} className={`px-2 py-0.5 text-xs rounded ${key.enabled ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400' : 'text-green-600 hover:text-green-700 dark:text-green-400'}`}>{key.enabled ? 'Disable' : 'Enable'}</button>
-                  <button onClick={() => handleRemoveKey(key.id)} className="p-1 text-red-400 hover:text-red-600 dark:hover:text-red-300" title="Remove"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              </div>
-            ))}
-            {keys.length === 0 && (
+                </SortableContext>
+              </DndContext>
+            ) : (
               <p className="text-xs text-neutral-400 dark:text-neutral-500 py-2">No credentials configured. Click "Add Credential" above to get started.</p>
             )}
           </div>
