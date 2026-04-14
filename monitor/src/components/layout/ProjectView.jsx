@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import SegmentedControl from '@/components/ui/segmented-control'
 import StatusPill from '@/components/ui/status-pill'
 import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope } from 'lucide-react'
@@ -993,10 +993,19 @@ export default function ProjectView({
         <div className="mb-6 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={goToProjectList} className="text-neutral-500 dark:text-neutral-400 shrink-0 px-2">
+              <Link
+                to="/"
+                aria-label="All Projects"
+                onClick={(event) => {
+                  event.preventDefault()
+                  setSelectedProject(null)
+                  window.location.assign('/')
+                }}
+                className="inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-500 dark:text-neutral-400 shrink-0 min-w-10 h-10 px-2"
+              >
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline ml-1">All Projects</span>
-              </Button>
+              </Link>
               <h1 className="text-lg sm:text-2xl font-bold text-neutral-800 dark:text-neutral-100 truncate">{selectedProject.id}</h1>
             </div>
             
