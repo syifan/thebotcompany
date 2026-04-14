@@ -95,9 +95,6 @@ function formatSendErrorMessage({ error, statusCode, source, cooldownMs }) {
 }
 
 function mergeServerMessages(serverMessages = [], localMessages = []) {
-  const pendingMessages = localMessages.filter(msg => msg?.pending)
-  if (pendingMessages.length === 0) return serverMessages
-
   const getServerImages = (server) => {
     if (server?.images) return server.images
     if (Array.isArray(server?.tool_calls)) return server.tool_calls
@@ -111,6 +108,28 @@ function mergeServerMessages(serverMessages = [], localMessages = []) {
     return []
   }
 
+  const normalizeMessage = (msg) => ({
+    role: msg?.role || '',
+    content: msg?.content || '',
+    images: msg?.images || getServerImages(msg),
+    pending: !!msg?.pending,
+    failed: !!msg?.failed,
+    error: msg?.error || null,
+  })
+
+  const messagesEqual = (a = [], b = []) => {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (JSON.stringify(normalizeMessage(a[i])) !== JSON.stringify(normalizeMessage(b[i]))) return false
+    }
+    return true
+  }
+
+  const pendingMessages = localMessages.filter(msg => msg?.pending)
+  if (pendingMessages.length === 0) {
+    return messagesEqual(serverMessages, localMessages) ? localMessages : serverMessages
+  }
+
   const unreconciledPending = pendingMessages.filter(pending => {
     return !serverMessages.some(server => {
       if (server?.role !== pending?.role) return false
@@ -122,8 +141,8 @@ function mergeServerMessages(serverMessages = [], localMessages = []) {
     })
   })
 
-  if (unreconciledPending.length === 0) return serverMessages
-  return [...serverMessages, ...unreconciledPending]
+  const mergedMessages = unreconciledPending.length === 0 ? serverMessages : [...serverMessages, ...unreconciledPending]
+  return messagesEqual(mergedMessages, localMessages) ? localMessages : mergedMessages
 }
 
 export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated, chatConfig = {} }) {
