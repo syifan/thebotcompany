@@ -271,6 +271,17 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     })
   }
 
+  const resizeInput = (el) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+  }
+
+  const resetInputHeight = () => {
+    if (!inputRef.current) return
+    inputRef.current.style.height = '38px'
+  }
+
   const sendMessage = async () => {
     if ((!input.trim() && attachedImages.length === 0) || streaming || !chatSession || !selectedProject) return
 
@@ -303,6 +314,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
     const userMsg = input.trim()
     setInput('')
+    resetInputHeight()
     const imageUrls = attachedImages.filter(a => a.uploaded).map(a => a.uploaded.url)
     setAttachedImages([])
     setMessages(prev => [...prev, { role: 'user', content: userMsg, images: imageUrls }])
@@ -553,10 +565,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               rows={1}
               className="flex-1 resize-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-base text-neutral-800 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 max-h-32 overflow-y-auto"
               style={{ minHeight: '38px' }}
-              onInput={(e) => {
-                e.target.style.height = 'auto'
-                e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px'
-              }}
+              onInput={(e) => resizeInput(e.target)}
             />
             <button
               onClick={sendMessage}

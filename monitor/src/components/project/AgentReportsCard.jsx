@@ -5,7 +5,7 @@ import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import StatusPill from '@/components/ui/status-pill'
 import LiveDuration from '@/components/layout/LiveDuration'
-import ScheduleDiagram, { parseScheduleBlock } from '@/components/ScheduleDiagram'
+import ScheduleDiagram, { MetaBlockBadges, parseScheduleBlock } from '@/components/ScheduleDiagram'
 
 function parseInlineSchedule(text) {
   if (!text) return null
@@ -27,8 +27,8 @@ function parseInlineSchedule(text) {
       }
       if (typeof step.agent !== 'string' || !step.agent.trim()) return null
       const { agent, ...rest } = step
-      if (!Object.prototype.hasOwnProperty.call(rest, 'prompt')) return null
-      return { [agent]: rest }
+      if (!Object.prototype.hasOwnProperty.call(rest, 'prompt') && !Object.prototype.hasOwnProperty.call(rest, 'task')) return null
+      return { [agent]: rest.task ? rest : { ...rest, task: rest.prompt } }
     })
     return steps.every(Boolean) ? { _steps: steps } : null
   } catch {
@@ -38,6 +38,26 @@ function parseInlineSchedule(text) {
 
 // Lazy report summary — triggers summarization on first render if missing
 const summaryCache = new Map()
+
+function sanitizePanelSummary(text) {
+  if (!text) return null
+  return text
+    .replace(/<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/g, ' ')
+    .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE|EXAM_PASS|EXAM_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, ' ')
+    .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|EXAM_PASS|EXAM_FAIL)\s*-->/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || null
+}
+
+function MetaBlocksSection({ text }) {
+  const hasDirectiveBlocks = /<!--\s*(MILESTONE|CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|PROJECT_COMPLETE|EXAM_PASS|EXAM_FAIL)\s*-->/.test(text || '')
+  if (!hasDirectiveBlocks) return null
+  return (
+    <div className="mt-2">
+      <MetaBlockBadges text={text} expandable={false} />
+    </div>
+  )
+}
 
 function ReportSummary({ reportId, projectId, summary: initialSummary, className }) {
   const [summary, setSummary] = useState(initialSummary || summaryCache.get(reportId) || null)
@@ -65,10 +85,12 @@ function ReportSummary({ reportId, projectId, summary: initialSummary, className
       .finally(() => setLoading(false))
   }, [reportId, projectId, summary, loading])
 
-  if (!summary && !loading) return null
+  const displaySummary = sanitizePanelSummary(summary)
+
+  if ((!summary || !displaySummary) && !loading) return null
   return (
-    <span className={className || "text-xs text-neutral-500 dark:text-neutral-400 italic"}>
-      {loading ? '…' : summary}
+    <span className={className || "text-xs text-neutral-500 dark:text-neutral-400 italic line-clamp-3"}>
+      {loading ? '…' : displaySummary}
     </span>
   )
 }
@@ -252,9 +274,10 @@ export default function AgentReportsCard({
                 <ReportSummary reportId={comment.id} projectId={selectedProject?.id} summary={comment.summary} />
                 {schedule && (
                   <div className="mt-2 max-w-full overflow-hidden">
-                    <ScheduleDiagram schedule={schedule} />
+                    <ScheduleDiagram schedule={schedule} expandable={false} className="not-prose" />
                   </div>
                 )}
+                <MetaBlocksSection text={comment.body} />
               </div>
             </div>
           )})}

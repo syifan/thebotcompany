@@ -9,6 +9,8 @@
   font-weight: 400;
   color: #213547;
   background-color: #f8f9fa;
+  --widget-side-padding: 0.75rem;
+  --widget-scrollbar-width: 0.375rem;
 }
 
 :root.dark {
@@ -96,22 +98,36 @@ body {
   color: #f5f5f5;
 }
 
-/* ---- Overlay scrollbars: float over content, don't consume layout space ---- */
+/* Desktop dashboard widgets: keep internal scrolling and make the header account for
+   the body scrollbar on the right so header/body content widths match. */
+@media (min-width: 640px) {
+  .dashboard-widget-header {
+    padding-left: calc(var(--widget-side-padding) + var(--widget-scrollbar-width));
+    padding-right: var(--widget-side-padding);
+  }
 
-/* Use overlay instead of auto so scrollbars don't shrink content area.
-   `overflow: overlay` is deprecated but still works in Chrome/Safari/Edge. */
-@supports (overflow: overlay) {
-  .overflow-y-auto { overflow-y: overlay !important; }
-  .overflow-x-auto { overflow-x: overlay !important; }
-  .overflow-auto   { overflow:   overlay !important; }
+  .dashboard-widget-scroll {
+    padding-left: calc(var(--widget-side-padding) - var(--widget-scrollbar-width));
+    padding-right: calc(var(--widget-side-padding) - var(--widget-scrollbar-width));
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+@supports (scrollbar-gutter: stable) {
+  @media (min-width: 640px) {
+    .dashboard-widget-scroll {
+      scrollbar-gutter: stable both-edges;
+    }
+  }
 }
 
 /* Auto-hide scrollbar thumbs: transparent until hover (all browsers) */
 
 /* WebKit / Blink (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: var(--widget-scrollbar-width);
+  height: var(--widget-scrollbar-width);
 }
 ::-webkit-scrollbar-track {
   background: transparent;

@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
 
 export default function DashboardWidget({ icon: Icon, title, badge, headerRight, headerExtra, children, className, contentClassName, contentOnScroll, footer }) {
   return (
-    <Card className={cn("h-[500px] flex flex-col", className)}>
-      <CardHeader className="shrink-0 pb-2">
+    <Card className={cn("flex flex-col sm:h-[500px]", className)}>
+      <CardHeader className="dashboard-widget-header shrink-0 pb-2">
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             {Icon && <Icon className="w-4 h-4" />}
@@ -17,7 +17,7 @@ export default function DashboardWidget({ icon: Icon, title, badge, headerRight,
         {headerExtra}
       </CardHeader>
       <CardContent
-        className={cn("flex-1 min-h-0 overflow-y-auto overflow-x-hidden pt-0", contentClassName)}
+        className={cn("pt-0 sm:flex-1 sm:min-h-0 dashboard-widget-scroll", contentClassName)}
         onScroll={contentOnScroll}
       >
         {children}

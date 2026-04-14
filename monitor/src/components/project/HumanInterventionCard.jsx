@@ -48,7 +48,9 @@ export default function HumanInterventionCard({
       }
       footer={isWriteMode && (
         <>
-          <Separator className="mx-6 mb-2 shrink-0" />
+          <div className="px-6 mb-2 shrink-0">
+            <Separator />
+          </div>
           <div className="px-6 pb-6 shrink-0">
             <Button
               onClick={() => setCreateIssueModal({ open: true, title: '', body: '', creating: false, error: null })}

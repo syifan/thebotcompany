@@ -987,7 +987,7 @@ export default function ProjectView({
 
   return (
     <div className="flex h-screen overflow-hidden">
-    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 p-6 max-w-screen-2xl mx-auto overflow-y-auto overflow-x-hidden">
+    <div className="flex-1 min-w-0 bg-neutral-50 dark:bg-neutral-950 px-3 py-4 sm:p-6 max-w-screen-2xl mx-auto overflow-y-auto overflow-x-hidden">
       <div>
         {/* Header */}
         <div className="mb-6 space-y-3">
@@ -1142,7 +1142,7 @@ export default function ProjectView({
             )}
 
             {/* Row 1: State, Cost & Budget, Config */}
-            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(22.5em, 1fr))" }}>
+            <div className="grid gap-3 sm:gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 22.5em), 1fr))" }}>
               <OrchestratorStateCard
                 selectedProject={selectedProject}
                 globalUptime={globalUptime}
