@@ -1033,24 +1033,31 @@ export default function SettingsPanel({
 
           {/* Credential list */}
           <div className="space-y-1">
-            {keys.map((key, idx) => (
-                  <SortableCredentialRow
-                    key={key.id}
-                    keyItem={key}
-                    idx={idx}
-                    keysLength={keys.length}
-                    editingLabel={editingLabel}
-                    editLabelValue={editLabelValue}
-                    setEditLabelValue={setEditLabelValue}
-                    handleSaveLabel={handleSaveLabel}
-                    setEditingLabel={setEditingLabel}
-                    setEditingCustomKey={setEditingCustomKey}
-                    handleReorder={handleReorder}
-                    handleToggleEnabled={handleToggleEnabled}
-                    handleRemoveKey={handleRemoveKey}
-                  />
-                ))}
-                {keys.length === 0 && (
+            {keys.length > 0 ? (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={keys.map(key => key.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {keys.map((key, idx) => (
+                      <SortableCredentialRow
+                        key={key.id}
+                        keyItem={key}
+                        idx={idx}
+                        keysLength={keys.length}
+                        editingLabel={editingLabel}
+                        editLabelValue={editLabelValue}
+                        setEditLabelValue={setEditLabelValue}
+                        handleSaveLabel={handleSaveLabel}
+                        setEditingLabel={setEditingLabel}
+                        setEditingCustomKey={setEditingCustomKey}
+                        handleReorder={handleReorder}
+                        handleToggleEnabled={handleToggleEnabled}
+                        handleRemoveKey={handleRemoveKey}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            ) : (
               <p className="text-xs text-neutral-400 dark:text-neutral-500 py-2">No credentials configured. Click "Add Credential" above to get started.</p>
             )}
           </div>
