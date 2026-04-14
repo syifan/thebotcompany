@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Loader2, Plus, X } from 'lucide-react'
+import { Send, Loader2, Plus, X, ChevronDown } from 'lucide-react'
 import { Panel, PanelHeader } from '@/components/ui/panel'
 import { useAuth } from '@/hooks/useAuth'
 import { AgentContentBlocks, buildChatAssistantBlocks } from '@/components/ui/agent-text-blocks'
@@ -139,8 +139,10 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   const [streamingToolCalls, setStreamingToolCalls] = useState([])
   const [streamingBlocks, setStreamingBlocks] = useState([]) // ordered: {type:'text',content} | {type:'tool',...}
   const [reconnecting, setReconnecting] = useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const shouldStickToBottomRef = useRef(true)
   const keyOptions = (chatConfig.keyPool?.keys || []).filter(key => key.enabled)
   const selectedKey = selectedKeyId !== 'auto' ? keyOptions.find(key => key.id === selectedKeyId) || null : null
   const modelOptions = getModelOptionsForKey(selectedKey, chatConfig.availableModels)
@@ -308,12 +310,39 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
   // Auto-scroll — use scrollTop instead of scrollIntoView to prevent parent scroll
   const messagesContainerRef = useRef(null)
-  const scrollToBottom = useCallback(() => {
+  const updateScrollToBottomVisibility = useCallback(() => {
     const container = messagesContainerRef.current
-    if (container) container.scrollTop = container.scrollHeight
+    if (!container) return
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    const isNearBottom = distanceFromBottom <= 12
+    const hasOverflow = container.scrollHeight > container.clientHeight + 12
+    shouldStickToBottomRef.current = isNearBottom
+    setShowScrollToBottom(hasOverflow)
   }, [])
 
-  useEffect(() => { scrollToBottom() }, [messages, streamingText, streamingToolCalls])
+  const scrollToBottom = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+    shouldStickToBottomRef.current = true
+    updateScrollToBottomVisibility()
+  }, [])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => updateScrollToBottomVisibility()
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    updateScrollToBottomVisibility()
+
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [open, chatSession?.id, updateScrollToBottomVisibility])
+
+  useEffect(() => {
+    if (!shouldStickToBottomRef.current) return
+    scrollToBottom()
+  }, [messages, streamingText, streamingToolCalls, scrollToBottom])
 
   // Reset streaming state and chat selectors when panel opens
   useEffect(() => {
@@ -323,9 +352,11 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
       setStreamingText(''); setStreamingToolCalls([])
       setSelectedKeyId('auto')
       setSelectedModel('auto')
+      shouldStickToBottomRef.current = true
+      requestAnimationFrame(() => scrollToBottom())
       if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 350)
     }
-  }, [open, chatSession?.id])
+  }, [open, chatSession?.id, scrollToBottom])
 
   useEffect(() => {
     if (selectedKeyId === 'auto') {
@@ -632,34 +663,51 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
       </PanelHeader>
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Messages area */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-1 overscroll-contain">
-          {messages.length === 0 && !streaming && (
-            <div className="text-center text-neutral-400 dark:text-neutral-500 text-sm py-12">
-              Ask anything about the project...
-            </div>
-          )}
-          {messages.map((msg, i) => (
-            <MessageBubble key={i} msg={msg} />
-          ))}
-
-          {/* Streaming indicators */}
-          {streaming && streamingBlocks.length > 0 && (
-            <div className="flex justify-start mb-3">
-              <div className="max-w-[90%]">
-                <AgentContentBlocks blocks={streamingBlocks} />
+        <div className="relative flex-1 min-h-0">
+          <div
+            ref={messagesContainerRef}
+            className="h-full overflow-y-auto overflow-x-hidden p-4 space-y-1 overscroll-contain"
+          >
+            {messages.length === 0 && !streaming && (
+              <div className="text-center text-neutral-400 dark:text-neutral-500 text-sm py-12">
+                Ask anything about the project...
               </div>
-            </div>
-          )}
+            )}
+            {messages.map((msg, i) => (
+              <MessageBubble key={i} msg={msg} />
+            ))}
 
-          {streaming && !streamingText && streamingToolCalls.length === 0 && (
-            <div className="flex justify-start mb-3">
-              <div className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2">
-                <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
+            {/* Streaming indicators */}
+            {streaming && streamingBlocks.length > 0 && (
+              <div className="flex justify-start mb-3">
+                <div className="max-w-[90%]">
+                  <AgentContentBlocks blocks={streamingBlocks} />
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div ref={messagesEndRef} />
+            {streaming && !streamingText && streamingToolCalls.length === 0 && (
+              <div className="flex justify-start mb-3">
+                <div className="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-3 py-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {showScrollToBottom && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              className="absolute bottom-3 right-3 h-10 w-10 rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-600 transition-colors flex items-center justify-center"
+              title="Scroll to bottom"
+              aria-label="Scroll to bottom"
+            >
+              <ChevronDown className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Reconnecting indicator */}

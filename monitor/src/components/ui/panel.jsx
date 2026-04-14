@@ -74,6 +74,10 @@ function Panel({ open, onClose, children, id: propId }) {
   const key = keyRef.current
   const onCloseRef = React.useRef(onClose)
   onCloseRef.current = onClose
+  const [isMobileViewport, setIsMobileViewport] = React.useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth < 768
+  })
 
   const { renderedKey, animate, activePanelKey } = usePanelState()
 
@@ -95,6 +99,14 @@ function Panel({ open, onClose, children, id: propId }) {
       if (!_activePanelKey) document.body.style.overflow = ''
     }
   }, [key])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleResize = () => setIsMobileViewport(window.innerWidth < 768)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const isActive = renderedKey === key
   const shouldAnimate = animate && activePanelKey === key
@@ -128,12 +140,7 @@ function Panel({ open, onClose, children, id: propId }) {
     _slotRef
   ) : null
 
-  return (
-    <>
-      {mobileOverlay}
-      {desktopContent}
-    </>
-  )
+  return isMobileViewport ? mobileOverlay : desktopContent
 }
 
 /**
