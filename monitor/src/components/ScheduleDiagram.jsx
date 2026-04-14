@@ -12,10 +12,11 @@ const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f97316', '#ec4899', '#06b6d4'
 const isDark = () => document.documentElement.classList.contains('dark')
 
 // Reusable collapsible card: header with chevron flush right, expandable body
-function MetaCard({ label, color, defaultOpen = false, children }) {
+function MetaCard({ label, color, defaultOpen = false, expandable = true, children }) {
   const [expanded, setExpanded] = useState(defaultOpen)
   const dark = isDark()
   const hasBody = !!children
+  const showBody = hasBody && (expandable ? expanded : defaultOpen)
 
   return (
     <div style={{
@@ -24,17 +25,17 @@ function MetaCard({ label, color, defaultOpen = false, children }) {
       border: `1px solid ${dark ? `${color}50` : `${color}35`}`,
     }}>
       <button
-        onClick={() => hasBody && setExpanded(!expanded)}
+        onClick={() => expandable && hasBody && setExpanded(!expanded)}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', width: '100%',
           background: 'none', border: 'none',
-          cursor: hasBody ? 'pointer' : 'default',
-          borderBottom: expanded && hasBody ? `1px solid ${dark ? `${color}30` : `${color}20`}` : 'none',
+          cursor: expandable && hasBody ? 'pointer' : 'default',
+          borderBottom: showBody ? `1px solid ${dark ? `${color}30` : `${color}20`}` : 'none',
         }}>
         <span style={{ fontSize: 12, fontWeight: 600, color, flex: 1, textAlign: 'left' }}>{label}</span>
-        {hasBody && <ChevronDown style={{ width: 12, height: 12, color, transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
+        {expandable && hasBody && <ChevronDown style={{ width: 12, height: 12, color, transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
       </button>
-      {expanded && hasBody && (
+      {showBody && (
         <div style={{
           padding: '8px 12px',
           fontSize: 13, lineHeight: 1.5,
@@ -189,13 +190,13 @@ function ScheduleBody({ schedule }) {
   )
 }
 
-function ScheduleDiagram({ schedule }) {
+function ScheduleDiagram({ schedule, expandable = true, className = 'my-4 not-prose' }) {
   const entries = getAgentEntries(schedule)
   if (entries.length === 0) return null
 
   return (
-    <div className="my-4 not-prose">
-      <MetaCard label={`📋 Schedule · ${entries.length} agent${entries.length > 1 ? 's' : ''}`} color="#3b82f6">
+    <div className={className}>
+      <MetaCard label={`📋 Schedule · ${entries.length} agent${entries.length > 1 ? 's' : ''}`} color="#3b82f6" expandable={expandable} defaultOpen={false}>
         <ScheduleBody schedule={schedule} />
       </MetaCard>
     </div>
@@ -297,7 +298,7 @@ export function parseDirectives(text) {
   return { list, verifyFailFeedback, examFailFeedback }
 }
 
-export function MetaBlockBadges({ text }) {
+export function MetaBlockBadges({ text, expandable = true }) {
   const milestone = parseMilestoneBlock(text)
   const projectComplete = parseProjectComplete(text)
   const examPass = parseExamPass(text)
@@ -311,6 +312,8 @@ export function MetaBlockBadges({ text }) {
         <MetaCard
           label={`🎯 Milestone: ${milestone.title || milestone.description?.slice(0, 60)} · ${milestone.cycles} cycles`}
           color="#8b5cf6"
+          expandable={expandable}
+          defaultOpen={false}
         >
           {milestone.description && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{milestone.description}</div>
@@ -324,21 +327,21 @@ export function MetaBlockBadges({ text }) {
         <MetaCard label="✅ Verification Passed" color="#10b981" />
       )}
       {directives.includes('verify_fail') && (
-        <MetaCard label="❌ Verification Failed" color="#ef4444">
+        <MetaCard label="❌ Verification Failed" color="#ef4444" expandable={expandable} defaultOpen={false}>
           {verifyFailFeedback && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{verifyFailFeedback}</div>
           )}
         </MetaCard>
       )}
       {directives.includes('exam_pass') && (
-        <MetaCard label="⚖️ Themis Approved" color="#10b981">
+        <MetaCard label="⚖️ Themis Approved" color="#10b981" expandable={expandable} defaultOpen={false}>
           {examPass?.message && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{examPass.message}</div>
           )}
         </MetaCard>
       )}
       {directives.includes('exam_fail') && (
-        <MetaCard label="⚖️ Themis Rejected" color="#ef4444">
+        <MetaCard label="⚖️ Themis Rejected" color="#ef4444" expandable={expandable} defaultOpen={false}>
           {examFailFeedback && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{examFailFeedback}</div>
           )}
@@ -348,6 +351,8 @@ export function MetaBlockBadges({ text }) {
         <MetaCard
           label={projectComplete.success ? '🏁 Project Complete' : '🛑 Project Ended'}
           color={projectComplete.success ? '#10b981' : '#ef4444'}
+          expandable={expandable}
+          defaultOpen={false}
         >
           {projectComplete.message && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{projectComplete.message}</div>
