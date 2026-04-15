@@ -90,6 +90,8 @@ function getChatDb(agentDir) {
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL DEFAULT 'New Chat',
+      selected_key_id TEXT DEFAULT NULL,
+      selected_model TEXT DEFAULT NULL,
 
       created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
       updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
@@ -106,6 +108,12 @@ function getChatDb(agentDir) {
   `);
   try {
     db.prepare('ALTER TABLE chat_messages ADD COLUMN success INTEGER DEFAULT NULL').run();
+  } catch {}
+  try {
+    db.prepare('ALTER TABLE chat_sessions ADD COLUMN selected_key_id TEXT DEFAULT NULL').run();
+  } catch {}
+  try {
+    db.prepare('ALTER TABLE chat_sessions ADD COLUMN selected_model TEXT DEFAULT NULL').run();
   } catch {}
 
   return db;
@@ -130,10 +138,16 @@ export function listSessions(agentDir) {
   }
 }
 
-export function createSession(agentDir, title) {
+export function createSession(agentDir, title, opts = {}) {
   const db = getChatDb(agentDir);
   try {
-    const result = db.prepare('INSERT INTO chat_sessions (title) VALUES (?)').run(title || 'New Chat');
+    const selectedKeyId = typeof opts.selectedKeyId === 'string' && opts.selectedKeyId.trim() ? opts.selectedKeyId.trim() : null;
+    const selectedModel = typeof opts.selectedModel === 'string' && opts.selectedModel.trim() ? opts.selectedModel.trim() : null;
+    const result = db.prepare('INSERT INTO chat_sessions (title, selected_key_id, selected_model) VALUES (?, ?, ?)').run(
+      title || 'New Chat',
+      selectedKeyId,
+      selectedModel,
+    );
     return db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(result.lastInsertRowid);
   } finally {
     db.close();
@@ -157,6 +171,24 @@ export function deleteSession(agentDir, chatId) {
   try {
     db.prepare('DELETE FROM chat_messages WHERE session_id = ?').run(chatId);
     db.prepare('DELETE FROM chat_sessions WHERE id = ?').run(chatId);
+  } finally {
+    db.close();
+  }
+}
+
+export function updateSessionPreferences(agentDir, chatId, opts = {}) {
+  const db = getChatDb(agentDir);
+  try {
+    const selectedKeyId = typeof opts.selectedKeyId === 'string' && opts.selectedKeyId.trim() ? opts.selectedKeyId.trim() : null;
+    const selectedModel = typeof opts.selectedModel === 'string' && opts.selectedModel.trim() ? opts.selectedModel.trim() : null;
+    db.prepare(`
+      UPDATE chat_sessions
+      SET selected_key_id = ?,
+          selected_model = ?,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      WHERE id = ?
+    `).run(selectedKeyId, selectedModel, chatId);
+    return db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(chatId);
   } finally {
     db.close();
   }

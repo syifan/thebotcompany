@@ -94,6 +94,13 @@ function formatSendErrorMessage({ error, statusCode, source, cooldownMs }) {
   return error || 'Failed to send message.'
 }
 
+function normalizeSessionSelection(session) {
+  return {
+    selectedKeyId: session?.selected_key_id || 'auto',
+    selectedModel: session?.selected_model || 'auto',
+  }
+}
+
 function mergeServerMessages(serverMessages = [], localMessages = []) {
   const getServerImages = (server) => {
     if (server?.images) return server.images
@@ -162,6 +169,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const shouldStickToBottomRef = useRef(true)
+  const hydratedSessionIdRef = useRef(null)
   const keyOptions = (chatConfig.keyPool?.keys || []).filter(key => key.enabled)
   const selectedKey = selectedKeyId !== 'auto' ? keyOptions.find(key => key.id === selectedKeyId) || null : null
   const modelOptions = getModelOptionsForKey(selectedKey, chatConfig.availableModels)
@@ -170,10 +178,12 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   useEffect(() => {
     if (!chatSession || !selectedProject) {
       setMessages([])
+      hydratedSessionIdRef.current = null
       return
     }
     if (chatSession._temp) {
       setMessages([])
+      hydratedSessionIdRef.current = null
       return
     }
     let cancelled = false
@@ -183,6 +193,12 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         if (cancelled) return
         const data = await res.json()
         if (data.session?.messages) setMessages(prev => mergeServerMessages(data.session.messages, prev))
+        if (hydratedSessionIdRef.current !== chatSession.id && data.session) {
+          const persistedSelection = normalizeSessionSelection(data.session)
+          setSelectedKeyId(persistedSelection.selectedKeyId)
+          setSelectedModel(persistedSelection.selectedModel)
+          hydratedSessionIdRef.current = chatSession.id
+        }
 
         // If backend is NOT streaming, ensure frontend streaming state is cleared
         if (!data.streaming) {
@@ -405,29 +421,49 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     scrollToBottom()
   }, [messages, streamingText, streamingToolCalls, scrollToBottom])
 
-  // Reset streaming state and chat selectors when panel opens
+  // Reset streaming state when panel opens, but keep persisted chat selectors
   useEffect(() => {
     if (open) {
       setStreaming(false)
       setStreamingBlocks([])
       setStreamingText(''); setStreamingToolCalls([])
-      setSelectedKeyId('auto')
-      setSelectedModel('auto')
+      if (chatSession?._temp) {
+        setSelectedKeyId('auto')
+        setSelectedModel('auto')
+      } else if (chatSession) {
+        const persistedSelection = normalizeSessionSelection(chatSession)
+        setSelectedKeyId(persistedSelection.selectedKeyId)
+        setSelectedModel(persistedSelection.selectedModel)
+      }
       shouldStickToBottomRef.current = true
       requestAnimationFrame(() => scrollToBottom())
       if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 350)
     }
-  }, [open, chatSession?.id, scrollToBottom])
+  }, [open, chatSession?.id, chatSession?.selected_key_id, chatSession?.selected_model, chatSession?._temp, scrollToBottom])
 
   useEffect(() => {
     if (selectedKeyId === 'auto') {
       if (selectedModel !== 'auto') setSelectedModel('auto')
       return
     }
-    if (selectedModel !== 'auto' && !modelOptions.some(model => model.id === selectedModel)) {
+    if (selectedModel !== 'auto' && modelOptions.length > 0 && !modelOptions.some(model => model.id === selectedModel)) {
       setSelectedModel('auto')
     }
   }, [selectedKeyId, selectedModel, modelOptions])
+
+  const persistSelection = useCallback(async (nextKeyId, nextModel) => {
+    if (!chatSession || chatSession._temp || !selectedProject) return
+    try {
+      await authFetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}/preferences`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedKeyId: nextKeyId !== 'auto' ? nextKeyId : null,
+          selectedModel: nextModel !== 'auto' ? nextModel : null,
+        }),
+      })
+    } catch {}
+  }, [authFetch, chatSession, selectedProject])
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || [])
@@ -481,7 +517,10 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         const res = await authFetch(`/api/projects/${selectedProject.id}/chats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({
+            selectedKeyId: selectedKeyId !== 'auto' ? selectedKeyId : null,
+            selectedModel: selectedModel !== 'auto' ? selectedModel : null,
+          }),
         })
         if (!res.ok) return
         const data = await res.json()
@@ -822,7 +861,13 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               <div className="min-w-0 flex-1 flex items-center gap-2">
                 <select
                   value={selectedKeyId}
-                  onChange={(e) => setSelectedKeyId(e.target.value)}
+                  onChange={(e) => {
+                    const nextKeyId = e.target.value
+                    setSelectedKeyId(nextKeyId)
+                    const nextModel = nextKeyId === 'auto' ? 'auto' : selectedModel
+                    if (nextKeyId === 'auto') setSelectedModel('auto')
+                    persistSelection(nextKeyId, nextModel)
+                  }}
                   className="min-w-0 flex-1 px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   title="Key"
                   aria-label="Key"
@@ -834,7 +879,11 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                 </select>
                 <select
                   value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
+                  onChange={(e) => {
+                    const nextModel = e.target.value
+                    setSelectedModel(nextModel)
+                    persistSelection(selectedKeyId, nextModel)
+                  }}
                   disabled={selectedKeyId === 'auto'}
                   className="min-w-0 flex-1 px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
                   title="Model"

@@ -14,7 +14,7 @@ import { spawn, execSync } from 'child_process';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
 import { runAgentWithAPI } from './agent-runner.js';
-import { listSessions as chatListSessions, createSession as chatCreateSession, getSession as chatGetSession, deleteSession as chatDeleteSession, streamChatMessage, getActiveStream, isStreaming as isChatStreaming, saveMessage as chatSaveMessage } from './chat.js';
+import { listSessions as chatListSessions, createSession as chatCreateSession, getSession as chatGetSession, deleteSession as chatDeleteSession, updateSessionPreferences as chatUpdateSessionPreferences, streamChatMessage, getActiveStream, isStreaming as isChatStreaming, saveMessage as chatSaveMessage } from './chat.js';
 import { resolveModel, callModel, buildUserMessage, getModels as getPiModels } from './providers/index.js';
 import { buildCustomTierMap, resolveProviderRuntime } from './providers/custom-config.js';
 import { startOAuthLogin, submitManualCode, checkOAuthStatus, getAccessToken as getOAuthAccessToken, clearCredentials as clearOAuthCredentials, listOAuthProviders, loadCredentials as loadOAuthCredentials } from './oauth.js';
@@ -3959,7 +3959,10 @@ const server = http.createServer(async (req, res) => {
       req.on('end', () => {
         try {
           const data = body ? JSON.parse(body) : {};
-          const session = chatCreateSession(runner.chatsDir, data.title);
+          const session = chatCreateSession(runner.chatsDir, data.title, {
+            selectedKeyId: typeof data.selectedKeyId === 'string' ? data.selectedKeyId : null,
+            selectedModel: typeof data.selectedModel === 'string' ? data.selectedModel : null,
+          });
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ session }));
         } catch (e) {
@@ -3992,6 +3995,35 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       }
+      return;
+    }
+
+    // PATCH /api/projects/:id/chats/:chatId/preferences — persist session key/model selection
+    const chatPreferencesMatch = req.method === 'PATCH' && subPath.match(/^chats\/(\d+)\/preferences$/);
+    if (chatPreferencesMatch) {
+      if (!requireWrite(req, res)) return;
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const data = body ? JSON.parse(body) : {};
+          const chatId = parseInt(chatPreferencesMatch[1]);
+          const session = chatUpdateSessionPreferences(runner.chatsDir, chatId, {
+            selectedKeyId: typeof data.selectedKeyId === 'string' && data.selectedKeyId !== 'auto' ? data.selectedKeyId : null,
+            selectedModel: typeof data.selectedModel === 'string' && data.selectedModel !== 'auto' ? data.selectedModel : null,
+          });
+          if (!session) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Session not found' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ session }));
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
       return;
     }
 
@@ -4158,6 +4190,11 @@ const server = http.createServer(async (req, res) => {
           const selectedKeySafe = explicitKeyId
             ? (getKeyPoolSafe().keys || []).find(key => key.id === explicitKeyId) || null
             : null;
+
+          chatUpdateSessionPreferences(runner.chatsDir, chatId, {
+            selectedKeyId: explicitKeyId,
+            selectedModel: explicitModel,
+          });
           if (explicitKeyId && !selectedKeySafe) {
             respondChatError(404, { error: 'Selected API key was not found.', errorType: 'key_not_found', source: 'local_selection' });
             return;
