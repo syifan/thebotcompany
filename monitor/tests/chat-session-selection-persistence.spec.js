@@ -24,6 +24,14 @@ test.describe('Chat session key/model persistence', () => {
     await setupMocks(page)
 
     let savedPreferences = null
+    const session = {
+      id: CHAT_ID,
+      title: 'Persisted chat',
+      updated_at: new Date().toISOString(),
+      message_count: 2,
+      selected_key_id: KEY_ID,
+      selected_model: 'claude-sonnet-4-6',
+    }
 
     await page.route(`**/api/projects/${PROJECT_REPO}/config`, route =>
       route.fulfill({
@@ -36,30 +44,14 @@ test.describe('Chat session key/model persistence', () => {
     )
 
     await page.route(`**/api/projects/${PROJECT_REPO}/chats`, route =>
-      route.fulfill({
-        json: {
-          sessions: [
-            {
-              id: CHAT_ID,
-              title: 'Persisted chat',
-              updated_at: new Date().toISOString(),
-              message_count: 2,
-              selected_key_id: KEY_ID,
-              selected_model: 'claude-sonnet-4-6',
-            },
-          ],
-        },
-      })
+      route.fulfill({ json: { sessions: [session] } })
     )
 
     await page.route(`**/api/projects/${PROJECT_REPO}/chats/${CHAT_ID}`, route =>
       route.fulfill({
         json: {
           session: {
-            id: CHAT_ID,
-            title: 'Persisted chat',
-            selected_key_id: KEY_ID,
-            selected_model: 'claude-sonnet-4-6',
+            ...session,
             messages: [
               { role: 'user', content: 'hello' },
               { role: 'assistant', content: 'hi' },
@@ -72,16 +64,9 @@ test.describe('Chat session key/model persistence', () => {
 
     await page.route(`**/api/projects/${PROJECT_REPO}/chats/${CHAT_ID}/preferences`, async route => {
       savedPreferences = await route.request().postDataJSON()
-      await route.fulfill({
-        json: {
-          session: {
-            id: CHAT_ID,
-            title: 'Persisted chat',
-            selected_key_id: savedPreferences.selectedKeyId,
-            selected_model: savedPreferences.selectedModel,
-          },
-        },
-      })
+      session.selected_key_id = savedPreferences.selectedKeyId
+      session.selected_model = savedPreferences.selectedModel
+      await route.fulfill({ json: { session } })
     })
 
     await page.goto(`${PROJECT_PATH}/chat/${CHAT_ID}`)
@@ -104,5 +89,11 @@ test.describe('Chat session key/model persistence', () => {
       selectedKeyId: KEY_ID_2,
       selectedModel: 'claude-opus-4-6',
     })
+
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.locator('select[aria-label="Key"]').last()).toHaveValue(KEY_ID_2)
+    await expect(page.locator('select[aria-label="Model"]').last()).toHaveValue('claude-opus-4-6')
   })
 })

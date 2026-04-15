@@ -176,9 +176,13 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
 
   // Load messages when session changes
   useEffect(() => {
-    if (!chatSession || !selectedProject) {
-      setMessages([])
-      hydratedSessionIdRef.current = null
+    if (!open || !chatSession || !selectedProject) {
+      if (!open || !chatSession) {
+        hydratedSessionIdRef.current = null
+      }
+      if (!chatSession || !selectedProject) {
+        setMessages([])
+      }
       return
     }
     if (chatSession._temp) {
@@ -193,7 +197,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         if (cancelled) return
         const data = await res.json()
         if (data.session?.messages) setMessages(prev => mergeServerMessages(data.session.messages, prev))
-        if (hydratedSessionIdRef.current !== chatSession.id && data.session) {
+        if (data.session) {
           const persistedSelection = normalizeSessionSelection(data.session)
           setSelectedKeyId(persistedSelection.selectedKeyId)
           setSelectedModel(persistedSelection.selectedModel)
@@ -271,7 +275,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     }
     load()
     return () => { cancelled = true }
-  }, [chatSession?.id, selectedProject?.id])
+  }, [open, chatSession?.id, selectedProject?.id])
 
   // Poll for new messages (syncs across devices, picks up background completions)
   useEffect(() => {
