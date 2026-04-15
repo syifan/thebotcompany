@@ -509,12 +509,17 @@ export async function streamChatMessage(opts) {
               if (/rate.limit|usage.limit|quota|429/i.test(errMsg)) {
                 throw new Error(errMsg);
               }
-              if (fullAssistantText || assistantText) {
-                saveMessage(agentDir, chatId, 'assistant',
-                  (fullAssistantText + assistantText).trim() + `\n\n⚠️ Error: ${errMsg}`,
-                  allToolCalls.length > 0 ? allToolCalls : null,
-                  { success: false });
-              }
+              const errorContent = (fullAssistantText || assistantText)
+                ? (fullAssistantText + assistantText).trim() + `\n\n⚠️ Error: ${errMsg}`
+                : `⚠️ Error: ${errMsg}`;
+              saveMessage(
+                agentDir,
+                chatId,
+                'assistant',
+                errorContent,
+                allToolCalls.length > 0 ? allToolCalls : null,
+                { success: false }
+              );
               sseWrite({ type: 'error', content: errMsg });
               sseWrite({ type: 'done' });
               activeStreams.delete(chatId);
