@@ -72,7 +72,14 @@ export function resolveModel(rawModel, providerOverride = null) {
       providerName: 'custom',
     };
   }
-  const { provider, modelId } = parseTBCModel(rawModel);
+
+  const hasExplicitProviderPrefix = ['openai-codex/', 'openai/', 'google/', 'minimax/', 'anthropic/']
+    .some(prefix => rawModel.startsWith(prefix));
+
+  const { provider, modelId } = hasExplicitProviderPrefix || !providerOverride
+    ? parseTBCModel(rawModel)
+    : { provider: providerOverride, modelId: rawModel };
+
   const piModel = getModel(provider, modelId);
   return { piModel, providerName: provider };
 }

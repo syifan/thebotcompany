@@ -94,10 +94,14 @@ function formatSendErrorMessage({ error, statusCode, source, cooldownMs }) {
   return error || 'Failed to send message.'
 }
 
-function mergeServerMessages(serverMessages = [], localMessages = []) {
-  const pendingMessages = localMessages.filter(msg => msg?.pending)
-  if (pendingMessages.length === 0) return serverMessages
+function normalizeSessionSelection(session) {
+  return {
+    selectedKeyId: session?.selected_key_id || 'auto',
+    selectedModel: session?.selected_model || 'auto',
+  }
+}
 
+function mergeServerMessages(serverMessages = [], localMessages = []) {
   const getServerImages = (server) => {
     if (server?.images) return server.images
     if (Array.isArray(server?.tool_calls)) return server.tool_calls
@@ -111,6 +115,28 @@ function mergeServerMessages(serverMessages = [], localMessages = []) {
     return []
   }
 
+  const normalizeMessage = (msg) => ({
+    role: msg?.role || '',
+    content: msg?.content || '',
+    images: msg?.images || getServerImages(msg),
+    pending: !!msg?.pending,
+    failed: !!msg?.failed,
+    error: msg?.error || null,
+  })
+
+  const messagesEqual = (a = [], b = []) => {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (JSON.stringify(normalizeMessage(a[i])) !== JSON.stringify(normalizeMessage(b[i]))) return false
+    }
+    return true
+  }
+
+  const pendingMessages = localMessages.filter(msg => msg?.pending)
+  if (pendingMessages.length === 0) {
+    return messagesEqual(serverMessages, localMessages) ? localMessages : serverMessages
+  }
+
   const unreconciledPending = pendingMessages.filter(pending => {
     return !serverMessages.some(server => {
       if (server?.role !== pending?.role) return false
@@ -122,8 +148,8 @@ function mergeServerMessages(serverMessages = [], localMessages = []) {
     })
   })
 
-  if (unreconciledPending.length === 0) return serverMessages
-  return [...serverMessages, ...unreconciledPending]
+  const mergedMessages = unreconciledPending.length === 0 ? serverMessages : [...serverMessages, ...unreconciledPending]
+  return messagesEqual(mergedMessages, localMessages) ? localMessages : mergedMessages
 }
 
 export default function ChatPanel({ open, onClose, selectedProject, chatSession, onSessionCreated, chatConfig = {} }) {
@@ -143,18 +169,25 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const shouldStickToBottomRef = useRef(true)
+  const hydratedSessionIdRef = useRef(null)
   const keyOptions = (chatConfig.keyPool?.keys || []).filter(key => key.enabled)
   const selectedKey = selectedKeyId !== 'auto' ? keyOptions.find(key => key.id === selectedKeyId) || null : null
   const modelOptions = getModelOptionsForKey(selectedKey, chatConfig.availableModels)
 
   // Load messages when session changes
   useEffect(() => {
-    if (!chatSession || !selectedProject) {
-      setMessages([])
+    if (!open || !chatSession || !selectedProject) {
+      if (!open || !chatSession) {
+        hydratedSessionIdRef.current = null
+      }
+      if (!chatSession || !selectedProject) {
+        setMessages([])
+      }
       return
     }
     if (chatSession._temp) {
       setMessages([])
+      hydratedSessionIdRef.current = null
       return
     }
     let cancelled = false
@@ -164,6 +197,12 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         if (cancelled) return
         const data = await res.json()
         if (data.session?.messages) setMessages(prev => mergeServerMessages(data.session.messages, prev))
+        if (data.session) {
+          const persistedSelection = normalizeSessionSelection(data.session)
+          setSelectedKeyId(persistedSelection.selectedKeyId)
+          setSelectedModel(persistedSelection.selectedModel)
+          hydratedSessionIdRef.current = chatSession.id
+        }
 
         // If backend is NOT streaming, ensure frontend streaming state is cleared
         if (!data.streaming) {
@@ -236,7 +275,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     }
     load()
     return () => { cancelled = true }
-  }, [chatSession?.id, selectedProject?.id])
+  }, [open, chatSession?.id, selectedProject?.id])
 
   // Poll for new messages (syncs across devices, picks up background completions)
   useEffect(() => {
@@ -317,7 +356,7 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     const isNearBottom = distanceFromBottom <= 12
     const hasOverflow = container.scrollHeight > container.clientHeight + 12
     shouldStickToBottomRef.current = isNearBottom
-    setShowScrollToBottom(hasOverflow)
+    setShowScrollToBottom(hasOverflow && !isNearBottom)
   }, [])
 
   const scrollToBottom = useCallback(() => {
@@ -332,11 +371,53 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     const container = messagesContainerRef.current
     if (!container) return
 
+    let touchStartY = null
+
     const handleScroll = () => updateScrollToBottomVisibility()
+    const handleWheel = (event) => {
+      if (event.deltaY < 0) {
+        shouldStickToBottomRef.current = false
+        setShowScrollToBottom(true)
+      }
+    }
+    const handlePointerDown = () => {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+      if (distanceFromBottom > 12) {
+        shouldStickToBottomRef.current = false
+      }
+    }
+    const handleTouchStart = (event) => {
+      touchStartY = event.touches?.[0]?.clientY ?? null
+    }
+    const handleTouchMove = (event) => {
+      const touchY = event.touches?.[0]?.clientY
+      if (touchStartY !== null && touchY !== undefined && touchY > touchStartY + 4) {
+        shouldStickToBottomRef.current = false
+        setShowScrollToBottom(true)
+      }
+    }
+    const handleTouchEnd = () => {
+      touchStartY = null
+    }
+
     container.addEventListener('scroll', handleScroll, { passive: true })
+    container.addEventListener('wheel', handleWheel, { passive: true })
+    container.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    container.addEventListener('touchstart', handleTouchStart, { passive: true })
+    container.addEventListener('touchmove', handleTouchMove, { passive: true })
+    container.addEventListener('touchend', handleTouchEnd, { passive: true })
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true })
     updateScrollToBottomVisibility()
 
-    return () => container.removeEventListener('scroll', handleScroll)
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      container.removeEventListener('wheel', handleWheel)
+      container.removeEventListener('pointerdown', handlePointerDown)
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchcancel', handleTouchEnd)
+    }
   }, [open, chatSession?.id, updateScrollToBottomVisibility])
 
   useEffect(() => {
@@ -344,29 +425,49 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
     scrollToBottom()
   }, [messages, streamingText, streamingToolCalls, scrollToBottom])
 
-  // Reset streaming state and chat selectors when panel opens
+  // Reset streaming state when panel opens, but keep persisted chat selectors
   useEffect(() => {
     if (open) {
       setStreaming(false)
       setStreamingBlocks([])
       setStreamingText(''); setStreamingToolCalls([])
-      setSelectedKeyId('auto')
-      setSelectedModel('auto')
+      if (chatSession?._temp) {
+        setSelectedKeyId('auto')
+        setSelectedModel('auto')
+      } else if (chatSession) {
+        const persistedSelection = normalizeSessionSelection(chatSession)
+        setSelectedKeyId(persistedSelection.selectedKeyId)
+        setSelectedModel(persistedSelection.selectedModel)
+      }
       shouldStickToBottomRef.current = true
       requestAnimationFrame(() => scrollToBottom())
       if (inputRef.current) setTimeout(() => inputRef.current?.focus(), 350)
     }
-  }, [open, chatSession?.id, scrollToBottom])
+  }, [open, chatSession?.id, chatSession?.selected_key_id, chatSession?.selected_model, chatSession?._temp, scrollToBottom])
 
   useEffect(() => {
     if (selectedKeyId === 'auto') {
       if (selectedModel !== 'auto') setSelectedModel('auto')
       return
     }
-    if (selectedModel !== 'auto' && !modelOptions.some(model => model.id === selectedModel)) {
+    if (selectedModel !== 'auto' && modelOptions.length > 0 && !modelOptions.some(model => model.id === selectedModel)) {
       setSelectedModel('auto')
     }
   }, [selectedKeyId, selectedModel, modelOptions])
+
+  const persistSelection = useCallback(async (nextKeyId, nextModel) => {
+    if (!chatSession || chatSession._temp || !selectedProject) return
+    try {
+      await authFetch(`/api/projects/${selectedProject.id}/chats/${chatSession.id}/preferences`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedKeyId: nextKeyId !== 'auto' ? nextKeyId : null,
+          selectedModel: nextModel !== 'auto' ? nextModel : null,
+        }),
+      })
+    } catch {}
+  }, [authFetch, chatSession, selectedProject])
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || [])
@@ -420,7 +521,10 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
         const res = await authFetch(`/api/projects/${selectedProject.id}/chats`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({
+            selectedKeyId: selectedKeyId !== 'auto' ? selectedKeyId : null,
+            selectedModel: selectedModel !== 'auto' ? selectedModel : null,
+          }),
         })
         if (!res.ok) return
         const data = await res.json()
@@ -761,7 +865,13 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
               <div className="min-w-0 flex-1 flex items-center gap-2">
                 <select
                   value={selectedKeyId}
-                  onChange={(e) => setSelectedKeyId(e.target.value)}
+                  onChange={(e) => {
+                    const nextKeyId = e.target.value
+                    setSelectedKeyId(nextKeyId)
+                    const nextModel = nextKeyId === 'auto' ? 'auto' : selectedModel
+                    if (nextKeyId === 'auto') setSelectedModel('auto')
+                    persistSelection(nextKeyId, nextModel)
+                  }}
                   className="min-w-0 flex-1 px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   title="Key"
                   aria-label="Key"
@@ -773,7 +883,11 @@ export default function ChatPanel({ open, onClose, selectedProject, chatSession,
                 </select>
                 <select
                   value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
+                  onChange={(e) => {
+                    const nextModel = e.target.value
+                    setSelectedModel(nextModel)
+                    persistSelection(selectedKeyId, nextModel)
+                  }}
                   disabled={selectedKeyId === 'auto'}
                   className="min-w-0 flex-1 px-3 py-2 text-xs bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-full text-neutral-700 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
                   title="Model"
