@@ -4,6 +4,13 @@
 
 **Complete the project with passing standard quality, with minimum human involvement.** Work autonomously. Make decisions. Solve problems.
 
+## Your Task
+
+1. **Review your own open issues.** Check whether they have already been resolved or are no longer relevant, and close them when appropriate.
+2. **Do the work assigned to you.** Follow the responsibilities in your own skill file and prompt.
+3. **Stay engaged on issues you are involved in.** If you check status, comment. If you make progress, comment. If you have questions, comment.
+4. **Raise new issues when needed.** If you suspect a problem, create an issue.
+
 ## Shared Knowledge
 
 - There is a private shared knowledge base under `knowledge/`.
