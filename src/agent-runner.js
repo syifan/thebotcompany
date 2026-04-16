@@ -326,6 +326,8 @@ function globFiles(pattern, cwd) {
 // ---------------------------------------------------------------------------
 // Grep implementation
 // ---------------------------------------------------------------------------
+const MAX_TEXT_TOOL_FILE_BYTES = 2 * 1024 * 1024;
+
 function grepFiles(pattern, searchPath, options = {}) {
   const results = [];
   const isDir = fs.statSync(searchPath).isDirectory();
@@ -333,6 +335,10 @@ function grepFiles(pattern, searchPath, options = {}) {
 
   function searchFile(filePath) {
     try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile() || stat.size > MAX_TEXT_TOOL_FILE_BYTES) {
+        return;
+      }
       const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i++) {
@@ -526,11 +532,11 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     proc.unref();  // don't keep the event loop alive
     runtime?.registerProcess?.(proc);
 
-    let stdout = '';
-    let stderr = '';
+    const stdout = createCappedOutputBuffer();
+    const stderr = createCappedOutputBuffer();
     let settled = false;
-    proc.stdout.on('data', (d) => { stdout += d; });
-    proc.stderr.on('data', (d) => { stderr += d; });
+    proc.stdout.on('data', (d) => { stdout.append(d); });
+    proc.stderr.on('data', (d) => { stderr.append(d); });
 
     const killProc = (signal) => {
       // Kill the entire process group (negative pid) to catch grandchildren
@@ -554,13 +560,12 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       runtime?.signal?.removeEventListener('abort', onAbort);
       runtime?.unregisterProcess?.(proc);
       let result = '';
-      if (stdout) result += stdout;
-      if (stderr) result += (result ? '\n' : '') + stderr;
+      const stdoutText = stdout.toString();
+      const stderrText = stderr.toString();
+      if (stdoutText) result += stdoutText;
+      if (stderrText) result += (result ? '\n' : '') + stderrText;
       if (code !== 0 && code !== null) {
         result += `\nExit code: ${code}`;
-      }
-      if (result.length > 100000) {
-        result = result.slice(0, 50000) + '\n\n... (output truncated) ...\n\n' + result.slice(-50000);
       }
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
@@ -596,6 +601,74 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
   });
 }
 
+const MAX_BASH_STREAM_OUTPUT_CHARS = 100000;
+const BASH_OUTPUT_HEAD_CHARS = 50000;
+const BASH_OUTPUT_TAIL_CHARS = 50000;
+const BASH_OUTPUT_TRUNCATION_MARKER = '\n\n... (output truncated) ...\n\n';
+const MAX_TOOL_RESULT_MESSAGE_CHARS = 12000;
+const TOOL_RESULT_DISPLAY_CHARS = 4000;
+
+function truncateForModel(text, maxChars = MAX_TOOL_RESULT_MESSAGE_CHARS) {
+  if (typeof text !== 'string') return JSON.stringify(text);
+  if (text.length <= maxChars) return text;
+  const headChars = Math.ceil(maxChars * 0.6);
+  const tailChars = Math.max(0, maxChars - headChars);
+  return `${text.slice(0, headChars)}${BASH_OUTPUT_TRUNCATION_MARKER}${tailChars > 0 ? text.slice(-tailChars) : ''}`;
+}
+
+function createCappedOutputBuffer(maxChars = MAX_BASH_STREAM_OUTPUT_CHARS) {
+  const headChars = Math.min(BASH_OUTPUT_HEAD_CHARS, maxChars);
+  const tailChars = Math.max(0, maxChars - headChars);
+  let full = '';
+  let head = '';
+  let tail = '';
+  let truncated = false;
+
+  return {
+    append(chunk) {
+      if (!chunk) return;
+      const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      if (!text) return;
+
+      if (!truncated) {
+        if (full.length + text.length <= maxChars) {
+          full += text;
+          return;
+        }
+
+        truncated = true;
+        head = full.slice(0, headChars);
+        const headFromChunk = Math.max(0, headChars - head.length);
+        if (headFromChunk > 0) {
+          head += text.slice(0, headFromChunk);
+        }
+        if (tailChars > 0) {
+          if (text.length >= tailChars) {
+            tail = text.slice(-tailChars);
+          } else {
+            const carry = Math.max(0, tailChars - text.length);
+            tail = full.slice(-carry) + text;
+          }
+        }
+        full = '';
+        return;
+      }
+
+      if (tailChars <= 0) return;
+      if (text.length >= tailChars) {
+        tail = text.slice(-tailChars);
+        return;
+      }
+      const carry = Math.max(0, tailChars - text.length);
+      tail = tail.slice(-carry) + text;
+    },
+    toString() {
+      if (!truncated) return full;
+      return `${head}${BASH_OUTPUT_TRUNCATION_MARKER}${tail}`;
+    },
+  };
+}
+
 function executeRead(input, cwd, allowedPaths = null) {
   let filePath = input.file_path;
   if (!filePath || typeof filePath !== 'string') return 'Error: file_path is required and must be a string';
@@ -603,6 +676,11 @@ function executeRead(input, cwd, allowedPaths = null) {
   if (isRawDbPath(filePath, allowedPaths)) return 'Error: raw project database access is not allowed. Use tbc-db CLI.';
   if (!isPathAllowed(filePath, allowedPaths, 'read')) return `Error: access denied for ${filePath}`;
   try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return `Error reading file: ${filePath} is not a regular file`;
+    if (stat.size > MAX_TEXT_TOOL_FILE_BYTES) {
+      return `Error reading file: ${filePath} is too large for the Read tool (${stat.size} bytes > ${MAX_TEXT_TOOL_FILE_BYTES} byte limit)`;
+    }
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
     const offset = (input.offset || 1) - 1;
@@ -1101,8 +1179,9 @@ export async function runAgentWithAPI(opts) {
 
           const remainingMs = timeoutMs > 0 ? Math.max(0, timeoutMs - (Date.now() - startTime)) : 0;
           const normalized = await executeToolDetailed(tc.name, tc.input, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy);
-          toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: normalized.output });
-          const displayOutput = normalized.output.length > 4000 ? normalized.output.slice(0, 4000) + '\n... (truncated)' : normalized.output;
+          const modelOutput = truncateForModel(normalized.output);
+          toolResults.push({ toolCallId: tc.id, toolName: tc.name, content: modelOutput });
+          const displayOutput = modelOutput.length > TOOL_RESULT_DISPLAY_CHARS ? modelOutput.slice(0, TOOL_RESULT_DISPLAY_CHARS) + '\n... (truncated)' : modelOutput;
           onEvent({ type: 'tool_result', id: tc.id, name: tc.name, output: displayOutput, exitCode: normalized.exitCode, ok: normalized.ok });
         }
 
