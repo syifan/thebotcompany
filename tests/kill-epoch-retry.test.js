@@ -39,7 +39,7 @@ describe('killEpoch interrupts in-flight worker retries', () => {
 
   it('executeSchedule should stop dispatching additional steps after killEpoch', () => {
     const src = readServer();
-    const executeScheduleMatch = src.match(/async executeSchedule\(schedule, config\) \{([\s\S]*?)\n  \}\n\n  async runLoop/);
+    const executeScheduleMatch = src.match(/async executeSchedule\(schedule, config(?:, managerName = null)?\) \{([\s\S]*?)\n  \}\n\n  async runLoop/);
     assert.ok(executeScheduleMatch, 'Could not find executeSchedule() in server.js');
     const body = executeScheduleMatch[1];
 

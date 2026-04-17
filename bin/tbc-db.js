@@ -125,15 +125,14 @@ const args = process.argv.slice(3);
 const visibility = process.env.TBC_VISIBILITY || 'full';
 const focusedIssues = (process.env.TBC_FOCUSED_ISSUES || '').split(',').map(s => s.trim()).filter(Boolean);
 
-if (visibility === 'blind') {
-  // Blind agents cannot use tbc-db at all (except issue-create for escalation)
-  if (command && command !== 'issue-create') {
-    console.error('Access denied: you are in blind mode and cannot query the tracker.');
+if (visibility === 'blind' || visibility === 'focused') {
+  const allowedCommands = new Set(['issue-create', 'pr-create']);
+  if (command && !allowedCommands.has(command)) {
+    const scope = visibility === 'blind' ? 'blind' : 'focused';
+    console.error(`Access denied: you are in ${scope} mode and cannot view the issue tracker or PR board.`);
     process.exit(1);
   }
 }
-
-// For focused mode, we filter after query execution (see below)
 
 const VALID_PR_STATUSES = new Set(['open', 'merged', 'closed']);
 

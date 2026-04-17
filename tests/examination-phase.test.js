@@ -12,6 +12,10 @@ function readServer() {
   return fs.readFileSync(serverPath, 'utf-8');
 }
 
+function readThemis() {
+  return fs.readFileSync(themisPath, 'utf-8');
+}
+
 describe('Themis examination phase', () => {
   it('adds themis manager prompt file', () => {
     assert.ok(fs.existsSync(themisPath), 'Expected agent/managers/themis.md to exist');
@@ -38,12 +42,40 @@ describe('Themis examination phase', () => {
       'Successful PROJECT_COMPLETE should not finalize the project immediately');
   });
 
-  it('adds a dedicated examination phase that runs themis', () => {
+  it('adds a dedicated examination phase that runs themis in full view', () => {
     const src = readServer();
     assert.match(src, /else if \(this\.phase === 'examination'\)/,
       'Expected a dedicated examination phase block in runLoop');
     assert.match(src, /const themis = managers\.find\(m => m\.name === 'themis'\)/,
       'Expected examination phase to run Themis');
+    assert.match(src, /runAgent\(themis, config, null, themisContext, \{ mode: 'full', issues: \[\] \}\)/,
+      'Expected Themis to run in full view');
+    assert.doesNotMatch(src, /runAgent\(themis, config, null, themisContext, \{ mode: 'blind', issues: \[\] \}\)/,
+      'Themis should no longer run blind');
+  });
+
+  it('lets Themis schedule its own independent team across multiple cycles', () => {
+    const src = readServer();
+    assert.match(src, /Resuming interrupted examination schedule/,
+      'Expected examination schedules to resume after interruption');
+    assert.match(src, /schedule = this\.parseSchedule\(result\.resultText\)/,
+      'Expected examination phase to parse Themis schedules');
+    assert.match(src, /executeSchedule\(schedule, config, 'themis'\)/,
+      'Expected examination workers to run under Themis ownership');
+    assert.match(src, /executeSchedule\(this\.currentSchedule, config, 'themis'\)/,
+      'Expected interrupted Themis schedules to resume under Themis ownership');
+    assert.match(src, /let decision = null/,
+      'Expected examination to support non-terminal cycles');
+    assert.match(src, /No decision yet, stay in examination phase/,
+      'Expected schedule-only examination cycles to remain in examination');
+  });
+
+  it('filters scheduled workers by manager ownership', () => {
+    const src = readServer();
+    assert.match(src, /const ownerName = typeof managerName === 'string' \? managerName\.toLowerCase\(\) : null/,
+      'Expected executeSchedule to accept a manager owner');
+    assert.match(src, /return \(worker\.reportsTo \|\| ''\)\.toLowerCase\(\) === ownerName/,
+      'Expected executeSchedule to limit workers to the current manager team');
   });
 
   it('finalizes completion only on EXAM_PASS', () => {
@@ -60,28 +92,42 @@ describe('Themis examination phase', () => {
       'Expected EXAM_PASS to exit examination phase cleanly');
   });
 
-  it('returns to athena and creates issues when Themis does not emit EXAM_PASS', () => {
+  it('returns to athena and creates issues on EXAM_FAIL', () => {
     const src = readServer();
     const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
     assert.ok(examBlock, 'Could not find examination phase block');
     const block = examBlock[1];
 
-    assert.match(block, /let decision = 'fail'/,
-      'Expected examination phase to default to failure');
+    assert.match(block, /decision === 'fail'/,
+      'Expected explicit EXAM_FAIL handling');
     assert.match(block, /phase:\s*'athena'/,
-      'Expected non-pass examination result to return control to Athena');
+      'Expected failed examination result to return control to Athena');
     assert.match(block, /issue-create|createIssue|INSERT INTO issues/i,
-      'Expected non-pass examination result to create issues');
+      'Expected failed examination result to create issues');
   });
 
-  it('treats EXAM_FAIL as optional, not required', () => {
+  it('still falls back to raw feedback when EXAM_FAIL JSON is absent or incomplete', () => {
     const src = readServer();
     const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
     assert.ok(examBlock, 'Could not find examination phase block');
     const block = examBlock[1];
 
     assert.match(block, /rawFeedback/,
-      'Expected examination failure path to fall back to raw Themis output when EXAM_FAIL is absent');
+      'Expected examination failure path to fall back to raw Themis output when structured feedback is absent');
+  });
+
+  it('updates Themis prompt for full-view team-based examination', () => {
+    const themis = readThemis();
+    assert.match(themis, /run in full view, not blind/i,
+      'Expected Themis prompt to make full visibility explicit');
+    assert.match(themis, /may hire workers, retune workers, and schedule workers/i,
+      'Expected Themis prompt to allow team management');
+    assert.match(themis, /Only workers with `reports_to: themis` are on your team\./,
+      'Expected Themis prompt to define an independent team');
+    assert.match(themis, /may take multiple cycles to finish the examination/i,
+      'Expected Themis prompt to allow multi-cycle examination');
+    assert.match(themis, /<!-- SCHEDULE -->/,
+      'Expected Themis prompt to document schedule output');
   });
 
   it('gives Athena context when Themis rejects project completion', () => {

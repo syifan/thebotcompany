@@ -1548,12 +1548,16 @@ class ProjectRunner {
     }
   }
 
-  async executeSchedule(schedule, config) {
+  async executeSchedule(schedule, config, managerName = null) {
     if (!schedule || !schedule._steps) return { total: 0, failures: 0 };
     
     let total = 0;
     let failures = 0;
-    const freshWorkers = this.loadAgents().workers;
+    const ownerName = typeof managerName === 'string' ? managerName.toLowerCase() : null;
+    const freshWorkers = this.loadAgents().workers.filter(worker => {
+      if (!ownerName) return true;
+      return (worker.reportsTo || '').toLowerCase() === ownerName;
+    });
     
     for (const step of schedule._steps) {
       if (!this.running || this.abortCurrentCycle) break;
@@ -1761,7 +1765,7 @@ class ProjectRunner {
           if (schedule) {
             this.currentSchedule = schedule;
             this.saveState(); // Persist schedule before execution so it survives reboot
-            const { total, failures } = await this.executeSchedule(schedule, config);
+            const { total, failures } = await this.executeSchedule(schedule, config, 'athena');
             cycleTotal += total;
             cycleFailures += failures;
           }
@@ -1783,7 +1787,7 @@ class ProjectRunner {
         // Note: don't require completedAgents — schedule may start with a delay step
         if (this.currentSchedule) {
           log(`Resuming interrupted schedule (${this.completedAgents.length} agents already completed${this.completedAgents.length ? ': [' + this.completedAgents.join(', ') + ']' : ''})`, this.id);
-          const { total, failures } = await this.executeSchedule(this.currentSchedule, config);
+          const { total, failures } = await this.executeSchedule(this.currentSchedule, config, 'ares');
           cycleTotal += total;
           cycleFailures += failures;
           this.currentSchedule = null;
@@ -1825,7 +1829,7 @@ class ProjectRunner {
           if (schedule) {
             this.completedAgents = [];
             this.saveState(); // Persist schedule before execution so it survives reboot
-            const { total, failures } = await this.executeSchedule(schedule, config);
+            const { total, failures } = await this.executeSchedule(schedule, config, 'ares');
             cycleTotal += total;
             cycleFailures += failures;
             this.currentSchedule = null;
@@ -1848,7 +1852,7 @@ class ProjectRunner {
         // Resume interrupted verification schedule (e.g. after reboot)
         if (this.currentSchedule && this.completedAgents.length > 0) {
           log(`Resuming interrupted verification schedule (${this.completedAgents.length} agents already completed: [${this.completedAgents.join(', ')}])`, this.id);
-          const { total, failures } = await this.executeSchedule(this.currentSchedule, config);
+          const { total, failures } = await this.executeSchedule(this.currentSchedule, config, 'apollo');
           cycleTotal += total;
           cycleFailures += failures;
           this.currentSchedule = null;
@@ -1893,7 +1897,7 @@ class ProjectRunner {
             this.currentSchedule = schedule;
             this.completedAgents = [];
             this.saveState(); // Persist schedule before execution so it survives reboot
-            const { total, failures } = await this.executeSchedule(schedule, config);
+            const { total, failures } = await this.executeSchedule(schedule, config, 'apollo');
             cycleTotal += total;
             cycleFailures += failures;
             this.currentSchedule = null;
@@ -1934,16 +1938,32 @@ class ProjectRunner {
 
       // ===== PHASE: EXAMINATION (Themis final audit) =====
       else if (this.phase === 'examination') {
+        // Resume interrupted examination schedule (e.g. after reboot)
+        if (this.currentSchedule) {
+          log(`Resuming interrupted examination schedule (${this.completedAgents.length} agents already completed${this.completedAgents.length ? ': [' + this.completedAgents.join(', ') + ']' : ''})`, this.id);
+          const { total, failures } = await this.executeSchedule(this.currentSchedule, config, 'themis');
+          cycleTotal += total;
+          cycleFailures += failures;
+          this.currentSchedule = null;
+          this.completedAgents = [];
+          this.saveState();
+        } else {
         const themis = managers.find(m => m.name === 'themis');
         if (themis) {
           const themisContext = `> **Final completion claim:** ${this.pendingCompletionMessage || 'Project claimed complete'}\n> **Evaluate the entire project, not just the human\'s explicit goal.** Audit correctness, completeness, maintainability, artifacts, tests, docs, and obvious risks.\n\n`;
-          const result = await this.runAgent(themis, config, null, themisContext, { mode: 'blind', issues: [] });
+          const result = await this.runAgent(themis, config, null, themisContext, { mode: 'full', issues: [] });
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
-          let decision = 'fail';
+          let schedule = null;
+          let decision = null;
           let failData = null;
           if (result && result.resultText) {
+            schedule = this.parseSchedule(result.resultText);
+            if (schedule) {
+              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
+            }
+
             if (result.resultText.includes('<!-- EXAM_PASS -->')) {
               decision = 'pass';
             }
@@ -1954,7 +1974,22 @@ class ProjectRunner {
               } catch {
                 failData = { feedback: 'Themis rejected project completion, but the response could not be parsed.' };
               }
+              decision = 'fail';
+            } else if (!schedule) {
+              decision = 'fail';
             }
+          }
+
+          if (schedule) {
+            this.currentSchedule = schedule;
+            this.completedAgents = [];
+            this.saveState();
+            const { total, failures } = await this.executeSchedule(schedule, config, 'themis');
+            cycleTotal += total;
+            cycleFailures += failures;
+            this.currentSchedule = null;
+            this.completedAgents = [];
+            this.saveState();
           }
 
           if (decision === 'pass') {
@@ -1973,7 +2008,7 @@ class ProjectRunner {
             });
             log(`🏁 PROJECT COMPLETE (validated by Themis): ${message}`, this.id);
             broadcastEvent({ type: 'project-complete', project: this.id, success: true, message });
-          } else {
+          } else if (decision === 'fail') {
             let issues = Array.isArray(failData?.issues) ? failData.issues : [];
             const rawFeedback = (result?.resultText || '').trim();
             if (issues.length === 0) {
@@ -2009,8 +2044,12 @@ class ProjectRunner {
             });
             log(`❌ Themis rejected project completion — returning to Athena`, this.id);
             broadcastEvent({ type: 'phase', project: this.id, phase: 'athena', title: this.milestoneTitle || 'Replanning after Themis rejection' });
+          } else {
+            // No decision yet, stay in examination phase — still save
+            this.saveState();
           }
         }
+        } // end else (no interrupted examination schedule)
       }
 
       // If no agent succeeded, don't count this cycle
@@ -2070,7 +2109,7 @@ class ProjectRunner {
       read.push(ownWorkspaceDir);
       write.push(ownWorkspaceDir);
     }
-    if (agent.isManager && agent.name !== 'themis' && visMode !== 'blind') {
+    if (agent.isManager && visMode !== 'blind') {
       read.push(this.workerSkillsDir);
       write.push(this.workerSkillsDir);
     }
@@ -2107,20 +2146,21 @@ class ProjectRunner {
         sharedRules += fs.readFileSync(folderStructurePath, 'utf-8') + '\n\n---\n\n';
       } catch {}
       const visMode = visibility?.mode || 'full';
+      if (visMode === 'full') {
+        const dbPath = path.join(ROOT, 'agent', 'db.md');
+        try {
+          const dbContent = fs.readFileSync(dbPath, 'utf-8');
+          sharedRules += dbContent + '\n\n---\n\n';
+        } catch {}
+      }
       if (agent.name !== 'themis') {
-        if (visMode === 'full') {
-          const dbPath = path.join(ROOT, 'agent', 'db.md');
-          try {
-            const dbContent = fs.readFileSync(dbPath, 'utf-8');
-            sharedRules += dbContent + '\n\n---\n\n';
-          } catch {}
-        } else if (visMode === 'focused') {
-          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker. Work only from the task, the repository, and your own agent notes. If needed, you may create a new issue to report a blocker or finding.\n\n---\n\n';
-        } else {
-          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker and you cannot rely on any agent notes, including your own prior notes. Work only from the task and the repository.\n\n---\n\n';
+        if (visMode === 'focused') {
+          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker or PR board. Work only from the task, the repository, shared knowledge, and your own agent notes. If needed, you may create a new issue or PR record to report a blocker or finding.\n\n---\n\n';
+        } else if (visMode === 'blind') {
+          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker or PR board, and you cannot rely on shared knowledge or any agent notes, including your own prior notes. Work only from the task and the repository. If needed, you may create a new issue or PR record to report a blocker or finding.\n\n---\n\n';
         }
       } else {
-        sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or any agent notes, including your own. Evaluate only the repository, tests, artifacts, and your own fresh inspection.\n\n---\n\n';
+        sharedRules += '\n> **You are Themis, final examination manager.** You run in full view, not blind. Inspect the repository, issue tracker, PR board, shared knowledge, and agent notes directly. You may hire and schedule workers, but only workers who report to you. Your examination team is independent from the Athena, Ares, and Apollo teams, so make your own judgment from primary evidence.\n\n---\n\n';
       }
       const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
