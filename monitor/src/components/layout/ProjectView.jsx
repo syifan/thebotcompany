@@ -80,6 +80,8 @@ export default function ProjectView({
   setNotifCenter,
   theme,
   setTheme,
+  breakMobileExperience,
+  setBreakMobileExperience,
   onAgentChangeRef,
 }) {
   const { isWriteMode, handleLogout, setLoginModal, loginModal, loginInput, setLoginInput, handleLogin, authFetch } = useAuth()
@@ -1374,6 +1376,8 @@ export default function ProjectView({
         onClose={closeSettingsPanel}
         theme={theme}
         setTheme={setTheme}
+        breakMobileExperience={breakMobileExperience}
+        setBreakMobileExperience={setBreakMobileExperience}
         setShowApiKeyHelp={setShowApiKeyHelp}
       />
       <ProjectSettingsPanel

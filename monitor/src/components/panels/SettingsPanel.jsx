@@ -795,6 +795,8 @@ export default function SettingsPanel({
   onClose,
   theme,
   setTheme,
+  breakMobileExperience,
+  setBreakMobileExperience,
   setShowApiKeyHelp,
 }) {
   const { authFetch } = useAuth()
@@ -909,6 +911,13 @@ export default function SettingsPanel({
   }
 
   const notifSupported = typeof window !== 'undefined' && 'Notification' in window
+
+  const updateBreakMobileExperience = (next) => {
+    setBreakMobileExperience(next)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('breakMobileExperience', String(next))
+    }
+  }
   const notifPermission = notifSupported ? Notification.permission : 'default'
 
   return (
@@ -940,6 +949,25 @@ export default function SettingsPanel({
               </button>
             </div>
           </div>
+          <label className="flex items-center justify-between py-2 mt-1 gap-4 cursor-pointer select-none">
+            <div>
+              <span className="text-sm text-neutral-700 dark:text-neutral-300">Intentionally break mobile experience</span>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">
+                Do not work 2am in the bed with your phone.
+              </p>
+            </div>
+            <span className="relative inline-flex items-center shrink-0 h-6 w-11">
+              <input
+                type="checkbox"
+                checked={breakMobileExperience}
+                onChange={(e) => updateBreakMobileExperience(e.target.checked)}
+                className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                aria-label="Intentionally break mobile experience"
+              />
+              <span className="pointer-events-none h-6 w-11 rounded-full bg-neutral-300 transition-colors peer-checked:bg-red-500 dark:bg-neutral-600" />
+              <span className="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+            </span>
+          </label>
         </div>
         <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5 pb-5">
           <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">Notifications</h3>
