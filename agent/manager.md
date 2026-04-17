@@ -148,9 +148,9 @@ Insert `{"delay": N}` steps wherever you need a pause (waiting for CI, builds, e
 You can control what each worker sees by adding `visibility` to each agent step:
 
 **Three levels:**
-- **`full`** (default): Worker can see all issues, comments, and reports via `tbc-db`
-- **`focused`**: Worker can only see issues mentioned in the task (e.g., `#42`). All other issues are hidden. Good for keeping workers on-task without distractions.
-- **`blind`**: Worker cannot access the tracker at all and cannot read agent notes. They only see the task description and the repo code. Good for independent verification — the worker must evaluate on their own without seeing prior discussion. Do not assign an issue to blind workers — they cannot access it.
+- **`full`** (default): Worker can see the issue board, PR board, shared knowledge, and their own notes.
+- **`focused`**: Worker cannot see the issue board or PR board, but can still read shared knowledge and their own notes. They still can create a new issue or TBC PR record if needed.
+- **`blind`**: Worker cannot see the issue board or PR board, cannot read shared knowledge, and cannot read any notes, including their own. They only get the task description and the repo. They still can create a new issue or TBC PR record if needed. Use this for independent verification when you want the worker to reason only from the task and code.
 
 ## PRs
 
