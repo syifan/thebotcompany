@@ -18,6 +18,29 @@
 - Treat `folder_structure.md` as authoritative for project layout.
 - Worker skill files live under `{project_dir}/skills/workers/`.
 
+## Visibility Restrictions
+
+Chat and doctor do not follow these rules.
+
+### What every agent cannot do
+
+- Agents cannot access another agent's private notes. Use `knowledge/` for long-term cross-agent knowledge and TBC issues for temporary communication.
+- Agents cannot close chat or human-opened issues.
+- Agents cannot use `gh` or other GitHub commands to access another repository.
+- Agents cannot access anything outside the project root. See `folder_structure.md`.
+
+### What focused agents cannot do
+
+- Focused agents also cannot do the above.
+- Focused agents cannot see the issue board.
+- Focused agents cannot see PRs.
+
+### What blind agents cannot do
+
+- Blind agents also cannot do the above.
+- Blind agents cannot see shared knowledge.
+- Blind agents cannot read any notes, including their own.
+
 ## Communication
 
 **Use `tbc-db` for all task tracking and communication.** See `db.md` for the full CLI reference.
