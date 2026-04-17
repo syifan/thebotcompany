@@ -28,6 +28,7 @@ function App() {
 
   // Dark mode / theme
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
+  const [breakMobileExperience, setBreakMobileExperience] = useState(() => localStorage.getItem('breakMobileExperience') === 'true')
 
   useEffect(() => {
     const apply = () => {
@@ -42,6 +43,24 @@ function App() {
       return () => mq.removeEventListener('change', apply)
     }
   }, [theme])
+
+  useEffect(() => {
+    localStorage.setItem('breakMobileExperience', String(breakMobileExperience))
+    document.documentElement.classList.toggle('break-mobile-experience', breakMobileExperience)
+    document.body?.classList.toggle('break-mobile-experience', breakMobileExperience)
+
+    const viewportMeta = document.querySelector('meta[name="viewport"]')
+    if (viewportMeta) {
+      viewportMeta.setAttribute(
+        'content',
+        breakMobileExperience
+          ? 'width=1024, initial-scale=1'
+          : 'width=device-width, initial-scale=1'
+      )
+    }
+
+    window.dispatchEvent(new CustomEvent('tbc:break-mobile-experience-changed', { detail: breakMobileExperience }))
+  }, [breakMobileExperience])
 
   // Register service worker (production only)
   useEffect(() => {
@@ -258,6 +277,8 @@ function App() {
           setNotifCenter={setNotifCenter}
           theme={theme}
           setTheme={setTheme}
+          breakMobileExperience={breakMobileExperience}
+          setBreakMobileExperience={setBreakMobileExperience}
         />
       }>
         <Route index element={null} />
@@ -278,6 +299,8 @@ function App() {
           setNotifCenter={setNotifCenter}
           theme={theme}
           setTheme={setTheme}
+          breakMobileExperience={breakMobileExperience}
+          setBreakMobileExperience={setBreakMobileExperience}
           onAgentChangeRef={onAgentChangeRef}
         />
       } />

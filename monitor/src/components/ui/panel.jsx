@@ -67,6 +67,11 @@ function usePanelState() {
 /**
  * Panel portals its children into the PanelSlot DOM node.
  */
+function mobileExperienceBroken() {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem('breakMobileExperience') === 'true'
+}
+
 function Panel({ open, onClose, children, id: propId }) {
   const idRef = React.useRef(propId || Math.random().toString(36).slice(2))
   const id = idRef.current
@@ -76,7 +81,7 @@ function Panel({ open, onClose, children, id: propId }) {
   onCloseRef.current = onClose
   const [isMobileViewport, setIsMobileViewport] = React.useState(() => {
     if (typeof window === 'undefined') return false
-    return window.innerWidth < 768
+    return window.innerWidth < 768 && !mobileExperienceBroken()
   })
 
   const { renderedKey, animate, activePanelKey } = usePanelState()
@@ -85,7 +90,7 @@ function Panel({ open, onClose, children, id: propId }) {
     if (open) {
       _register(key, id, () => onCloseRef.current?.())
       // Lock body scroll on mobile when panel is open (full-screen overlay)
-      const isMobile = window.innerWidth < 768
+      const isMobile = window.innerWidth < 768 && !mobileExperienceBroken()
       if (isMobile) document.body.style.overflow = 'hidden'
     } else {
       _unregister(key)
@@ -102,10 +107,15 @@ function Panel({ open, onClose, children, id: propId }) {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
-    const handleResize = () => setIsMobileViewport(window.innerWidth < 768)
+    const handleResize = () => setIsMobileViewport(window.innerWidth < 768 && !mobileExperienceBroken())
     handleResize()
+    const handleToggle = () => handleResize()
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    window.addEventListener('tbc:break-mobile-experience-changed', handleToggle)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('tbc:break-mobile-experience-changed', handleToggle)
+    }
   }, [])
 
   const isActive = renderedKey === key

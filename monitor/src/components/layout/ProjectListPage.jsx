@@ -23,6 +23,8 @@ export default function ProjectListPage({
   setNotifCenter,
   theme,
   setTheme,
+  breakMobileExperience,
+  setBreakMobileExperience,
 }) {
   const { isWriteMode, handleLogout, setLoginModal, loginModal, loginInput, setLoginInput, handleLogin, authFetch } = useAuth()
   const { unreadCount } = useNotifications()
@@ -381,6 +383,8 @@ export default function ProjectListPage({
         onClose={closeSettingsPanel}
         theme={theme}
         setTheme={setTheme}
+        breakMobileExperience={breakMobileExperience}
+        setBreakMobileExperience={setBreakMobileExperience}
         setShowApiKeyHelp={setShowApiKeyHelp}
       />
 

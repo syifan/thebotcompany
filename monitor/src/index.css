@@ -154,3 +154,8 @@ body {
 .dark *:hover {
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
+
+html.break-mobile-experience body,
+html.break-mobile-experience #root {
+  min-width: 1024px;
+}
