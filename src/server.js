@@ -871,6 +871,50 @@ class ProjectRunner {
     };
   }
 
+  _syncAgentRegistry(db) {
+    const upsert = db.prepare(`
+      INSERT INTO agents (name, role, reports_to, model, disabled)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET
+        role = excluded.role,
+        reports_to = excluded.reports_to,
+        model = excluded.model,
+        disabled = excluded.disabled
+    `);
+    const managersDir = path.join(ROOT, 'agent', 'managers');
+    const workersDir = this.workerSkillsDir;
+    const parseRole = (content) => (content.match(/^role:\s*(.+)$/m) || [])[1]?.trim() || null;
+    const parseModel = (content) => (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null;
+
+    if (fs.existsSync(managersDir)) {
+      for (const file of fs.readdirSync(managersDir)) {
+        if (!file.endsWith('.md')) continue;
+        const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
+        const name = file.replace('.md', '');
+        const disabled = /^disabled:\s*true$/m.test(content) ? 1 : 0;
+        upsert.run(name, parseRole(content), null, parseModel(content), disabled);
+      }
+    }
+
+    if (fs.existsSync(workersDir)) {
+      for (const file of fs.readdirSync(workersDir)) {
+        if (!file.endsWith('.md')) continue;
+        const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
+        const name = file.replace('.md', '');
+        const disabled = /^disabled:\s*true$/m.test(content) ? 1 : 0;
+        const reportsTo = (content.match(/^reports_to:\s*(.+)$/m) || [])[1]?.trim() || null;
+        upsert.run(name, parseRole(content), reportsTo, parseModel(content), disabled);
+      }
+    }
+  }
+
+  _resolveAllowedIssueClosers(db, issueCreator) {
+    if (issueCreator === 'human' || issueCreator === 'chat') {
+      return { allowed: new Set(['human', 'chat']), special: 'chat-human' };
+    }
+    return { allowed: new Set([issueCreator, 'athena']), special: 'agent-athena' };
+  }
+
   getDb() {
     const dbPath = this.projectDbPath;
     const db = new Database(dbPath);
@@ -878,11 +922,13 @@ class ProjectRunner {
     db.pragma('foreign_keys = ON');
     db.exec(`
       CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, role TEXT, reports_to TEXT, model TEXT, disabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
-      CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), closed_at TEXT);
+      CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_by TEXT, closed_at TEXT, closed_by TEXT);
       CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
       CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
       CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')), issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
     `);
+    try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
+    try { db.exec('ALTER TABLE issues ADD COLUMN closed_by TEXT'); } catch {}
     db.exec(`
       UPDATE tbc_prs
       SET status = CASE
@@ -906,6 +952,7 @@ class ProjectRunner {
         SELECT RAISE(ABORT, 'invalid tbc_prs.status');
       END;
     `);
+    this._syncAgentRegistry(db);
     return db;
   }
 
@@ -3775,24 +3822,45 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       req.on('data', d => body += d);
       req.on('end', () => {
+        let db = null;
         try {
           const issueId = parseInt(issuePatchMatch[1], 10);
-          const { status } = JSON.parse(body);
+          const { status, actor } = JSON.parse(body);
           if (!['open', 'closed'].includes(status)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Status must be "open" or "closed"' }));
             return;
           }
-          const db = runner.getDb();
+          db = runner.getDb();
+          const issue = db.prepare('SELECT id, creator, status FROM issues WHERE id = ?').get(issueId);
+          if (!issue) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Issue not found' }));
+            return;
+          }
+          const actingAs = actor || 'human';
+          if (status === 'closed' && issue.status !== 'closed') {
+            const { allowed, special } = runner._resolveAllowedIssueClosers(db, issue.creator);
+            if (!allowed.has(actingAs)) {
+              const error = special === 'chat-human'
+                ? `Issue #${issueId} was opened by ${issue.creator} and can only be closed by chat or human`
+                : `Issue #${issueId} was opened by ${issue.creator} and can only be closed by ${issue.creator} or athena`;
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error }));
+              return;
+            }
+          }
           const now = new Date().toISOString();
           const closedAt = status === 'closed' ? now : null;
-          db.prepare('UPDATE issues SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?').run(status, now, closedAt, issueId);
-          db.close();
+          const closedBy = status === 'closed' ? actingAs : null;
+          db.prepare('UPDATE issues SET status = ?, updated_at = ?, updated_by = ?, closed_at = ?, closed_by = ? WHERE id = ?').run(status, now, actingAs, closedAt, closedBy, issueId);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
         } catch (e) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));
+        } finally {
+          try { db?.close(); } catch {}
         }
       });
       return;

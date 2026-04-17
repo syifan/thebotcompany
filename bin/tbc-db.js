@@ -145,6 +145,14 @@ function normalizePrStatus(status) {
   throw new Error(`Invalid PR status: ${status}. Allowed: open, merged, closed`);
 }
 
+function resolveAllowedIssueCloser(issueCreator) {
+  if (issueCreator === 'human' || issueCreator === 'chat') {
+    return { allowed: new Set(['human', 'chat']), special: 'chat-human' };
+  }
+
+  return { allowed: new Set([issueCreator, 'athena']), special: 'agent-athena' };
+}
+
 function jsonOut(data) {
   console.log(JSON.stringify(data, null, 2));
 }
@@ -275,13 +283,13 @@ const commands = {
     if (!issue) { console.error(`Issue #${id} not found`); process.exit(1); }
     if (issue.status === 'closed') { console.log(`Issue #${id} already closed`); return; }
     const closer = actor;
-    if (issue.creator === 'human') {
-      if (closer !== 'human') {
-        console.error(`Blocked: issue #${id} was opened by human and can only be closed by human`);
-        process.exit(1);
+    const { allowed, special } = resolveAllowedIssueCloser(issue.creator);
+    if (!allowed.has(closer)) {
+      if (special === 'chat-human') {
+        console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by chat or human`);
+      } else {
+        console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by ${issue.creator} or athena`);
       }
-    } else if (closer !== issue.creator) {
-      console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by that same agent`);
       process.exit(1);
     }
     const now = new Date().toISOString();
