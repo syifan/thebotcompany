@@ -11,14 +11,17 @@ function mkProject() {
   const projectRoot = root;
   const own = path.join(projectRoot, 'agents', 'leo');
   const other = path.join(projectRoot, 'agents', 'nora');
+  const knowledge = path.join(projectRoot, 'knowledge');
   const skills = path.join(projectRoot, 'skills', 'workers');
   fs.mkdirSync(repo, { recursive: true });
   fs.mkdirSync(own, { recursive: true });
   fs.mkdirSync(other, { recursive: true });
+  fs.mkdirSync(knowledge, { recursive: true });
   fs.mkdirSync(skills, { recursive: true });
   fs.writeFileSync(path.join(repo, 'repo.txt'), 'repo ok');
   fs.writeFileSync(path.join(own, 'note.txt'), 'own ok');
   fs.writeFileSync(path.join(other, 'secret.txt'), 'other secret');
+  fs.writeFileSync(path.join(knowledge, 'spec.md'), 'shared knowledge');
   fs.writeFileSync(path.join(skills, 'nora.md'), 'role: worker');
   fs.writeFileSync(path.join(projectRoot, 'project.db'), 'sqlite');
   return {
@@ -27,9 +30,24 @@ function mkProject() {
     projectRoot,
     own,
     other,
+    knowledge,
     skills,
     allowedWorker: {
       read: [repo, own],
+      write: [repo, own],
+      denied: [
+        path.join(projectRoot, 'agents'),
+        path.join(projectRoot, 'responses'),
+        path.join(projectRoot, 'uploads'),
+        path.join(projectRoot, 'skills'),
+        path.join(projectRoot, 'state.json'),
+        path.join(projectRoot, 'orchestrator.log'),
+        path.join(projectRoot, 'project.db'),
+      ],
+      dbPath: path.join(projectRoot, 'project.db'),
+    },
+    allowedFocused: {
+      read: [repo, own, knowledge],
       write: [repo, own],
       denied: [
         path.join(projectRoot, 'agents'),

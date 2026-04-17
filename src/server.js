@@ -871,6 +871,50 @@ class ProjectRunner {
     };
   }
 
+  _syncAgentRegistry(db) {
+    const upsert = db.prepare(`
+      INSERT INTO agents (name, role, reports_to, model, disabled)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET
+        role = excluded.role,
+        reports_to = excluded.reports_to,
+        model = excluded.model,
+        disabled = excluded.disabled
+    `);
+    const managersDir = path.join(ROOT, 'agent', 'managers');
+    const workersDir = this.workerSkillsDir;
+    const parseRole = (content) => (content.match(/^role:\s*(.+)$/m) || [])[1]?.trim() || null;
+    const parseModel = (content) => (content.match(/^model:\s*(.+)$/m) || [])[1]?.trim() || null;
+
+    if (fs.existsSync(managersDir)) {
+      for (const file of fs.readdirSync(managersDir)) {
+        if (!file.endsWith('.md')) continue;
+        const content = fs.readFileSync(path.join(managersDir, file), 'utf-8');
+        const name = file.replace('.md', '');
+        const disabled = /^disabled:\s*true$/m.test(content) ? 1 : 0;
+        upsert.run(name, parseRole(content), null, parseModel(content), disabled);
+      }
+    }
+
+    if (fs.existsSync(workersDir)) {
+      for (const file of fs.readdirSync(workersDir)) {
+        if (!file.endsWith('.md')) continue;
+        const content = fs.readFileSync(path.join(workersDir, file), 'utf-8');
+        const name = file.replace('.md', '');
+        const disabled = /^disabled:\s*true$/m.test(content) ? 1 : 0;
+        const reportsTo = (content.match(/^reports_to:\s*(.+)$/m) || [])[1]?.trim() || null;
+        upsert.run(name, parseRole(content), reportsTo, parseModel(content), disabled);
+      }
+    }
+  }
+
+  _resolveAllowedIssueClosers(db, issueCreator) {
+    if (issueCreator === 'human' || issueCreator === 'chat') {
+      return { allowed: new Set(['human', 'chat']), special: 'chat-human' };
+    }
+    return { allowed: new Set([issueCreator, 'athena']), special: 'agent-athena' };
+  }
+
   getDb() {
     const dbPath = this.projectDbPath;
     const db = new Database(dbPath);
@@ -878,11 +922,13 @@ class ProjectRunner {
     db.pragma('foreign_keys = ON');
     db.exec(`
       CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, role TEXT, reports_to TEXT, model TEXT, disabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
-      CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), closed_at TEXT);
+      CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_by TEXT, closed_at TEXT, closed_by TEXT);
       CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
       CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
       CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')), issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
     `);
+    try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
+    try { db.exec('ALTER TABLE issues ADD COLUMN closed_by TEXT'); } catch {}
     db.exec(`
       UPDATE tbc_prs
       SET status = CASE
@@ -906,6 +952,7 @@ class ProjectRunner {
         SELECT RAISE(ABORT, 'invalid tbc_prs.status');
       END;
     `);
+    this._syncAgentRegistry(db);
     return db;
   }
 
@@ -1501,12 +1548,16 @@ class ProjectRunner {
     }
   }
 
-  async executeSchedule(schedule, config) {
+  async executeSchedule(schedule, config, managerName = null) {
     if (!schedule || !schedule._steps) return { total: 0, failures: 0 };
     
     let total = 0;
     let failures = 0;
-    const freshWorkers = this.loadAgents().workers;
+    const ownerName = typeof managerName === 'string' ? managerName.toLowerCase() : null;
+    const freshWorkers = this.loadAgents().workers.filter(worker => {
+      if (!ownerName) return true;
+      return (worker.reportsTo || '').toLowerCase() === ownerName;
+    });
     
     for (const step of schedule._steps) {
       if (!this.running || this.abortCurrentCycle) break;
@@ -1714,7 +1765,7 @@ class ProjectRunner {
           if (schedule) {
             this.currentSchedule = schedule;
             this.saveState(); // Persist schedule before execution so it survives reboot
-            const { total, failures } = await this.executeSchedule(schedule, config);
+            const { total, failures } = await this.executeSchedule(schedule, config, 'athena');
             cycleTotal += total;
             cycleFailures += failures;
           }
@@ -1736,7 +1787,7 @@ class ProjectRunner {
         // Note: don't require completedAgents — schedule may start with a delay step
         if (this.currentSchedule) {
           log(`Resuming interrupted schedule (${this.completedAgents.length} agents already completed${this.completedAgents.length ? ': [' + this.completedAgents.join(', ') + ']' : ''})`, this.id);
-          const { total, failures } = await this.executeSchedule(this.currentSchedule, config);
+          const { total, failures } = await this.executeSchedule(this.currentSchedule, config, 'ares');
           cycleTotal += total;
           cycleFailures += failures;
           this.currentSchedule = null;
@@ -1778,7 +1829,7 @@ class ProjectRunner {
           if (schedule) {
             this.completedAgents = [];
             this.saveState(); // Persist schedule before execution so it survives reboot
-            const { total, failures } = await this.executeSchedule(schedule, config);
+            const { total, failures } = await this.executeSchedule(schedule, config, 'ares');
             cycleTotal += total;
             cycleFailures += failures;
             this.currentSchedule = null;
@@ -1801,7 +1852,7 @@ class ProjectRunner {
         // Resume interrupted verification schedule (e.g. after reboot)
         if (this.currentSchedule && this.completedAgents.length > 0) {
           log(`Resuming interrupted verification schedule (${this.completedAgents.length} agents already completed: [${this.completedAgents.join(', ')}])`, this.id);
-          const { total, failures } = await this.executeSchedule(this.currentSchedule, config);
+          const { total, failures } = await this.executeSchedule(this.currentSchedule, config, 'apollo');
           cycleTotal += total;
           cycleFailures += failures;
           this.currentSchedule = null;
@@ -1846,7 +1897,7 @@ class ProjectRunner {
             this.currentSchedule = schedule;
             this.completedAgents = [];
             this.saveState(); // Persist schedule before execution so it survives reboot
-            const { total, failures } = await this.executeSchedule(schedule, config);
+            const { total, failures } = await this.executeSchedule(schedule, config, 'apollo');
             cycleTotal += total;
             cycleFailures += failures;
             this.currentSchedule = null;
@@ -1887,16 +1938,32 @@ class ProjectRunner {
 
       // ===== PHASE: EXAMINATION (Themis final audit) =====
       else if (this.phase === 'examination') {
+        // Resume interrupted examination schedule (e.g. after reboot)
+        if (this.currentSchedule) {
+          log(`Resuming interrupted examination schedule (${this.completedAgents.length} agents already completed${this.completedAgents.length ? ': [' + this.completedAgents.join(', ') + ']' : ''})`, this.id);
+          const { total, failures } = await this.executeSchedule(this.currentSchedule, config, 'themis');
+          cycleTotal += total;
+          cycleFailures += failures;
+          this.currentSchedule = null;
+          this.completedAgents = [];
+          this.saveState();
+        } else {
         const themis = managers.find(m => m.name === 'themis');
         if (themis) {
           const themisContext = `> **Final completion claim:** ${this.pendingCompletionMessage || 'Project claimed complete'}\n> **Evaluate the entire project, not just the human\'s explicit goal.** Audit correctness, completeness, maintainability, artifacts, tests, docs, and obvious risks.\n\n`;
-          const result = await this.runAgent(themis, config, null, themisContext, { mode: 'blind', issues: [] });
+          const result = await this.runAgent(themis, config, null, themisContext, { mode: 'full', issues: [] });
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
-          let decision = 'fail';
+          let schedule = null;
+          let decision = null;
           let failData = null;
           if (result && result.resultText) {
+            schedule = this.parseSchedule(result.resultText);
+            if (schedule) {
+              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
+            }
+
             if (result.resultText.includes('<!-- EXAM_PASS -->')) {
               decision = 'pass';
             }
@@ -1907,7 +1974,22 @@ class ProjectRunner {
               } catch {
                 failData = { feedback: 'Themis rejected project completion, but the response could not be parsed.' };
               }
+              decision = 'fail';
+            } else if (!schedule) {
+              decision = 'fail';
             }
+          }
+
+          if (schedule) {
+            this.currentSchedule = schedule;
+            this.completedAgents = [];
+            this.saveState();
+            const { total, failures } = await this.executeSchedule(schedule, config, 'themis');
+            cycleTotal += total;
+            cycleFailures += failures;
+            this.currentSchedule = null;
+            this.completedAgents = [];
+            this.saveState();
           }
 
           if (decision === 'pass') {
@@ -1926,7 +2008,7 @@ class ProjectRunner {
             });
             log(`🏁 PROJECT COMPLETE (validated by Themis): ${message}`, this.id);
             broadcastEvent({ type: 'project-complete', project: this.id, success: true, message });
-          } else {
+          } else if (decision === 'fail') {
             let issues = Array.isArray(failData?.issues) ? failData.issues : [];
             const rawFeedback = (result?.resultText || '').trim();
             if (issues.length === 0) {
@@ -1962,8 +2044,12 @@ class ProjectRunner {
             });
             log(`❌ Themis rejected project completion — returning to Athena`, this.id);
             broadcastEvent({ type: 'phase', project: this.id, phase: 'athena', title: this.milestoneTitle || 'Replanning after Themis rejection' });
+          } else {
+            // No decision yet, stay in examination phase — still save
+            this.saveState();
           }
         }
+        } // end else (no interrupted examination schedule)
       }
 
       // If no agent succeeded, don't count this cycle
@@ -2023,7 +2109,7 @@ class ProjectRunner {
       read.push(ownWorkspaceDir);
       write.push(ownWorkspaceDir);
     }
-    if (agent.isManager && agent.name !== 'themis' && visMode !== 'blind') {
+    if (agent.isManager && visMode !== 'blind') {
       read.push(this.workerSkillsDir);
       write.push(this.workerSkillsDir);
     }
@@ -2060,20 +2146,21 @@ class ProjectRunner {
         sharedRules += fs.readFileSync(folderStructurePath, 'utf-8') + '\n\n---\n\n';
       } catch {}
       const visMode = visibility?.mode || 'full';
+      if (visMode === 'full') {
+        const dbPath = path.join(ROOT, 'agent', 'db.md');
+        try {
+          const dbContent = fs.readFileSync(dbPath, 'utf-8');
+          sharedRules += dbContent + '\n\n---\n\n';
+        } catch {}
+      }
       if (agent.name !== 'themis') {
-        if (visMode === 'full') {
-          const dbPath = path.join(ROOT, 'agent', 'db.md');
-          try {
-            const dbContent = fs.readFileSync(dbPath, 'utf-8');
-            sharedRules += dbContent + '\n\n---\n\n';
-          } catch {}
-        } else if (visMode === 'focused') {
-          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker. Work only from the task, the repository, and your own agent notes. If needed, you may create a new issue to report a blocker or finding.\n\n---\n\n';
-        } else {
-          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker and you cannot rely on any agent notes, including your own prior notes. Work only from the task and the repository.\n\n---\n\n';
+        if (visMode === 'focused') {
+          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker or PR board. Work only from the task, the repository, shared knowledge, and your own agent notes. If needed, you may create a new issue or PR record to report a blocker or finding.\n\n---\n\n';
+        } else if (visMode === 'blind') {
+          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker or PR board, and you cannot rely on shared knowledge or any agent notes, including your own prior notes. Work only from the task and the repository. If needed, you may create a new issue or PR record to report a blocker or finding.\n\n---\n\n';
         }
       } else {
-        sharedRules += '\n> **You are Themis, final examiner.** You must not read communication history, issue tracker contents, or any agent notes, including your own. Evaluate only the repository, tests, artifacts, and your own fresh inspection.\n\n---\n\n';
+        sharedRules += '\n> **You are Themis, final examination manager.** You run in full view, not blind. Inspect the repository, issue tracker, PR board, shared knowledge, and agent notes directly. You may hire and schedule workers, but only workers who report to you. Your examination team is independent from the Athena, Ares, and Apollo teams, so make your own judgment from primary evidence.\n\n---\n\n';
       }
       const rolePath = path.join(ROOT, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
@@ -3775,24 +3862,45 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       req.on('data', d => body += d);
       req.on('end', () => {
+        let db = null;
         try {
           const issueId = parseInt(issuePatchMatch[1], 10);
-          const { status } = JSON.parse(body);
+          const { status, actor } = JSON.parse(body);
           if (!['open', 'closed'].includes(status)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Status must be "open" or "closed"' }));
             return;
           }
-          const db = runner.getDb();
+          db = runner.getDb();
+          const issue = db.prepare('SELECT id, creator, status FROM issues WHERE id = ?').get(issueId);
+          if (!issue) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Issue not found' }));
+            return;
+          }
+          const actingAs = actor || 'human';
+          if (status === 'closed' && issue.status !== 'closed') {
+            const { allowed, special } = runner._resolveAllowedIssueClosers(db, issue.creator);
+            if (!allowed.has(actingAs)) {
+              const error = special === 'chat-human'
+                ? `Issue #${issueId} was opened by ${issue.creator} and can only be closed by chat or human`
+                : `Issue #${issueId} was opened by ${issue.creator} and can only be closed by ${issue.creator} or athena`;
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error }));
+              return;
+            }
+          }
           const now = new Date().toISOString();
           const closedAt = status === 'closed' ? now : null;
-          db.prepare('UPDATE issues SET status = ?, updated_at = ?, closed_at = ? WHERE id = ?').run(status, now, closedAt, issueId);
-          db.close();
+          const closedBy = status === 'closed' ? actingAs : null;
+          db.prepare('UPDATE issues SET status = ?, updated_at = ?, updated_by = ?, closed_at = ?, closed_by = ? WHERE id = ?').run(status, now, actingAs, closedAt, closedBy, issueId);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
         } catch (e) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));
+        } finally {
+          try { db?.close(); } catch {}
         }
       });
       return;

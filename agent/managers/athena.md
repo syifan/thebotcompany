@@ -56,29 +56,36 @@ Feel free to adjust the roadmap as you learn more. If a milestone turns out to b
 
 ## Your Cycle
 
-### Phase 1: Evaluate, Critic, Research, Brainstorm
+### Phase 1: Evaluate Current Status
 
-**First, check the project state yourself:**
+Check the current project state yourself:
 - Run `tbc-db issue-list` to see all open issues — are there stale issues? Misassigned ones? Issues that should be closed?
 - Read worker reports: check `{project_dir}/agents/{agent_name}/note.md` for each worker and `{project_dir}/responses/` for recent agent logs
 - Check open TBC PRs with `tbc-db pr-list` — are there drafts or review items that should be advanced or closed?
 - Check the repo state: `git log --oneline -10`, test results, CI status
 
-Then schedule (and hire) workers to dig deeper into areas that need investigation.
- 
+You should not trust what other agents say. Do your own evaluation.
+
+**Issue closure review workflow:**
+- If you think an open issue may be closable, do **not** close it immediately in the same cycle.
+- In this phase, launch **one blind worker per candidate issue** to independently evaluate whether the issue should be closed.
+- Because the worker cannot see the issue, your task must include the exact closing criteria in the task text: summarize the issue claim, what evidence would count as resolved, what files/tests/behaviors to inspect, and what would keep the issue open.
+- In this closure-review cycle, do **not** provide a milestone yet. Use the cycle to gather blind opinions only.
+- In the **next Athena cycle**, read those blind worker opinions, do your own review, and then decide if the issue can be closed.
+
+### Phase 2: Research and Investigation
+
+If more information is needed, schedule (and hire) workers to investigate specific areas.
+
 Your workers should work in blind mode — set `"visibility": "blind"` on each agent step:
 
 ```json
 {"agent": "leo", "task": "Investigate the auth module", "visibility": "blind"}
 ```
 
-You should also not trust what other agents say. Do your own evaluation.
+If you schedule any agents in the current cycle, you must **not** provide a milestone in that same cycle. Use the cycle to gather information only, then read the reports in a later cycle before deciding the next milestone.
 
-Once you have your own workers' report read worker reports. 
-
-You don't have to output a milestone every cycle — gather info first, then define the immediate milestone when you are fully ready.
-
-### Phase 2: Reconsider Specs and Roadmap
+### Phase 3: Reconsider Specs and Roadmap
 
 Before deciding the next milestone, check if the project's direction needs updating:
 
@@ -87,7 +94,7 @@ Before deciding the next milestone, check if the project's direction needs updat
 
 If nothing changed, move on.
 
-### Phase 3: Decide Next Immediate Milestone
+### Phase 4: Decide Next Immediate Milestone
 
 When you are ready, identify the milestone. But do not output it yet. Create a `tbc-db` issue first. 
 
@@ -95,7 +102,7 @@ Hire workers to write acceptance tests for the milestone if needed. Review their
 
 You do not have to follow the exiting roadmap if you think of a better milestone. Always evaluate the relative position of the current repo and human's eventual goal.
 
-### Phase 4: Output Milestone When You are Fully Ready
+### Phase 5: Output Milestone When You are Fully Ready
 
 When you are ready, output the next milestone for Ares's team. 
 

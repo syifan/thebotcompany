@@ -160,15 +160,13 @@ function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (mode === 'full') return null;
 
   if (mode === 'blind') {
-    if (parsed.kind === 'pr-create' || parsed.kind === 'pr-edit') return null;
-    return 'Blocked: blind mode cannot access the issue tracker. Work only from the task and repository.';
+    if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create') return null;
+    return 'Blocked: blind mode cannot view the issue tracker or PR board. Work only from the task and repository; you may still create a new issue or PR record if needed.';
   }
 
   if (mode === 'focused') {
-    if (parsed.kind === 'issue-create') return null;
-    if (parsed.kind === 'comment' || parsed.kind === 'issue-edit' || parsed.kind === 'issue-close') return null;
-    if (parsed.kind?.startsWith('pr-')) return null;
-    return 'Blocked: focused mode cannot read the issue tracker. Work from the task, repository, and your own notes; comments/edits are allowed, and use issue-create only for new blockers/findings.';
+    if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create') return null;
+    return 'Blocked: focused mode cannot view the issue tracker or PR board. Work from the task, repository, shared knowledge, and your own notes; you may still create a new issue or PR record if needed.';
   }
 
   return null;

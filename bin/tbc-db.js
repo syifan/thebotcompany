@@ -125,15 +125,14 @@ const args = process.argv.slice(3);
 const visibility = process.env.TBC_VISIBILITY || 'full';
 const focusedIssues = (process.env.TBC_FOCUSED_ISSUES || '').split(',').map(s => s.trim()).filter(Boolean);
 
-if (visibility === 'blind') {
-  // Blind agents cannot use tbc-db at all (except issue-create for escalation)
-  if (command && command !== 'issue-create') {
-    console.error('Access denied: you are in blind mode and cannot query the tracker.');
+if (visibility === 'blind' || visibility === 'focused') {
+  const allowedCommands = new Set(['issue-create', 'pr-create']);
+  if (command && !allowedCommands.has(command)) {
+    const scope = visibility === 'blind' ? 'blind' : 'focused';
+    console.error(`Access denied: you are in ${scope} mode and cannot view the issue tracker or PR board.`);
     process.exit(1);
   }
 }
-
-// For focused mode, we filter after query execution (see below)
 
 const VALID_PR_STATUSES = new Set(['open', 'merged', 'closed']);
 
@@ -143,6 +142,14 @@ function normalizePrStatus(status) {
   if (['closed', 'completed', 'superseded'].includes(status)) return 'closed';
   if (['open', 'draft', 'ready_for_review', 'ready_for_ci', 'in_progress'].includes(status)) return 'open';
   throw new Error(`Invalid PR status: ${status}. Allowed: open, merged, closed`);
+}
+
+function resolveAllowedIssueCloser(issueCreator) {
+  if (issueCreator === 'human' || issueCreator === 'chat') {
+    return { allowed: new Set(['human', 'chat']), special: 'chat-human' };
+  }
+
+  return { allowed: new Set([issueCreator, 'athena']), special: 'agent-athena' };
 }
 
 function jsonOut(data) {
@@ -275,13 +282,13 @@ const commands = {
     if (!issue) { console.error(`Issue #${id} not found`); process.exit(1); }
     if (issue.status === 'closed') { console.log(`Issue #${id} already closed`); return; }
     const closer = actor;
-    if (issue.creator === 'human') {
-      if (closer !== 'human') {
-        console.error(`Blocked: issue #${id} was opened by human and can only be closed by human`);
-        process.exit(1);
+    const { allowed, special } = resolveAllowedIssueCloser(issue.creator);
+    if (!allowed.has(closer)) {
+      if (special === 'chat-human') {
+        console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by chat or human`);
+      } else {
+        console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by ${issue.creator} or athena`);
       }
-    } else if (closer !== issue.creator) {
-      console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by that same agent`);
       process.exit(1);
     }
     const now = new Date().toISOString();
