@@ -69,7 +69,7 @@ db.exec(`
     cycles_budget INTEGER DEFAULT 20,
     cycles_used INTEGER DEFAULT 0,
     branch_name TEXT,
-    parent_milestone_id INTEGER,
+    parent_milestone_id TEXT,
     linked_pr_id INTEGER,
     failure_reason TEXT,
     phase TEXT DEFAULT 'implementation',
@@ -82,9 +82,9 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     summary TEXT DEFAULT '',
-    milestone_id INTEGER,
+    milestone_id TEXT,
     parent_pr_id INTEGER,
-    epoch_index INTEGER,
+    epoch_index TEXT,
     branch_name TEXT,
     base_branch TEXT NOT NULL,
     head_branch TEXT NOT NULL,
@@ -129,12 +129,13 @@ try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
 try { db.exec('ALTER TABLE issues ADD COLUMN closed_by TEXT'); } catch {}
 try { db.exec('ALTER TABLE milestones ADD COLUMN title TEXT'); } catch {}
 try { db.exec('ALTER TABLE milestones ADD COLUMN branch_name TEXT'); } catch {}
-try { db.exec('ALTER TABLE milestones ADD COLUMN parent_milestone_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN milestone_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN parent_milestone_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE milestones ADD COLUMN linked_pr_id INTEGER'); } catch {}
 try { db.exec('ALTER TABLE milestones ADD COLUMN failure_reason TEXT'); } catch {}
-try { db.exec('ALTER TABLE tbc_prs ADD COLUMN milestone_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN milestone_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE tbc_prs ADD COLUMN parent_pr_id INTEGER'); } catch {}
-try { db.exec('ALTER TABLE tbc_prs ADD COLUMN epoch_index INTEGER'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN epoch_index TEXT'); } catch {}
 try { db.exec('ALTER TABLE tbc_prs ADD COLUMN branch_name TEXT'); } catch {}
 try { db.exec('ALTER TABLE tbc_prs ADD COLUMN decision TEXT'); } catch {}
 try { db.exec('ALTER TABLE tbc_prs ADD COLUMN decision_reason TEXT DEFAULT ""'); } catch {}
@@ -465,9 +466,9 @@ const commands = {
       .run(
         values.title,
         values.summary || '',
-        values.milestone ? Number(values.milestone) : null,
+        values.milestone || null,
         values.parent ? Number(values.parent) : null,
-        values.epoch ? Number(values.epoch) : null,
+        values.epoch || null,
         values.branch || values.head,
         values.base || 'main',
         values.head,
@@ -582,9 +583,9 @@ const commands = {
     const params = [];
     if (values.title !== undefined) { sets.push('title = ?'); params.push(values.title); }
     if (values.summary !== undefined) { sets.push('summary = ?'); params.push(values.summary); }
-    if (values.milestone !== undefined) { sets.push('milestone_id = ?'); params.push(values.milestone ? Number(values.milestone) : null); }
+    if (values.milestone !== undefined) { sets.push('milestone_id = ?'); params.push(values.milestone || null); }
     if (values.parent !== undefined) { sets.push('parent_pr_id = ?'); params.push(values.parent ? Number(values.parent) : null); }
-    if (values.epoch !== undefined) { sets.push('epoch_index = ?'); params.push(values.epoch ? Number(values.epoch) : null); }
+    if (values.epoch !== undefined) { sets.push('epoch_index = ?'); params.push(values.epoch || null); }
     if (values.branch !== undefined) { sets.push('branch_name = ?'); params.push(values.branch || null); }
     if (values.base !== undefined) { sets.push('base_branch = ?'); params.push(values.base); }
     const nextBase = values.base;

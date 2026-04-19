@@ -29,10 +29,10 @@ describe('TBC local epoch PR model', () => {
       '--title', 'Epoch 7 PR',
       '--head', 'ares/epoch-7',
       '--actor', 'ares',
-      '--milestone', '12',
+      '--milestone', 'M1.2',
       '--parent', '5',
-      '--epoch', '7',
-      '--branch', 'epoch-7-branch',
+      '--epoch', 'E7',
+      '--branch', 'e7-m1-2-epoch-7-branch',
     ], dbPath);
     assert.equal(created.status, 0, created.stderr || created.stdout);
 
@@ -41,10 +41,10 @@ describe('TBC local epoch PR model', () => {
     db.close();
 
     assert.deepEqual(pr, {
-      milestone_id: 12,
+      milestone_id: 'M1.2',
       parent_pr_id: 5,
-      epoch_index: 7,
-      branch_name: 'epoch-7-branch',
+      epoch_index: 'E7',
+      branch_name: 'e7-m1-2-epoch-7-branch',
       actor: 'ares',
       status: 'open',
     });
