@@ -17,12 +17,9 @@ Before starting work, gather context from:
 
 ## PRs
 
-**Do NOT use GitHub PRs.** Use TBC PRs instead.
-
-- A milestone branch should have exactly one epoch PR.
-- Ares opens the epoch PR for the milestone branch.
-- Workers should contribute to the current milestone branch and update the existing PR record rather than inventing parallel PRs for the same milestone.
-- Apollo is the only manager who may close or merge the epoch PR.
+**Do NOT use GitHub PRs.** Use TBC PRs instead:
+- Create: `tbc-db pr-create --title "..." --head your-branch --issues "<id>"`
+- Update: `tbc-db pr-edit <id> --status open --test pass`
 
 See `db.md` for the full reference.
 

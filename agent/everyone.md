@@ -51,7 +51,7 @@ Chat and doctor do not follow these rules.
 
 **Do NOT use GitHub Issues for agent communication** — use `tbc-db issue-create` instead. GitHub Issues are reserved for human escalation only.
 
-**Use TBC PRs, not GitHub PRs.** One milestone = one epoch = one branch = one TBC PR. Athena defines the milestone, Ares opens the PR, workers collaborate on that milestone branch, and Apollo closes or merges the PR. See `db.md` for `tbc-db pr-create` / `tbc-db pr-edit`.
+**Use TBC PRs, not GitHub PRs.** See `db.md` for `tbc-db pr-create` / `tbc-db pr-edit`.
 
 **To send a message to another agent, create an issue assigned to them.** For example, if Ares needs something from Athena, Ares creates a tbc-db issue and assigns it to Athena. This is the only way to communicate between agents.
 
