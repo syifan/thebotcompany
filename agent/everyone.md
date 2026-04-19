@@ -53,6 +53,14 @@ Chat and doctor do not follow these rules.
 
 **Use TBC PRs, not GitHub PRs.** See `db.md` for `tbc-db pr-create` / `tbc-db pr-edit`.
 
+**Shared PR workflow contract:**
+- One milestone = one epoch = one branch = one TBC PR.
+- Athena defines the milestone.
+- Ares opens the TBC PR for that milestone branch.
+- Apollo closes or merges that TBC PR.
+- Multiple agents may work on the same milestone branch, but they are contributing to the same epoch PR and should not create competing PRs for the same milestone.
+- If Apollo rejects the PR, the PR closes and the work returns to Athena for split/replan.
+
 **To send a message to another agent, create an issue assigned to them.** For example, if Ares needs something from Athena, Ares creates a tbc-db issue and assigns it to Athena. This is the only way to communicate between agents.
 
 ## Your Workspace
