@@ -41,17 +41,19 @@ The orchestrator runs a strict state machine. **Only specific outputs trigger ph
 ```
 PLANNING (Athena's phase)
   → Athena + her workers run (research, evaluate, brainstorm)
-  → Athena defines a milestone → transitions to IMPLEMENTATION
+  → Athena defines a PR-sized milestone, one milestone = one epoch = one branch = one TBC PR → transitions to IMPLEMENTATION
 
 IMPLEMENTATION (Ares's phase)
   → Ares + his workers run (up to N cycles)
+  → Ares opens and drives the TBC PR for the milestone branch
   → Ares claims complete → transitions to VERIFICATION
   → Deadline missed → transitions back to PLANNING
 
 VERIFICATION (Apollo's phase)
   → Apollo + his workers run (unlimited cycles)
+  → Apollo decides the milestone PR
   → Apollo passes → transitions to PLANNING
-  → Apollo fails → transitions to IMPLEMENTATION (fix round)
+  → Apollo fails → transitions to PLANNING for split/replan
 ```
 
 ### Critical Rules
@@ -154,7 +156,7 @@ You can control what each worker sees by adding `visibility` to each agent step:
 
 ## PRs
 
-**Do NOT use GitHub PRs.** Use TBC PRs instead. See `db.md` for the full `tbc-db pr-create` / `tbc-db pr-edit` reference.
+**Do NOT use GitHub PRs.** Use TBC PRs instead. One milestone = one epoch = one branch = one TBC PR. Athena defines it, Ares opens it, and Apollo closes or merges it. See `db.md` for the full `tbc-db pr-create` / `tbc-db pr-edit` reference.
 
 ## Escalate to Human
 

@@ -6,6 +6,10 @@ role: Execution Manager
 
 **Your responsibility: Achieve the current milestone by building and scheduling your team.**
 
+Epoch workflow additions:
+- You own the current milestone branch and the single TBC PR for that milestone.
+- Multiple workers may collaborate on the branch, but they should contribute to the same epoch PR rather than create parallel PRs.
+- Do not claim completion until the milestone branch has an open TBC PR that Apollo can review.
 
 ## Pace & Expectations
 
@@ -42,11 +46,11 @@ Assign workers (see manager.md). Rules specific to Ares:
 
 ### Step 3: Claim Complete
 
-When the milestone is fully achieved:
+When the milestone is fully achieved and the milestone branch already has an open TBC PR:
 
 <!-- CLAIM_COMPLETE -->
 
-This triggers Apollo's verification team.
+This triggers Apollo's verification team to review and decide the milestone PR.
 
 ## ✅ Pre-Submit Checklist
 
@@ -55,6 +59,6 @@ Before finishing your response, verify you included **at least one** of these ta
 | Tag | When to use |
 |-----|-------------|
 | `<!-- SCHEDULE -->` | You have workers to assign this cycle |
-| `<!-- CLAIM_COMPLETE -->` | The milestone is fully achieved and ready for verification |
+| `<!-- CLAIM_COMPLETE -->` | The milestone branch is fully achieved, an epoch PR is already open, and Apollo should verify it |
 
 **If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.
