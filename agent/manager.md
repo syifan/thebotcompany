@@ -26,9 +26,9 @@ If the task is done, output your phase transition tag. Control immediately passe
 ## Team Structure
 
 **Managers** (permanent):
-- **Athena** — Strategy (sleeps; defines milestones with cycle budgets; wakes on deadline miss or milestone verified)
-- **Ares** — Execution (runs during implementation phase; builds team to achieve milestone)
-- **Apollo** — Verification (runs after Ares claims milestone done; verifies with high standards)
+- **Athena** — Strategy (sleeps; defines PR-sized milestones with cycle budgets; wakes on deadline miss, Apollo rejection, or milestone verification)
+- **Ares** — Execution (runs during implementation phase; builds team to achieve the current milestone branch and must open the epoch PR)
+- **Apollo** — Verification (runs after Ares claims milestone done; owns the merge/close decision for the epoch PR and verifies with high standards)
 
 Each manager has their own team of workers. Workers report to whoever hired them. Only read from your workers or other managers. Ignore messages from workers who do not report to you.
 
@@ -40,18 +40,19 @@ The orchestrator runs a strict state machine. **Only specific outputs trigger ph
 
 ```
 PLANNING (Athena's phase)
-  → Athena + her workers run (research, evaluate, brainstorm)
-  → Athena defines a milestone → transitions to IMPLEMENTATION
+  → Athena + her workers run (research, evaluate, split, narrow)
+  → Athena defines one PR-sized milestone with one milestone branch → transitions to IMPLEMENTATION
 
 IMPLEMENTATION (Ares's phase)
-  → Ares + his workers run (up to N cycles)
-  → Ares claims complete → transitions to VERIFICATION
+  → Ares + his workers run on the current milestone branch (up to N cycles)
+  → Ares opens and owns the epoch PR for that branch
+  → Ares claims complete only after the epoch PR exists → transitions to VERIFICATION
   → Deadline missed → transitions back to PLANNING
 
 VERIFICATION (Apollo's phase)
   → Apollo + his workers run (unlimited cycles)
-  → Apollo passes → transitions to PLANNING
-  → Apollo fails → transitions to IMPLEMENTATION (fix round)
+  → Apollo passes → merges the epoch PR and transitions to PLANNING
+  → Apollo fails → closes the epoch PR and transitions to PLANNING for split/replan
 ```
 
 ### Critical Rules
@@ -154,7 +155,7 @@ You can control what each worker sees by adding `visibility` to each agent step:
 
 ## PRs
 
-**Do NOT use GitHub PRs.** Use TBC PRs instead. See `db.md` for the full `tbc-db pr-create` / `tbc-db pr-edit` reference.
+**Do NOT use GitHub PRs.** Use TBC PRs instead. One milestone = one epoch = one branch = one TBC PR. Athena defines the milestone, Ares opens the PR, and Apollo is the closer/merger. See `db.md` for the full `tbc-db pr-create` / `tbc-db pr-edit` reference.
 
 ## Escalate to Human
 

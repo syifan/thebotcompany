@@ -373,10 +373,13 @@ class ProjectRunner {
     this.milestoneDescription = null;
     this.milestoneCyclesBudget = 0;
     this.milestoneCyclesUsed = 0;
+    this.currentEpochPrId = null;
+    this.currentMilestoneBranch = null;
+    this.lastMergedMilestoneBranch = null;
     this.verificationFeedback = null;
     this.examinationFeedback = null;
     this.pendingCompletionMessage = null;
-    this.isFixRound = false; // true when returning from failed verification
+    this.isFixRound = false; // legacy flag, should stay false under epoch-as-PR flow
     this.isComplete = false;
     this.completionSuccess = false;
     this.completionMessage = null;
@@ -924,11 +927,24 @@ class ProjectRunner {
       CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, role TEXT, reports_to TEXT, model TEXT, disabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
       CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_by TEXT, closed_at TEXT, closed_by TEXT);
       CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
-      CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
-      CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')), issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
+      CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, branch_name TEXT, parent_milestone_id INTEGER, linked_pr_id INTEGER, failure_reason TEXT, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
+      CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', milestone_id INTEGER, parent_pr_id INTEGER, epoch_index INTEGER, branch_name TEXT, base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')), decision TEXT, decision_reason TEXT DEFAULT '', issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, actor TEXT, updated_by TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
     `);
     try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
     try { db.exec('ALTER TABLE issues ADD COLUMN closed_by TEXT'); } catch {}
+    try { db.exec('ALTER TABLE milestones ADD COLUMN title TEXT'); } catch {}
+    try { db.exec('ALTER TABLE milestones ADD COLUMN branch_name TEXT'); } catch {}
+    try { db.exec('ALTER TABLE milestones ADD COLUMN parent_milestone_id INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE milestones ADD COLUMN linked_pr_id INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE milestones ADD COLUMN failure_reason TEXT'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN milestone_id INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN parent_pr_id INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN epoch_index INTEGER'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN branch_name TEXT'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN decision TEXT'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN decision_reason TEXT DEFAULT ""'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN actor TEXT'); } catch {}
+    try { db.exec('ALTER TABLE tbc_prs ADD COLUMN updated_by TEXT'); } catch {}
     db.exec(`
       UPDATE tbc_prs
       SET status = CASE
@@ -988,7 +1004,7 @@ class ProjectRunner {
     try {
       const db = this.getDb();
       let query = `
-        SELECT id, title, summary, base_branch, head_branch, status, issue_ids, test_status, github_pr_number, github_pr_url, created_at, updated_at
+        SELECT id, title, summary, milestone_id, parent_pr_id, epoch_index, branch_name, base_branch, head_branch, status, decision, decision_reason, issue_ids, test_status, github_pr_number, github_pr_url, actor, updated_by, created_at, updated_at
         FROM tbc_prs
       `;
       const params = [];
@@ -1019,7 +1035,7 @@ class ProjectRunner {
     try {
       const db = this.getDb();
       const pr = db.prepare(`
-        SELECT id, title, summary, base_branch, head_branch, status, issue_ids, test_status, github_pr_number, github_pr_url, created_at, updated_at
+        SELECT id, title, summary, milestone_id, parent_pr_id, epoch_index, branch_name, base_branch, head_branch, status, decision, decision_reason, issue_ids, test_status, github_pr_number, github_pr_url, actor, updated_by, created_at, updated_at
         FROM tbc_prs
         WHERE id = ?
       `).get(prId);
@@ -1033,6 +1049,51 @@ class ProjectRunner {
         shortTitle: pr.title,
         issueIds: (() => { try { return JSON.parse(pr.issue_ids || '[]'); } catch { return []; } })(),
       };
+    } catch {
+      return null;
+    }
+  }
+
+  async getOpenEpochPRForCurrentMilestone() {
+    try {
+      const db = this.getDb();
+      const pr = db.prepare(`
+        SELECT * FROM tbc_prs
+        WHERE status = 'open'
+          AND (
+            (branch_name IS NOT NULL AND branch_name = ?)
+            OR head_branch = ?
+          )
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 1
+      `).get(this.currentMilestoneBranch || '', this.currentMilestoneBranch || '');
+      db.close();
+      return pr || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async decideEpochPR(status, { actor = 'apollo', reason = '' } = {}) {
+    const pr = await this.getOpenEpochPRForCurrentMilestone();
+    if (!pr) return null;
+    try {
+      const db = this.getDb();
+      const normalizedStatus = status === 'merged' ? 'merged' : 'closed';
+      db.prepare(`
+        UPDATE tbc_prs
+        SET status = ?, decision = ?, decision_reason = ?, updated_by = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        normalizedStatus,
+        normalizedStatus === 'merged' ? 'merge' : 'close',
+        reason || '',
+        actor,
+        new Date().toISOString(),
+        pr.id,
+      );
+      db.close();
+      return { ...pr, status: normalizedStatus, decision: normalizedStatus === 'merged' ? 'merge' : 'close', decision_reason: reason || '' };
     } catch {
       return null;
     }
@@ -1094,6 +1155,9 @@ class ProjectRunner {
       milestone: this.milestoneDescription,
       milestoneCyclesBudget: this.milestoneCyclesBudget,
       milestoneCyclesUsed: this.milestoneCyclesUsed,
+      currentEpochPrId: this.currentEpochPrId,
+      currentMilestoneBranch: this.currentMilestoneBranch,
+      lastMergedMilestoneBranch: this.lastMergedMilestoneBranch,
       isFixRound: this.isFixRound,
       isComplete: this.isComplete || false,
       completionSuccess: this.completionSuccess || false,
@@ -1153,6 +1217,8 @@ class ProjectRunner {
       milestoneDescription: null,
       milestoneCyclesBudget: 0,
       milestoneCyclesUsed: 0,
+      currentEpochPrId: null,
+      currentMilestoneBranch: null,
       verificationFeedback: null,
       examinationFeedback: null,
       pendingCompletionMessage: null,
@@ -1328,6 +1394,9 @@ class ProjectRunner {
         this.milestoneDescription = state.milestoneDescription || null;
         this.milestoneCyclesBudget = state.milestoneCyclesBudget || 0;
         this.milestoneCyclesUsed = state.milestoneCyclesUsed || 0;
+        this.currentEpochPrId = state.currentEpochPrId || null;
+        this.currentMilestoneBranch = state.currentMilestoneBranch || null;
+        this.lastMergedMilestoneBranch = state.lastMergedMilestoneBranch || null;
         this.verificationFeedback = state.verificationFeedback || null;
         this.examinationFeedback = state.examinationFeedback || null;
         this.pendingCompletionMessage = state.pendingCompletionMessage || null;
@@ -1366,6 +1435,9 @@ class ProjectRunner {
         milestoneDescription: this.milestoneDescription,
         milestoneCyclesBudget: this.milestoneCyclesBudget,
         milestoneCyclesUsed: this.milestoneCyclesUsed,
+        currentEpochPrId: this.currentEpochPrId || null,
+        currentMilestoneBranch: this.currentMilestoneBranch || null,
+        lastMergedMilestoneBranch: this.lastMergedMilestoneBranch || null,
         verificationFeedback: this.verificationFeedback,
         examinationFeedback: this.examinationFeedback,
         pendingCompletionMessage: this.pendingCompletionMessage,
@@ -1677,8 +1749,10 @@ class ProjectRunner {
             situation = '> **Situation: Project Just Started**\n\n';
           } else if (this.verificationFeedback === '__passed__') {
             situation = '> **Situation: Milestone Verified Complete**\n> Previous milestone was verified by Apollo\'s team.\n\n';
+          } else if (this.verificationFeedback) {
+            situation = `> **Situation: Epoch PR Rejected by Apollo**\n> ${this.verificationFeedback}\n> Previous branch: ${this.currentMilestoneBranch || 'unknown'}\n> Athena should split or narrow the failed milestone into a new PR-sized milestone, not send it back as a generic fix round.\n\n`;
           } else {
-            situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles without completing the milestone.\n\n`;
+            situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles without completing the milestone.\n> Current branch: ${this.currentMilestoneBranch || 'not set'}\n\n`;
           }
 
           const result = await this.runAgent(athena, config, null, situation);
@@ -1697,11 +1771,15 @@ class ProjectRunner {
             if (milestoneMatch) {
               try {
                 const milestone = JSON.parse(milestoneMatch[1]);
+                const milestoneTitle = milestone.title || milestone.description.slice(0, 80);
+                const milestoneBranch = milestone.branch || `epoch-${this.epochCount + 1}-${String(milestoneTitle).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'milestone'}`;
                 this.setState({
-                  milestoneTitle: milestone.title || milestone.description.slice(0, 80),
+                  milestoneTitle,
                   milestoneDescription: milestone.description,
                   milestoneCyclesBudget: milestone.cycles || 20,
                   milestoneCyclesUsed: 0,
+                  currentEpochPrId: null,
+                  currentMilestoneBranch: milestoneBranch,
                   verificationFeedback: null,
                   examinationFeedback: null,
                   pendingCompletionMessage: null,
@@ -1799,9 +1877,9 @@ class ProjectRunner {
         if (ares) {
           // Build context for Ares (remaining includes this cycle)
           const cyclesRemaining = this.milestoneCyclesBudget - this.milestoneCyclesUsed;
-          let aresContext = `> **Milestone:** ${this.milestoneDescription}\n> **Cycles remaining:** ${cyclesRemaining} of ${this.milestoneCyclesBudget}\n\n`;
+          let aresContext = `> **Milestone:** ${this.milestoneDescription}\n> **Cycles remaining:** ${cyclesRemaining} of ${this.milestoneCyclesBudget}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Epoch PR rule:** Ares must open exactly one TBC PR for this milestone branch before claiming completion.\n\n`;
           if (this.isFixRound && this.verificationFeedback) {
-            aresContext += `> **⚠️ Verification Failed — Fix Required:**\n> ${this.verificationFeedback}\n> You have ${this.milestoneCyclesBudget - this.milestoneCyclesUsed} cycles to fix and re-claim.\n\n`;
+            aresContext += `> **Legacy verification feedback:**\n> ${this.verificationFeedback}\n\n`;
           }
 
           const result = await this.runAgent(ares, config, null, aresContext);
@@ -1819,9 +1897,16 @@ class ProjectRunner {
 
             // Check if Ares claims milestone complete
             if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
-              log(`🎯 Ares claims milestone complete — switching to verification`, this.id);
-              this.setState({ phase: 'verification' });
-              broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: this.milestoneTitle });
+              const openEpochPr = await this.getOpenEpochPRForCurrentMilestone();
+              if (!openEpochPr) {
+                this.verificationFeedback = `Ares claimed milestone completion without an open epoch PR on branch ${this.currentMilestoneBranch || 'unknown'}. Athena must replan or split after Ares opens the PR.`;
+                log('⚠️ CLAIM_COMPLETE ignored because no open epoch PR exists for the current milestone branch', this.id);
+                this.saveState();
+              } else {
+                log(`🎯 Ares claims milestone complete for epoch PR #${openEpochPr.id} — switching to verification`, this.id);
+                this.setState({ phase: 'verification', currentEpochPrId: openEpochPr.id });
+                broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: this.milestoneTitle });
+              }
             }
           }
 
@@ -1861,7 +1946,7 @@ class ProjectRunner {
         } else {
         const apollo = managers.find(m => m.name === 'apollo');
         if (apollo) {
-          const apolloContext = `> **Milestone to verify:** ${this.milestoneDescription}\n\n`;
+          const apolloContext = `> **Milestone to verify:** ${this.milestoneDescription}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${this.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
 
           const result = await this.runAgent(apollo, config, null, apolloContext);
           cycleTotal++;
@@ -1907,6 +1992,10 @@ class ProjectRunner {
 
           // Process decision
           if (decision === 'pass') {
+            const mergedPr = await this.decideEpochPR('merged', {
+              actor: 'apollo',
+              reason: `Apollo passed milestone ${this.milestoneTitle || this.milestoneDescription || ''}`.trim(),
+            });
             log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
             broadcastEvent({ type: 'verified', project: this.id, title: this.milestoneTitle });
             this.milestoneTitle = null;
@@ -1915,18 +2004,26 @@ class ProjectRunner {
               milestoneDescription: null,
               milestoneCyclesBudget: 0,
               milestoneCyclesUsed: 0,
+              currentEpochPrId: null,
+              currentMilestoneBranch: null,
+              lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
               verificationFeedback: null,
               isFixRound: false,
               phase: 'athena',
             });
           } else if (decision === 'fail') {
-            log(`❌ Verification failed — returning to Ares (${Math.floor(this.milestoneCyclesBudget / 2)} fix cycles)`, this.id);
+            const failureReason = this.verificationFeedback || 'Apollo rejected the epoch PR and requested milestone splitting or narrowing.';
+            await this.decideEpochPR('closed', {
+              actor: 'apollo',
+              reason: failureReason,
+            });
+            log('❌ Verification failed — returning to Athena for split/replan', this.id);
             broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
-            const fixBudget = Math.floor(this.milestoneCyclesBudget / 2);
             this.setState({
-              milestoneCyclesBudget: this.milestoneCyclesUsed + fixBudget,
-              isFixRound: true,
-              phase: 'implementation',
+              currentEpochPrId: null,
+              verificationFeedback: failureReason,
+              isFixRound: false,
+              phase: 'athena',
             });
           } else {
             // No decision yet, stay in verification phase — still save

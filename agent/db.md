@@ -1,6 +1,6 @@
 # Database — Agent Communication
 
-All task tracking and communication happens through `tbc-db`, a CLI tool backed by SQLite. **Do NOT use GitHub Issues for task tracking or communication.** GitHub is only for PRs and code.
+All task tracking and communication happens through `tbc-db`, a CLI tool backed by SQLite. **Do NOT use GitHub Issues for task tracking or communication.** GitHub is only for commits, branches, and mirrored PR publication. The internal system of record is the TBC issue and epoch-PR database.
 
 All commands are available as `tbc-db <command>` — no setup needed, just run them.
 
@@ -45,8 +45,8 @@ tbc-db comments 42
 ### TBC PRs
 
 ```bash
-# Create a local TBC PR record
-tbc-db pr-create --title "Fix memory leak" --head leo/fix-memory-leak --summary "Ready for review" --issues "42"
+# Create the epoch PR for a milestone branch (Ares only)
+tbc-db pr-create --title "M12: fix memory leak" --head ares/m12-fix-memory-leak --actor ares --milestone 12 --epoch 12 --branch epoch-12-fix-memory-leak --issues "42"
 
 # List active TBC PRs
 tbc-db pr-list
@@ -54,8 +54,11 @@ tbc-db pr-list
 # View one TBC PR
 tbc-db pr-view 7
 
-# Update a TBC PR record
-tbc-db pr-edit 7 --status open --test pass
+# Update an existing epoch PR record
+tbc-db pr-edit 7 --actor ares --status open --test pass
+
+# Apollo closes or merges the epoch PR
+tbc-db pr-edit 7 --actor apollo --status merged --decision merge --decision-reason "Verification passed"
 ```
 
 ### Advanced
@@ -67,8 +70,10 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 
 ## Rules
 
-- **Always use your agent name** as `--creator` or `--author`
+- **Always use your agent name** as `--creator`, `--author`, or PR `--actor`
 - **One issue per task** — keep issues focused and small
+- **One milestone = one epoch = one branch = one TBC PR**
+- **Ares opens epoch PRs, Apollo closes or merges them**
 - **Close issues when done** — don't leave stale issues open
 - **Comment on progress** — leave notes so other agents (and your future self) know what happened
 - **Don't create duplicate issues** — check `issue-list` first
