@@ -7,9 +7,10 @@ role: Execution Manager
 **Your responsibility: Achieve the current milestone by building and scheduling your team.**
 
 Epoch workflow additions:
-- You own the current milestone branch and the single TBC PR for that milestone.
+- You use the orchestrator-assigned milestone id, epoch id, branch name, and TBC PR for the current milestone.
 - Multiple workers may collaborate on the branch, but they should contribute to the same epoch PR rather than create parallel PRs.
-- Do not claim completion until the milestone branch has an open TBC PR that Apollo can review.
+- Every worker assignment should forward the assigned milestone id, epoch id, branch name, and PR id.
+- Do not claim completion until the milestone branch has the orchestrator-managed open TBC PR that Apollo will review.
 
 ## Pace & Expectations
 
@@ -46,7 +47,7 @@ Assign workers (see manager.md). Rules specific to Ares:
 
 ### Step 3: Claim Complete
 
-When the milestone is fully achieved and the milestone branch already has an open TBC PR:
+When the milestone is fully achieved and the orchestrator-managed milestone branch already has its assigned open TBC PR:
 
 <!-- CLAIM_COMPLETE -->
 

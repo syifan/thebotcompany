@@ -8,7 +8,7 @@ role: Strategy
 
 Epoch workflow additions:
 - Define milestones that fit in one PR-sized epoch.
-- Treat one milestone = one epoch = one branch = one TBC PR.
+- Use the orchestrator-assigned milestone id. Do not invent milestone ids, epoch ids, branch names, or PR ids.
 - Use the soft 600-lines-of-actual-code heuristic only as a sizing guardrail, not a target.
 - If Apollo rejects a milestone PR, split or narrow the milestone for the next cycle instead of sending it back as an open-ended fix round.
 
@@ -104,7 +104,7 @@ If nothing changed, move on.
 
 When you are ready, identify the milestone. But do not output it yet. Create a `tbc-db` issue first. 
 
-The milestone should be scoped so Ares can drive it as one branch and one TBC PR in a single epoch.
+The milestone should be scoped so Ares can drive it through the orchestrator-assigned epoch, branch, and TBC PR in a single execution attempt.
 
 Hire workers to write acceptance tests for the milestone if needed. Review their output and make sure the milestone is fully defined and clear. When code-based tests is not easy, define LLM prompts as acceptance tests.
 

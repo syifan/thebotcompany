@@ -38,6 +38,8 @@ Each manager has their own team of workers. Workers report to whoever hired them
 
 The orchestrator runs a strict state machine. **Only specific outputs trigger phase transitions.** You cannot skip phases or hand off to other managers — the orchestrator controls all transitions.
 
+The orchestrator also owns the execution identifiers. It assigns milestone ids, epoch ids, branch names, and the active TBC PR. Managers must use the assigned values rather than inventing their own.
+
 ```
 PLANNING (Athena's phase)
   → Athena + her workers run (research, evaluate, brainstorm)
@@ -156,7 +158,7 @@ You can control what each worker sees by adding `visibility` to each agent step:
 
 ## PRs
 
-**Do NOT use GitHub PRs.** Use TBC PRs instead. One milestone = one epoch = one branch = one TBC PR. Athena defines it, Ares opens it, and Apollo closes or merges it. See `db.md` for the full `tbc-db pr-create` / `tbc-db pr-edit` reference.
+**Do NOT use GitHub PRs.** Use TBC PRs instead. One milestone executes through one epoch on one branch with one TBC PR. The orchestrator assigns the milestone id, epoch id, branch name, and active PR. Athena defines milestone content, Ares executes the assigned epoch, and Apollo closes or merges the assigned PR. See `db.md` for the full `tbc-db pr-create` / `tbc-db pr-edit` reference.
 
 ## Escalate to Human
 
