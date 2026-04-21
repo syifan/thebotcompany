@@ -1103,12 +1103,71 @@ class ProjectRunner {
     }
   }
 
+  closeOpenEpochPRForBranch(branchName, { actor = 'apollo', reason = '' } = {}) {
+    if (!branchName) return null;
+    try {
+      const db = this.getDb();
+      const pr = db.prepare(`
+        SELECT * FROM tbc_prs
+        WHERE status = 'open'
+          AND (
+            (branch_name IS NOT NULL AND branch_name = ?)
+            OR head_branch = ?
+          )
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 1
+      `).get(branchName, branchName);
+      if (!pr) {
+        db.close();
+        return null;
+      }
+      const normalizedStatus = 'closed';
+      db.prepare(`
+        UPDATE tbc_prs
+        SET status = ?, decision = ?, decision_reason = ?, updated_by = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        normalizedStatus,
+        'close',
+        reason || '',
+        actor,
+        new Date().toISOString(),
+        pr.id,
+      );
+      db.close();
+      return { ...pr, status: normalizedStatus, decision: 'close', decision_reason: reason || '' };
+    } catch {
+      return null;
+    }
+  }
+
+  normalizeResetTargetMilestone(resetTo) {
+    const value = typeof resetTo === 'string' ? resetTo.trim() : '';
+    if (!value) return null;
+    if (/^root$/i.test(value)) return { milestoneId: null, label: 'root' };
+    const current = String(this.currentMilestoneId || '').trim();
+    if (!current) return null;
+    const candidate = value.replace(/^m/i, 'M');
+    const ancestors = [];
+    const parts = current.split('.');
+    for (let i = parts.length; i >= 1; i--) ancestors.push(parts.slice(0, i).join('.'));
+    if (!ancestors.includes(candidate)) return null;
+    return { milestoneId: candidate, label: candidate };
+  }
+
   makeMilestoneBranchPrefix(milestoneId) {
     return String(milestoneId || 'M0').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
-  slugifyMilestoneTitle(title) {
-    return String(title || 'milestone').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'milestone';
+  slugifyMilestoneTitle(title, { stripLeadingMilestoneId = null } = {}) {
+    let normalizedTitle = String(title || 'milestone');
+    if (stripLeadingMilestoneId) {
+      const escapedMilestoneId = String(stripLeadingMilestoneId)
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\\\./g, '[\\s._-]*');
+      normalizedTitle = normalizedTitle.replace(new RegExp(`^\\s*${escapedMilestoneId}(?:[\\s:._-]+|\\b)`, 'i'), '');
+    }
+    return normalizedTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'milestone';
   }
 
   async allocateNextMilestoneId(parentMilestoneId = null) {
@@ -1687,14 +1746,24 @@ class ProjectRunner {
     if (this.currentAgentProcess) {
       this.currentAgentProcess.kill('SIGTERM');
     }
+    if (this.currentMilestoneBranch) {
+      this.closeOpenEpochPRForBranch(this.currentMilestoneBranch, {
+        actor: 'ares',
+        reason: `Epoch killed manually while replanning milestone ${this.currentMilestoneId || 'unknown'}.`,
+      });
+    }
     this.currentSchedule = null;
     this.completedAgents = [];
     this.setState({
       phase: 'athena',
+      pendingMilestoneId: null,
       milestoneTitle: null,
       milestoneDescription: null,
       milestoneCyclesBudget: 0,
       milestoneCyclesUsed: 0,
+      currentEpochId: null,
+      currentEpochPrId: null,
+      currentMilestoneBranch: null,
       verificationFeedback: null,
       isFixRound: false,
     });
@@ -1919,7 +1988,11 @@ class ProjectRunner {
           } else {
             situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles without completing the milestone.\n> Previous milestone: ${this.currentMilestoneId || 'unknown'}\n> Current branch: ${this.currentMilestoneBranch || 'not set'}\n\n`;
           }
-          situation += `> **Assigned milestone ID:** ${this.pendingMilestoneId}\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n\n`;
+          situation += `> **Assigned milestone ID:** ${this.pendingMilestoneId}\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n`;
+          if (this.currentMilestoneId) {
+            situation += `> **Optional reset:** If the current subtree is wrong, you may return a milestone with \"reset_to\": \"${this.currentMilestoneId}\" or any ancestor milestone id (or \"root\") to abandon deeper branches and replan from that level.\n`;
+          }
+          situation += `\n`;
 
           const result = await this.runAgent(athena, config, null, situation);
           cycleTotal++;
@@ -1938,7 +2011,23 @@ class ProjectRunner {
               try {
                 const milestone = JSON.parse(milestoneMatch[1]);
                 const milestoneTitle = milestone.title || milestone.description.slice(0, 80);
-                const milestoneId = this.pendingMilestoneId || this.currentMilestoneId || await this.allocateNextMilestoneId(this.currentMilestoneId || null);
+                const resetTarget = this.normalizeResetTargetMilestone(milestone.reset_to);
+                const resetTo = resetTarget ? resetTarget.milestoneId : (this.currentMilestoneId || null);
+                const shouldReusePendingMilestoneId = !!this.pendingMilestoneId && resetTo === (this.currentMilestoneId || null);
+                const milestoneId = shouldReusePendingMilestoneId
+                  ? this.pendingMilestoneId
+                  : await this.allocateNextMilestoneId(resetTo);
+                if (milestone.reset_to && !resetTarget) {
+                  log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, this.id);
+                } else if (milestone.reset_to && resetTarget) {
+                  log(`Athena reset planning anchor to ${resetTarget.label}`, this.id);
+                  if (this.currentMilestoneBranch) {
+                    this.closeOpenEpochPRForBranch(this.currentMilestoneBranch, {
+                      actor: 'athena',
+                      reason: `Athena reset subtree to ${resetTarget.label} while replanning.`,
+                    });
+                  }
+                }
                 this.setState({
                   milestoneTitle,
                   milestoneDescription: milestone.description,
@@ -2065,7 +2154,7 @@ class ProjectRunner {
           }
           if (!this.currentMilestoneBranch) {
             const branchPrefix = this.makeMilestoneBranchPrefix(this.currentMilestoneId);
-            this.currentMilestoneBranch = `${String(this.currentEpochId || 'E0').toLowerCase()}-${branchPrefix}-${this.slugifyMilestoneTitle(this.milestoneTitle)}`;
+            this.currentMilestoneBranch = `${String(this.currentEpochId || 'E0').toLowerCase()}-${branchPrefix}-${this.slugifyMilestoneTitle(this.milestoneTitle, { stripLeadingMilestoneId: this.currentMilestoneId })}`;
             epochStateChanged = true;
           }
           if (epochStateChanged) this.saveState();
