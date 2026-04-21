@@ -115,6 +115,7 @@ Use abstract tiers instead of specific model names. The system resolves tiers to
 Default workers to **mid**. Use `high` or `low` only with a clear reason.
 
 When writing skill files, write clear and specific skill files that define the worker's expertise and any standing rules they should follow.
+Do not use skill files to assign cycle-specific tasks. Skill files are for role instructions and standing constraints only. Put actual work assignments in issues and in the schedule task text.
 
 ## Assign Tasks to Your Workers
 
