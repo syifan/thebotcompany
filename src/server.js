@@ -932,6 +932,7 @@ class ProjectRunner {
       CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
       CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, milestone_id TEXT UNIQUE, title TEXT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, branch_name TEXT, parent_milestone_id TEXT, linked_pr_id INTEGER, failure_reason TEXT, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
       CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', milestone_id TEXT, parent_pr_id INTEGER, epoch_index TEXT, branch_name TEXT, base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')), decision TEXT, decision_reason TEXT DEFAULT '', issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, actor TEXT, updated_by TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
+      CREATE TABLE IF NOT EXISTS pr_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, pr_id INTEGER NOT NULL REFERENCES tbc_prs(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
     `);
     try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
     try { db.exec('ALTER TABLE issues ADD COLUMN closed_by TEXT'); } catch {}
@@ -1043,6 +1044,7 @@ class ProjectRunner {
         FROM tbc_prs
         WHERE id = ?
       `).get(prId);
+      const comments = pr ? db.prepare(`SELECT * FROM pr_comments WHERE pr_id = ? ORDER BY created_at ASC`).all(prId) : [];
       db.close();
       if (!pr) return null;
       return {
@@ -1052,9 +1054,28 @@ class ProjectRunner {
         baseRefName: pr.base_branch,
         shortTitle: pr.title,
         issueIds: (() => { try { return JSON.parse(pr.issue_ids || '[]'); } catch { return []; } })(),
+        comments,
       };
     } catch {
       return null;
+    }
+  }
+
+  async addPRComment(prId, { author = 'human', body = '' } = {}) {
+    try {
+      const db = this.getDb();
+      const pr = db.prepare('SELECT id FROM tbc_prs WHERE id = ?').get(prId);
+      if (!pr) {
+        db.close();
+        return { error: 'PR not found' };
+      }
+      const now = new Date().toISOString();
+      const result = db.prepare('INSERT INTO pr_comments (pr_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(prId, author || 'human', body.trim(), now);
+      const comment = db.prepare('SELECT * FROM pr_comments WHERE id = ?').get(result.lastInsertRowid);
+      db.close();
+      return { comment };
+    } catch (e) {
+      return { error: e.message };
     }
   }
 
@@ -4058,8 +4079,41 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: 'PR not found' }));
         } else {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ pr }));
+          res.end(JSON.stringify({ pr, comments: pr.comments || [] }));
         }
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
+    // POST /api/projects/:id/prs/:prId/comments — add PR comment
+    const prCommentPostMatch = req.method === 'POST' && subPath.match(/^prs\/(\d+)\/comments$/);
+    if (prCommentPostMatch) {
+      try {
+        const prId = parseInt(prCommentPostMatch[1], 10);
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+          const { author, body: commentBody } = JSON.parse(body);
+          if (!commentBody?.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Comment body required' }));
+          }
+          const result = await runner.addPRComment(prId, { author, body: commentBody });
+          if (result.error === 'PR not found') {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: result.error }));
+          }
+          if (result.error) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: result.error }));
+          }
+          const pr = await runner.getPR(prId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, comment: result.comment, pr, comments: pr?.comments || [] }));
+        });
       } catch (e) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));

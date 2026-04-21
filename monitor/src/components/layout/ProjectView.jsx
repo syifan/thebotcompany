@@ -138,6 +138,9 @@ export default function ProjectView({
   const [prModal, setPrModal] = useState({
     open: initialPathPanel.panel === 'pr',
     pr: null,
+    comments: [],
+    newComment: '',
+    commenting: false,
     loading: false,
     error: null,
     requestedNumber: null,
@@ -818,7 +821,7 @@ export default function ProjectView({
     const controller = new AbortController()
     const requestId = prRequestRef.current.id + 1
     prRequestRef.current = { id: requestId, controller, targetNumber: requestedNumber }
-    setPrModal({ open: true, pr: null, loading: true, error: null, requestedNumber })
+    setPrModal({ open: true, pr: null, comments: [], newComment: '', commenting: false, loading: true, error: null, requestedNumber })
     navigateProjectPath(['pr', prId])
     try {
       const res = await fetch(`/api/projects/${currentProject.id}/prs/${requestedNumber}`, { signal: controller.signal })
@@ -827,15 +830,36 @@ export default function ProjectView({
       if (prRequestRef.current.id !== requestId) return
       if (selectedProjectRef.current?.id !== currentProject.id) return
       if (typeof window !== 'undefined' && window.location.pathname !== expectedPath) return
-      setPrModal({ open: true, pr: data.pr, loading: false, error: null, requestedNumber })
+      setPrModal({ open: true, pr: data.pr, comments: data.comments || data.pr?.comments || [], newComment: '', commenting: false, loading: false, error: null, requestedNumber })
     } catch (err) {
       if (err.name === 'AbortError') return
       if (prRequestRef.current.id !== requestId) return
       if (selectedProjectRef.current?.id !== currentProject.id) return
       if (typeof window !== 'undefined' && window.location.pathname !== expectedPath) return
-      setPrModal({ open: true, pr: null, loading: false, error: err.message, requestedNumber })
+      setPrModal({ open: true, pr: null, comments: [], newComment: '', commenting: false, loading: false, error: err.message, requestedNumber })
     } finally {
       if (prRequestRef.current.id === requestId) prRequestRef.current.controller = null
+    }
+  }
+
+  const submitPRComment = async () => {
+    if (!prModal.pr || !prModal.newComment?.trim()) return
+    setPrModal(prev => ({ ...prev, commenting: true }))
+    try {
+      const res = await authFetch(projectApi(`/prs/${prModal.pr.id}/comments`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: 'human', body: prModal.newComment.trim() })
+      })
+      if (res.ok) {
+        const detailRes = await authFetch(projectApi(`/prs/${prModal.pr.id}`))
+        const data = await detailRes.json()
+        setPrModal(prev => ({ ...prev, pr: data.pr, comments: data.comments || data.pr?.comments || [], newComment: '', commenting: false }))
+      } else {
+        setPrModal(prev => ({ ...prev, commenting: false }))
+      }
+    } catch {
+      setPrModal(prev => ({ ...prev, commenting: false }))
     }
   }
 
@@ -1334,7 +1358,7 @@ export default function ProjectView({
         submitIssueComment={submitIssueComment}
         modKey={modKey}
       />
-      <PRDetailPanel prModal={{ ...prModal, open: isPrPanelOpen }} setPrModal={setPrModalWithUrl} />
+      <PRDetailPanel prModal={{ ...prModal, open: isPrPanelOpen }} setPrModal={setPrModalWithUrl} submitPRComment={submitPRComment} />
       <ChatPanel
         open={isChatPanelOpen}
         onClose={closeChatPanel}

@@ -161,6 +161,19 @@ export function buildIssueTimeline(issue, comments = []) {
   return items.sort((a, b) => toMillis(a.at) - toMillis(b.at))
 }
 
-export function buildPRTimeline(pr) {
-  return buildPREvents(pr).sort((a, b) => toMillis(a.at) - toMillis(b.at))
+export function buildPRTimeline(pr, comments = []) {
+  const items = [
+    ...buildPREvents(pr),
+    ...comments.map((comment) => ({
+      type: 'comment',
+      id: comment.id,
+      author: comment.author,
+      body: comment.body,
+      at: comment.created_at,
+      meta: formatWhen(comment.created_at),
+      kind: 'comment',
+      icon: MessageSquare,
+    })),
+  ]
+  return items.sort((a, b) => toMillis(a.at) - toMillis(b.at))
 }

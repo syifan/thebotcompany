@@ -1,6 +1,7 @@
 import React from 'react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 import { GitPullRequest, ExternalLink } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import StatusPill from '@/components/ui/status-pill'
 import { EntityTimeline, buildPRTimeline } from '@/components/ui/entity-event-list'
 
@@ -14,15 +15,17 @@ function formatDate(value) {
   })
 }
 
-export default function PRDetailPanel({ prModal, setPrModal }) {
+export default function PRDetailPanel({ prModal, setPrModal, submitPRComment }) {
   const pr = prModal.pr
   const branchLabel = pr && pr.baseRefName === pr.headRefName
     ? pr.baseRefName
     : `${pr?.baseRefName} ← ${pr?.headRefName}`
 
+  const closePanel = () => setPrModal({ open: false, pr: null, comments: [], newComment: '', commenting: false, loading: false, error: null })
+
   return (
-    <Panel id="pr-detail" open={prModal.open} onClose={() => setPrModal({ open: false, pr: null, loading: false, error: null })}>
-      <PanelHeader onClose={() => setPrModal({ open: false, pr: null, loading: false, error: null })}>
+    <Panel id="pr-detail" open={prModal.open} onClose={closePanel}>
+      <PanelHeader onClose={closePanel}>
         {pr ? `#${pr.number} ${pr.title}` : 'PR'}
       </PanelHeader>
       <PanelContent>
@@ -66,12 +69,28 @@ export default function PRDetailPanel({ prModal, setPrModal }) {
               <div className="font-medium">{formatDate(pr.updated_at)}</div>
             </div>
 
-            <EntityTimeline title="PR activity" items={buildPRTimeline(pr)} />
+            <EntityTimeline title="PR activity" items={buildPRTimeline(pr, prModal.comments || pr.comments || [])} />
 
             <div>
               <div className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Summary</div>
               <div className="whitespace-pre-wrap text-sm leading-6 text-neutral-800 dark:text-neutral-200">
                 {pr.summary?.trim() || 'No summary'}
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-neutral-200 dark:border-neutral-800 pt-4">
+              <div className="text-xs uppercase tracking-wide text-neutral-500">Add comment</div>
+              <textarea
+                value={prModal.newComment || ''}
+                onChange={(e) => setPrModal(prev => ({ ...prev, newComment: e.target.value }))}
+                rows={4}
+                placeholder="Add a PR comment"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-neutral-400"
+              />
+              <div className="flex justify-end">
+                <Button size="sm" onClick={submitPRComment} disabled={prModal.commenting || !prModal.newComment?.trim()}>
+                  {prModal.commenting ? 'Posting...' : 'Post comment'}
+                </Button>
               </div>
             </div>
           </div>
