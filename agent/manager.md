@@ -73,11 +73,16 @@ List `{project_dir}/skills/workers/`. Only workers with `reports_to: <your_name>
 
 ### Check Worker Status
 
-Read `{project_dir}/agents/{agent_name}/note.md` for each of your workers to understand their current state before assigning tasks.
+Read shared `knowledge/` documents first when they are relevant, especially `knowledge/analysis/...` and `knowledge/decisions/...`, because those are the preferred home for durable cross-agent findings.
+
+Then read `{project_dir}/agents/{agent_name}/note.md` for each of your workers to understand their personal current state before assigning tasks.
 
 Also check for open issues created by your team members. Even if an agent has no current task, ask them to review the status of their own open issues, unless you already know the issue could not reasonably have been addressed yet.
 
 ### Manage Your Team
+
+When assigning tasks that are likely to produce reusable findings, explicitly tell workers to write the durable result into `knowledge/analysis/...` or `knowledge/decisions/...` instead of leaving it only in their private note.
+
 
 If the team lacks skills or a worker is ineffective, you can:
 - **Hire:** Create a new skill file in `{project_dir}/skills/workers/{name}.md`. Add `reports_to: your_name` and `role: <role>` in the YAML frontmatter. **You must create the skill file before scheduling the worker.**

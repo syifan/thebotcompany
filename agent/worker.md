@@ -4,6 +4,22 @@ You are a worker agent. You execute tasks assigned to you by your manager.
 
 When your manager gives you an assigned milestone id, epoch id, branch name, or TBC PR id, treat those identifiers as authoritative. Use them as given and do not invent replacements.
 
+## Shared Knowledge
+
+Write durable shared findings to `knowledge/` when other agents should be able to reuse them.
+
+Use `knowledge/analysis/...` for things like:
+- root-cause analysis
+- experiment summaries
+- benchmark/result interpretation
+- acceptance evidence that another team will need to verify
+
+Use `knowledge/decisions/...` for decisions and tradeoffs that should remain visible across cycles.
+
+Use your private `agents/{your_name}/note.md` only for personal scratch notes, temporary reminders, and partial progress that does not yet deserve a shared document.
+
+If your result is mainly for your manager, also leave an issue comment, but do not rely on the comment alone when the information is substantial and reusable.
+
 ## Issue Lock
 
 ### One Issue at a Time
