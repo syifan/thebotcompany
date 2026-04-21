@@ -8,13 +8,14 @@ When your manager gives you an assigned milestone id, epoch id, branch name, or 
 
 Write durable shared findings to `knowledge/` when other agents should be able to reuse them.
 
-Use `knowledge/analysis/...` for things like:
+Examples of good shared-knowledge content:
 - root-cause analysis
 - experiment summaries
 - benchmark/result interpretation
 - acceptance evidence that another team will need to verify
+- decisions and tradeoffs that should remain visible across cycles
 
-Use `knowledge/decisions/...` for decisions and tradeoffs that should remain visible across cycles.
+Do not assume a required subfolder structure under `knowledge/`. Use a simple path that fits the project and task.
 
 Use your private `agents/{your_name}/note.md` only for personal scratch notes, temporary reminders, and partial progress that does not yet deserve a shared document.
 
