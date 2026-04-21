@@ -15,7 +15,6 @@ Examples of good shared-knowledge content:
 - acceptance evidence that another team will need to verify
 - decisions and tradeoffs that should remain visible across cycles
 
-Do not assume a required subfolder structure under `knowledge/`. Use a simple path that fits the project and task.
 
 Use your private `agents/{your_name}/note.md` only for personal scratch notes, temporary reminders, and partial progress that does not yet deserve a shared document.
 

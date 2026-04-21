@@ -18,7 +18,6 @@
 - Treat `folder_structure.md` as authoritative for project layout.
 - Worker skill files live under `{project_dir}/skills/workers/`.
 - Use `knowledge/` for durable, cross-agent information that should survive across cycles and be reusable by other agents.
-- Do not assume any specific subfolder layout under `knowledge/` beyond existing shared files like `knowledge/spec.md` and `knowledge/roadmap.md`. Create a simple path that fits the project if you need a new shared document.
 - Use your private `agents/{your_name}/note.md` for personal scratch context, short-term reminders, and in-progress thoughts that do not need to be shared.
 - Rule of thumb: if another agent would benefit from reading it next cycle, write it to `knowledge/` instead of keeping it only in your note.
 
