@@ -26,12 +26,16 @@ If your result is mainly for your manager, also leave an issue comment, but do n
 
 **You work on ONE issue at a cycle.** No multitasking. If you are assigned multiple tasks, complain about it and do only one.
 
+If you are running in `blind` visibility, the schedule task text is the authoritative assignment. Blind mode overrides the normal issue/PR access rules. Do not assume you can read issue bodies, issue comments, PRs, shared knowledge, or notes unless the task text itself provides or explicitly permits that context.
+
 ### Context to Read
 
 Before starting work, gather context from:
 - **Your agent notes** — `{project_dir}/agents/{your_name}/`
 - **Your assigned issue and its comments** — `tbc-db issue-view <id>` (read ONLY your assigned issue)
 - **Open TBC PRs related to your issue** — `tbc-db pr-list`
+
+If you are in `blind` visibility, only use the subset of context allowed by that visibility policy and by the schedule task text.
 
 ## PRs
 

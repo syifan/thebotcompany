@@ -177,4 +177,13 @@ describe('agent filesystem allowlist', () => {
       assert.match(g2, /access denied/i);
     });
   });
+  it('blocks shell-based system log access for blind agents', async () => {
+    const p = mkProject();
+    const grepLog = await executeTool('Bash', { command: 'grep -n "Apollo" workspace/orchestrator.log' }, p.repo, 0, {}, null, null, p.allowedBlind, null);
+    assert.match(grepLog, /system log access is not allowed/i);
+
+    const tbcLogs = await executeTool('Bash', { command: 'tbc logs 200 | grep Apollo' }, p.repo, 0, {}, null, null, p.allowedBlind, null);
+    assert.match(tbcLogs, /system log access is not allowed/i);
+  });
+
 });

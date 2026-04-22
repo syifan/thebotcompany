@@ -109,6 +109,20 @@ function checkSensitiveDbAccess(command) {
   return null;
 }
 
+function checkSensitiveLogAccess(command, allowedPaths = null) {
+  if (!command || !allowedPaths?.denied?.length) return null;
+  const denied = allowedPaths.denied.map(p => String(p || '').replace(/\\/g, '/'));
+  const logDenied = denied.some(p => p.endsWith('/orchestrator.log') || p.endsWith('/server.log') || p.includes('/.thebotcompany/logs/'));
+  if (!logDenied) return null;
+  if (/(?:^|[;&|`\s])tbc\s+logs\b/i.test(command)) {
+    return 'Blocked: system log access is not allowed.';
+  }
+  if (/orchestrator\.log\b|server\.log\b|\.thebotcompany\/logs\//i.test(command)) {
+    return 'Blocked: system log access is not allowed.';
+  }
+  return null;
+}
+
 function extractTbcDbCommand(command) {
   if (!command || !/(?:^|[;&|`\s])tbc-db\b/.test(` ${command}`)) return null;
   const trimmed = command.trim();
@@ -497,6 +511,11 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     const dbBlock = checkSensitiveDbAccess(originalCommand);
     if (dbBlock) {
       resolve({ output: dbBlock, exitCode: 1, ok: false });
+      return;
+    }
+    const logBlock = checkSensitiveLogAccess(originalCommand, allowedPaths);
+    if (logBlock) {
+      resolve({ output: logBlock, exitCode: 1, ok: false });
       return;
     }
     const issueBlock = checkIssueAccessInCommand(command, issuePolicy);

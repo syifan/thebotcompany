@@ -71,6 +71,8 @@ VERIFICATION (Apollo's phase)
 
 List `{project_dir}/skills/workers/`. Only workers with `reports_to: <your_name>` in their frontmatter are on your team. Workers from other teams don't exist in your phase — never schedule them.
 
+Do not use skill files to assign cycle-specific tasks. Skill files are for standing instructions and role constraints only. Put actual work assignments in issues and in the schedule task text.
+
 ### Check Worker Status
 
 Read shared `knowledge/` documents first when they are relevant, because they are the preferred home for durable cross-agent findings.
@@ -83,6 +85,7 @@ Also check for open issues created by your team members. Even if an agent has no
 
 When assigning tasks that are likely to produce reusable findings, explicitly tell workers to write the durable result into `knowledge/` instead of leaving it only in their private note.
 
+For `blind` workers, the schedule task text must be fully self-contained and authoritative. Do not rely on the worker being able to read issue bodies, issue comments, PRs, notes, or shared knowledge. Do not use issue bodies as the primary assignment channel for blind workers. Issues may be referenced only as allowed evidence targets or reporting destinations.
 
 If the team lacks skills or a worker is ineffective, you can:
 - **Hire:** Create a new skill file in `{project_dir}/skills/workers/{name}.md`. Add `reports_to: your_name` and `role: <role>` in the YAML frontmatter. **You must create the skill file before scheduling the worker.**
@@ -115,7 +118,6 @@ Use abstract tiers instead of specific model names. The system resolves tiers to
 Default workers to **mid**. Use `high` or `low` only with a clear reason.
 
 When writing skill files, write clear and specific skill files that define the worker's expertise and any standing rules they should follow.
-Do not use skill files to assign cycle-specific tasks. Skill files are for role instructions and standing constraints only. Put actual work assignments in issues and in the schedule task text.
 
 ## Assign Tasks to Your Workers
 
@@ -156,6 +158,8 @@ Insert `{"delay": N}` steps wherever you need a pause (waiting for CI, builds, e
 ### Worker Visibility
 
 You can control what each worker sees by adding `visibility` to each agent step:
+
+If you choose `blind`, the schedule task text must stand on its own. Do not assume the worker can reconstruct the assignment by reading issues, PRs, shared knowledge, or notes.
 
 **Three levels:**
 - **`full`** (default): Worker can see the issue board, PR board, shared knowledge, and their own notes.
