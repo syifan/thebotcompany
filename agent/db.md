@@ -56,6 +56,12 @@ tbc-db pr-view 7
 
 # Update a TBC PR record
 tbc-db pr-edit 7 --status open --test pass
+
+# Add a comment to a TBC PR
+tbc-db pr-comment 7 --author leo --body "Ready for Apollo review"
+
+# List comments on a TBC PR
+tbc-db pr-comments 7
 ```
 
 ### Advanced
@@ -96,5 +102,6 @@ If you get "Access denied", respect the restriction and work with what you have.
 
 - For agent-delivered work, create a **TBC PR** with `tbc-db pr-create` instead of `gh pr create`
 - Update the record as work progresses with `tbc-db pr-edit`
-- Use `pr-list` and `pr-view` to inspect active TBC PRs
+- Use `tbc-db pr-comment` for review notes, progress updates, handoffs, and verification feedback on a TBC PR
+- Use `pr-list`, `pr-view`, and `pr-comments` to inspect active TBC PRs and their discussion
 - GitHub PRs are optional mirrors, not the default workflow
