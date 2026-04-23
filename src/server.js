@@ -2114,6 +2114,8 @@ class ProjectRunner {
             const { total, failures } = await this.executeSchedule(schedule, config, 'athena');
             cycleTotal += total;
             cycleFailures += failures;
+            this.currentSchedule = null;
+            this.completedAgents = [];
           }
 
           this.saveState();
