@@ -1155,6 +1155,24 @@ class ProjectRunner {
     return { milestoneId: candidate, label: candidate };
   }
 
+  getParentMilestoneId(milestoneId = null) {
+    const value = String(milestoneId || '').trim();
+    if (!value || !value.includes('.')) return null;
+    return value.split('.').slice(0, -1).join('.') || null;
+  }
+
+  async getMilestoneRecord(milestoneId) {
+    if (!milestoneId) return null;
+    try {
+      const db = this.getDb();
+      const row = db.prepare(`SELECT * FROM milestones WHERE milestone_id = ?`).get(milestoneId);
+      db.close();
+      return row || null;
+    } catch {
+      return null;
+    }
+  }
+
   makeMilestoneBranchPrefix(milestoneId) {
     return String(milestoneId || 'M0').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
@@ -2232,7 +2250,10 @@ class ProjectRunner {
         } else {
         const apollo = managers.find(m => m.name === 'apollo');
         if (apollo) {
-          const apolloContext = `> **Milestone to verify:** ${this.milestoneDescription}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${this.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
+          const isRollupVerification = !this.currentEpochPrId;
+          const apolloContext = isRollupVerification
+            ? `> **Milestone to verify:** ${this.milestoneDescription}\n> **Rollup verification target:** ${this.currentMilestoneId || 'unknown'}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
+            : `> **Milestone to verify:** ${this.milestoneDescription}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${this.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
 
           const result = await this.runAgent(apollo, config, null, apolloContext);
           cycleTotal++;
@@ -2278,46 +2299,99 @@ class ProjectRunner {
 
           // Process decision
           if (decision === 'pass') {
-            const mergedPr = await this.decideEpochPR('merged', {
+            const mergedPr = isRollupVerification ? null : await this.decideEpochPR('merged', {
               actor: 'apollo',
               reason: `Apollo passed milestone ${this.currentMilestoneId || ''} ${this.milestoneTitle || this.milestoneDescription || ''}`.trim(),
             });
+            const completedMilestoneId = this.currentMilestoneId;
+            const completedMilestoneTitle = this.milestoneTitle;
+            const parentMilestoneId = this.getParentMilestoneId(completedMilestoneId);
             await this.markCurrentMilestoneCompleted();
-            log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
-            broadcastEvent({ type: 'verified', project: this.id, title: this.milestoneTitle });
-            this.milestoneTitle = null;
-            this.setState({
-              milestoneTitle: null,
-              milestoneDescription: null,
-              milestoneCyclesBudget: 0,
-              milestoneCyclesUsed: 0,
-              currentMilestoneId: null,
-              pendingMilestoneId: null,
-              currentEpochId: null,
-              currentEpochPrId: null,
-              currentMilestoneBranch: null,
-              lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
-              verificationFeedback: null,
-              isFixRound: false,
-              phase: 'athena',
-            });
+            if (parentMilestoneId) {
+              const parentMilestone = await this.getMilestoneRecord(parentMilestoneId);
+              log(`✅ Milestone verified — escalating completion check to parent milestone ${parentMilestoneId}`, this.id);
+              broadcastEvent({ type: 'verified', project: this.id, title: completedMilestoneTitle });
+              if (parentMilestone) {
+                await this.upsertMilestoneRecord({
+                  milestoneId: parentMilestoneId,
+                  title: parentMilestone.title,
+                  description: parentMilestone.description,
+                  cyclesBudget: parentMilestone.cycles_budget,
+                  branchName: parentMilestone.branch_name,
+                  parentMilestoneId: parentMilestone.parent_milestone_id,
+                  phase: 'verification',
+                  status: 'active',
+                  linkedPrId: parentMilestone.linked_pr_id,
+                  failureReason: null,
+                });
+              }
+              this.setState({
+                milestoneTitle: parentMilestone?.title || parentMilestoneId,
+                milestoneDescription: parentMilestone?.description || `Parent rollup verification for ${parentMilestoneId}`,
+                milestoneCyclesBudget: parentMilestone?.cycles_budget || 0,
+                milestoneCyclesUsed: parentMilestone?.cycles_used || 0,
+                currentMilestoneId: parentMilestoneId,
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                currentMilestoneBranch: parentMilestone?.branch_name || null,
+                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
+                verificationFeedback: null,
+                isFixRound: false,
+                phase: 'verification',
+              });
+              broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: parentMilestone?.title || parentMilestoneId });
+            } else {
+              log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
+              broadcastEvent({ type: 'verified', project: this.id, title: this.milestoneTitle });
+              this.milestoneTitle = null;
+              this.setState({
+                milestoneTitle: null,
+                milestoneDescription: null,
+                milestoneCyclesBudget: 0,
+                milestoneCyclesUsed: 0,
+                currentMilestoneId: null,
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                currentMilestoneBranch: null,
+                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
+                verificationFeedback: null,
+                isFixRound: false,
+                phase: 'athena',
+              });
+            }
           } else if (decision === 'fail') {
             const failureReason = this.verificationFeedback || 'Apollo rejected the epoch PR and requested milestone splitting or narrowing.';
-            await this.decideEpochPR('closed', {
-              actor: 'apollo',
-              reason: failureReason,
-            });
-            await this.markCurrentMilestoneFailed(failureReason);
-            log('❌ Verification failed — returning to Athena for split/replan', this.id);
-            broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
-            this.setState({
-              pendingMilestoneId: null,
-              currentEpochId: null,
-              currentEpochPrId: null,
-              verificationFeedback: failureReason,
-              isFixRound: false,
-              phase: 'athena',
-            });
+            if (isRollupVerification) {
+              log('❌ Parent rollup verification incomplete — returning to Athena to plan the next child milestone', this.id);
+              broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
+              this.setState({
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                currentMilestoneBranch: null,
+                verificationFeedback: failureReason,
+                isFixRound: false,
+                phase: 'athena',
+              });
+            } else {
+              await this.decideEpochPR('closed', {
+                actor: 'apollo',
+                reason: failureReason,
+              });
+              await this.markCurrentMilestoneFailed(failureReason);
+              log('❌ Verification failed — returning to Athena for split/replan', this.id);
+              broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
+              this.setState({
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                verificationFeedback: failureReason,
+                isFixRound: false,
+                phase: 'athena',
+              });
+            }
           } else {
             // No decision yet, stay in verification phase — still save
             this.saveState();

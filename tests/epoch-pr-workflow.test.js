@@ -53,4 +53,20 @@ describe('epoch-as-PR orchestrator flow', () => {
     assert.match(athena, /`reset_to` is optional/);
     assert.match(athena, /ancestor milestone/);
   });
+
+  it('escalates a successful child milestone to parent rollup verification instead of jumping to root', () => {
+    assert.match(server, /const isRollupVerification = !this\.currentEpochPrId/);
+    assert.match(server, /const parentMilestoneId = this\.getParentMilestoneId\(completedMilestoneId\)/);
+    assert.match(server, /Milestone verified — escalating completion check to parent milestone/);
+    assert.match(server, /phase: 'verification'/);
+    assert.match(server, /currentMilestoneId: parentMilestoneId/);
+  });
+
+  it('returns rollup verification failures to Athena without treating them as epoch PR failures', () => {
+    const rollupFailBlock = server.match(/if \(isRollupVerification\) \{[\s\S]*?\n            \} else \{/)
+    assert.ok(rollupFailBlock)
+    const block = rollupFailBlock[0]
+    assert.match(block, /Parent rollup verification incomplete — returning to Athena to plan the next child milestone/)
+    assert.doesNotMatch(block, /markCurrentMilestoneFailed/)
+  });
 });
