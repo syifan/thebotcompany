@@ -25,6 +25,7 @@ import ChatPanel from '@/components/panels/ChatPanel'
 import AgentDetailPanel from '@/components/panels/AgentDetailPanel'
 import IssueDetailPanel from '@/components/panels/IssueDetailPanel'
 import PRDetailPanel from '@/components/panels/PRDetailPanel'
+import MilestoneDetailPanel from '@/components/panels/MilestoneDetailPanel'
 import ProjectSettingsPanel from '@/components/panels/ProjectSettingsPanel'
 import LoginModal from '@/components/modals/LoginModal'
 import ApiKeyHelpModal from '@/components/modals/ApiKeyHelpModal'
@@ -144,6 +145,11 @@ export default function ProjectView({
     error: null,
     requestedNumber: null,
   })
+  const [milestoneModal, setMilestoneModal] = useState({
+    open: initialPathPanel.panel === 'milestone',
+    milestone: null,
+    requestedId: initialPathPanel.panel === 'milestone' ? initialPathPanel.id : null,
+  })
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
   const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
@@ -164,6 +170,7 @@ export default function ProjectView({
   const isChatPanelOpen = chatPanelOpen || pathPanel.panel === 'chat'
   const isIssuePanelOpen = issueModal.open || pathPanel.panel === 'issue'
   const isPrPanelOpen = prModal.open || pathPanel.panel === 'pr'
+  const isMilestonePanelOpen = milestoneModal.open || pathPanel.panel === 'milestone'
   const isAgentPanelOpen = agentModal.open || pathPanel.panel === 'agent'
   const isBootstrapPanelOpen = bootstrapModal.open || pathPanel.panel === 'bootstrap'
 
@@ -246,6 +253,17 @@ export default function ProjectView({
     })
   }, [navigateProjectPath, shouldClearCurrentPanelPath])
 
+  const setMilestoneModalWithUrl = useCallback((updater) => {
+    setMilestoneModal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (prev.open && !next.open) {
+        if (shouldClearCurrentPanelPath('milestone')) navigateProjectPath()
+        return { ...next, requestedId: null }
+      }
+      return next
+    })
+  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+
   const setAgentModalTab = useCallback((nextTab) => {
     setAgentModal(prev => {
       if (!prev.open || !prev.agent || prev.tab === nextTab) return prev
@@ -272,6 +290,7 @@ export default function ProjectView({
     setChatPanelOpen(false)
     setIssueModal(prev => ({ ...prev, open: false, loading: false, requestedId: null }))
     setPrModal(prev => ({ ...prev, open: false, loading: false, error: null, requestedNumber: null }))
+    setMilestoneModal(prev => ({ ...prev, open: false, milestone: null, requestedId: null }))
     setAgentModal(prev => ({ ...prev, open: false }))
   }, [abortIssueRequest, abortPrRequest])
 
@@ -316,6 +335,13 @@ export default function ProjectView({
     setChatPanelOpen(false)
     clearPanelPathIfActive('chat')
   }, [clearPanelPathIfActive])
+
+  const openMilestoneModal = useCallback((milestoneId) => {
+    const requestedId = String(milestoneId)
+    const milestone = milestones.find((item) => String(item.milestone_id) === requestedId) || null
+    setMilestoneModal({ open: true, milestone, requestedId })
+    navigateProjectPath(['milestone', requestedId])
+  }, [milestones, navigateProjectPath])
 
   // Project settings (token state now managed inside ProjectSettingsPanel)
 
@@ -936,6 +962,12 @@ export default function ProjectView({
       return
     }
 
+    const activeMilestoneId = milestoneModal.requestedId
+    if (panel === 'milestone' && panelId && (!milestoneModal.open || String(activeMilestoneId) !== String(panelId))) {
+      openMilestoneModal(panelId)
+      return
+    }
+
     if (panel === 'agent' && panelId) {
       const needsAgentData = agentModal.agent === panelId && !agentModal.loading && !agentModal.data
       if (!agentModal.open || agentModal.agent !== panelId || needsAgentData) {
@@ -962,12 +994,25 @@ export default function ProjectView({
     issueModal.requestedId,
     prModal.open,
     prModal.requestedNumber,
+    milestoneModal.open,
+    milestoneModal.requestedId,
     agentModal.open,
     agentModal.agent,
     agentModal.tab,
     openBootstrapModal,
+    openMilestoneModal,
     shouldClearCurrentPanelPath,
   ])
+
+  useEffect(() => {
+    if (!milestoneModal.requestedId) return
+    const milestone = milestones.find((item) => String(item.milestone_id) === String(milestoneModal.requestedId))
+    if (!milestone) return
+    setMilestoneModal(prev => {
+      if (String(prev.requestedId) !== String(milestone.milestone_id) || prev.milestone === milestone) return prev
+      return { ...prev, milestone }
+    })
+  }, [milestones, milestoneModal.requestedId])
 
   useEffect(() => () => {
     abortIssueRequest()
@@ -1202,6 +1247,8 @@ export default function ProjectView({
               <MilestoneTreeCard
                 milestones={milestones}
                 currentMilestoneId={selectedProject?.currentMilestoneId || null}
+                onMilestoneClick={openMilestoneModal}
+                onPrClick={openPRModal}
               />
 
               <DashboardWidget icon={GitPullRequest} title={`Agent PRs (${prs.length})`}>
@@ -1348,6 +1395,11 @@ export default function ProjectView({
         modKey={modKey}
       />
       <PRDetailPanel prModal={{ ...prModal, open: isPrPanelOpen }} setPrModal={setPrModalWithUrl} />
+      <MilestoneDetailPanel
+        milestoneModal={{ ...milestoneModal, open: isMilestonePanelOpen }}
+        setMilestoneModal={setMilestoneModalWithUrl}
+        onOpenPR={openPRModal}
+      />
       <ChatPanel
         open={isChatPanelOpen}
         onClose={closeChatPanel}

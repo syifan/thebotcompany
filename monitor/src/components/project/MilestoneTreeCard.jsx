@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { GitBranch, ChevronRight, ChevronDown } from 'lucide-react'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import StatusPill from '@/components/ui/status-pill'
-
-const PAGE_SIZE = 20
 
 function milestoneSortValue(id = '') {
   return String(id)
@@ -53,32 +51,59 @@ function statusVariant(node) {
   return 'meta'
 }
 
-function TreeNode({ node, currentMilestoneId, depth = 0 }) {
+function TreeNode({ node, currentMilestoneId, onMilestoneClick, onPrClick, depth = 0 }) {
   const [open, setOpen] = useState(false)
   const hasChildren = node.children?.length > 0
   const isCurrent = currentMilestoneId && node.milestone_id === currentMilestoneId
+
   return (
     <div className="space-y-2">
-      <div className={`rounded-lg border px-3 py-2 ${isCurrent ? 'border-blue-400 bg-blue-50/60 dark:border-blue-500 dark:bg-blue-950/20' : 'border-neutral-200 dark:border-neutral-800'}`}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onMilestoneClick?.(node.milestone_id)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onMilestoneClick?.(node.milestone_id)
+          }
+        }}
+        className={`block w-full rounded-lg border px-1.5 py-2 text-left cursor-pointer ${isCurrent ? 'border-blue-300/70 dark:border-blue-700/70' : 'border-neutral-200 dark:border-neutral-800'}`}
+      >
         <div className="flex items-start gap-2">
-          <button
-            type="button"
-            onClick={() => hasChildren && setOpen((v) => !v)}
-            className={`mt-0.5 shrink-0 ${hasChildren ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-            aria-label={open ? 'Collapse milestone' : 'Expand milestone'}
-          >
-            {open ? <ChevronDown className="w-4 h-4 text-neutral-500" /> : <ChevronRight className="w-4 h-4 text-neutral-500" />}
-          </button>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs text-neutral-600 dark:text-neutral-300">{node.milestone_id}</span>
-              {node.status && <StatusPill variant={statusVariant(node)}>{node.status}</StatusPill>}
-              {node.phase && <StatusPill variant="meta">{node.phase}</StatusPill>}
-              {typeof node.cycles_budget === 'number' && node.cycles_budget > 0 && (
-                <StatusPill variant="meta">{node.cycles_used || 0}/{node.cycles_budget} cycles</StatusPill>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <span className="font-mono text-xs text-neutral-600 dark:text-neutral-300">{node.milestone_id}</span>
+                {node.status && node.status !== 'active' && !isCurrent && <StatusPill variant={statusVariant(node)}>{node.status}</StatusPill>}
+                {node.phase && <StatusPill variant="meta">{node.phase}</StatusPill>}
+                {node.linked_pr_id && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onPrClick?.(node.linked_pr_id)
+                    }}
+                    className="inline-flex"
+                  >
+                    <StatusPill variant="meta">PR #{node.linked_pr_id}</StatusPill>
+                  </button>
+                )}
+              </div>
+              {hasChildren && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setOpen((v) => !v)
+                  }}
+                  className="inline-flex shrink-0 items-center justify-center rounded border border-neutral-200 p-1 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+                  aria-label={open ? 'Collapse milestone' : 'Expand milestone'}
+                  title={open ? 'Collapse' : 'Expand'}
+                >
+                  {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                </button>
               )}
-              {node.linked_pr_id && <StatusPill variant="meta">PR #{node.linked_pr_id}</StatusPill>}
-              {isCurrent && <StatusPill variant="info">current</StatusPill>}
             </div>
             <div className="mt-1 text-sm font-medium text-neutral-900 dark:text-neutral-100 break-words">
               {node.title || node.description || node.milestone_id}
@@ -87,9 +112,9 @@ function TreeNode({ node, currentMilestoneId, depth = 0 }) {
         </div>
       </div>
       {hasChildren && open && (
-        <div className="ml-6 space-y-2 border-l border-neutral-200 dark:border-neutral-800 pl-3">
+        <div className="ml-4 space-y-2 border-l border-neutral-200 pl-2.5 dark:border-neutral-800">
           {node.children.map((child) => (
-            <TreeNode key={child.milestone_id} node={child} currentMilestoneId={currentMilestoneId} depth={depth + 1} />
+            <TreeNode key={child.milestone_id} node={child} currentMilestoneId={currentMilestoneId} onMilestoneClick={onMilestoneClick} onPrClick={onPrClick} depth={depth + 1} />
           ))}
         </div>
       )}
@@ -97,38 +122,18 @@ function TreeNode({ node, currentMilestoneId, depth = 0 }) {
   )
 }
 
-export default function MilestoneTreeCard({ milestones = [], currentMilestoneId = null }) {
+export default function MilestoneTreeCard({ milestones = [], currentMilestoneId = null, onMilestoneClick, onPrClick }) {
   const tree = useMemo(() => buildTree(milestones), [milestones])
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  const sentinelRef = useRef(null)
-  const visibleTree = tree.slice(0, visibleCount)
-  const hasMore = visibleCount < tree.length
-
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE)
-  }, [milestones])
-
-  useEffect(() => {
-    if (!hasMore || !sentinelRef.current) return undefined
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setVisibleCount((count) => Math.min(count + PAGE_SIZE, tree.length))
-      }
-    }, { rootMargin: '120px 0px' })
-    observer.observe(sentinelRef.current)
-    return () => observer.disconnect()
-  }, [hasMore, tree.length])
 
   return (
     <DashboardWidget icon={GitBranch} title={`Milestones (${milestones.length})`}>
       {tree.length === 0 ? (
         <div className="text-sm text-neutral-500">No milestone records yet.</div>
       ) : (
-        <div className="space-y-3 max-h-[32rem] overflow-y-auto pr-1">
-          {visibleTree.map((node) => (
-            <TreeNode key={node.milestone_id} node={node} currentMilestoneId={currentMilestoneId} />
+        <div className="space-y-3">
+          {tree.map((node) => (
+            <TreeNode key={node.milestone_id} node={node} currentMilestoneId={currentMilestoneId} onMilestoneClick={onMilestoneClick} onPrClick={onPrClick} />
           ))}
-          {hasMore && <div ref={sentinelRef} className="h-4" aria-hidden="true" />}
         </div>
       )}
     </DashboardWidget>
