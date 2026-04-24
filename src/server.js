@@ -4174,6 +4174,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // GET /api/projects/:id/milestones — list milestone records for tree rendering
+    if (req.method === 'GET' && subPath === 'milestones') {
+      try {
+        const db = runner.getDb();
+        const milestones = db.prepare(`
+          SELECT id, milestone_id, title, description, cycles_budget, cycles_used, branch_name, parent_milestone_id, linked_pr_id, failure_reason, phase, status, created_at, completed_at
+          FROM milestones
+          ORDER BY created_at ASC, id ASC
+        `).all();
+        db.close();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ milestones }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
     // GET /api/projects/:id/prs/:prId — single PR
     const prDetailMatch = req.method === 'GET' && subPath.match(/^prs\/(\d+)$/);
     if (prDetailMatch) {

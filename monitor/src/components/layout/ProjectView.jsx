@@ -15,6 +15,7 @@ import WorkerCard from '@/components/project/WorkerCard'
 import IssuesSidebar from '@/components/project/IssuesSidebar'
 import HumanInterventionCard from '@/components/project/HumanInterventionCard'
 import AgentReportsCard from '@/components/project/AgentReportsCard'
+import MilestoneTreeCard from '@/components/project/MilestoneTreeCard'
 import ChatCard from '@/components/project/ChatCard'
 import SettingsPanel from '@/components/panels/SettingsPanel'
 import NotificationPanel from '@/components/panels/NotificationPanel'
@@ -120,6 +121,7 @@ export default function ProjectView({
   const [commentsPage, setCommentsPage] = useState(1)
   const [commentsHasMore, setCommentsHasMore] = useState(true)
   const [commentsLoading, setCommentsLoading] = useState(false)
+  const [milestones, setMilestones] = useState([])
   const [selectedAgent, setSelectedAgent] = useState(() => localStorage.getItem('selectedAgent') || null)
   const initialPathPanel = parseProjectPanelPath(currentPath, selectedProject)
   const [reportsPanelOpen, setReportsPanelOpen] = useState(initialPathPanel.panel === 'reports')
@@ -347,13 +349,14 @@ export default function ProjectView({
     if (initial) setProjectLoading(true)
     
     try {
-      const [logsRes, agentsRes, configRes, prsRes, issuesRes, repoRes] = await Promise.all([
+      const [logsRes, agentsRes, configRes, prsRes, issuesRes, repoRes, milestonesRes] = await Promise.all([
         fetch(`${baseApi}/logs?lines=100`),
         fetch(`${baseApi}/agents`),
         fetch(`${baseApi}/config`),
         fetch(`${baseApi}/prs?status=${prFilter}`),
         fetch(`${baseApi}/issues`).catch(() => ({ ok: false })),
-        fetch(`${baseApi}/repo`)
+        fetch(`${baseApi}/repo`),
+        fetch(`${baseApi}/milestones`).catch(() => ({ ok: false }))
       ])
       
       if (selectedProjectRef.current?.id !== currentProject.id) return
@@ -375,6 +378,11 @@ export default function ProjectView({
       setPrs((await prsRes.json()).prs || [])
       if (issuesRes.ok) {
         setIssues((await issuesRes.json()).issues || [])
+      }
+      if (milestonesRes.ok) {
+        setMilestones((await milestonesRes.json()).milestones || [])
+      } else {
+        setMilestones([])
       }
       setRepoUrl((await repoRes.json()).url)
     } catch (err) {
@@ -1189,6 +1197,11 @@ export default function ProjectView({
                 selectedProject={selectedProject}
                 setFocusedReportId={setFocusedReportId}
                 setReportsPanelOpen={openReportsPanel}
+              />
+
+              <MilestoneTreeCard
+                milestones={milestones}
+                currentMilestoneId={selectedProject?.currentMilestoneId || null}
               />
 
               <DashboardWidget icon={GitPullRequest} title={`Agent PRs (${prs.length})`}>
