@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const server = fs.readFileSync(path.resolve('src/server.js'), 'utf8');
 const athena = fs.readFileSync(path.resolve('agent/managers/athena.md'), 'utf8');
+const ares = fs.readFileSync(path.resolve('agent/managers/ares.md'), 'utf8');
 
 describe('epoch-as-PR orchestrator flow', () => {
   it('requires an orchestrator-managed epoch PR before Ares can claim completion', () => {
@@ -68,5 +69,20 @@ describe('epoch-as-PR orchestrator flow', () => {
     const block = rollupFailBlock[0]
     assert.match(block, /Parent rollup verification incomplete — returning to Athena to plan the next child milestone/)
     assert.doesNotMatch(block, /markCurrentMilestoneFailed/)
+  });
+
+  it('gives Ares one grace review turn after worker budget exhaustion', () => {
+    assert.match(server, /const aresGraceMode = this\.milestoneCyclesUsed >= this\.milestoneCyclesBudget/)
+    assert.match(server, /if \(aresGraceMode && this\.aresGraceCycleUsed\)/)
+    assert.match(server, /Grace review mode:\*\* Worker budget is exhausted/)
+    assert.match(server, /if \(aresGraceMode\) this\.aresGraceCycleUsed = true/)
+    assert.match(server, /Ares grace review did not claim completion/)
+    assert.match(server, /Ignoring Ares schedule because grace review mode forbids worker scheduling/)
+  });
+
+  it('documents that grace review mode forbids scheduling and allows only a completion claim', () => {
+    assert.match(ares, /If in grace review mode/)
+    assert.match(ares, /Do not emit a schedule or assign workers/)
+    assert.match(ares, /either emit `<!-- CLAIM_COMPLETE -->` or leave it out/)
   });
 });

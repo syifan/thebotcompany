@@ -379,6 +379,7 @@ class ProjectRunner {
     this.currentEpochPrId = null;
     this.currentMilestoneBranch = null;
     this.lastMergedMilestoneBranch = null;
+    this.aresGraceCycleUsed = false;
     this.verificationFeedback = null;
     this.examinationFeedback = null;
     this.pendingCompletionMessage = null;
@@ -1448,6 +1449,7 @@ class ProjectRunner {
       currentEpochId: null,
       currentEpochPrId: null,
       currentMilestoneBranch: null,
+      aresGraceCycleUsed: false,
       verificationFeedback: null,
       examinationFeedback: null,
       pendingCompletionMessage: null,
@@ -1629,6 +1631,7 @@ class ProjectRunner {
         this.currentEpochPrId = state.currentEpochPrId || null;
         this.currentMilestoneBranch = state.currentMilestoneBranch || null;
         this.lastMergedMilestoneBranch = state.lastMergedMilestoneBranch || null;
+        this.aresGraceCycleUsed = state.aresGraceCycleUsed || false;
         this.verificationFeedback = state.verificationFeedback || null;
         this.examinationFeedback = state.examinationFeedback || null;
         this.pendingCompletionMessage = state.pendingCompletionMessage || null;
@@ -1673,6 +1676,7 @@ class ProjectRunner {
         currentEpochPrId: this.currentEpochPrId || null,
         currentMilestoneBranch: this.currentMilestoneBranch || null,
         lastMergedMilestoneBranch: this.lastMergedMilestoneBranch || null,
+        aresGraceCycleUsed: this.aresGraceCycleUsed || false,
         verificationFeedback: this.verificationFeedback,
         examinationFeedback: this.examinationFeedback,
         pendingCompletionMessage: this.pendingCompletionMessage,
@@ -2056,6 +2060,7 @@ class ProjectRunner {
                   currentEpochId: null,
                   currentEpochPrId: null,
                   currentMilestoneBranch: null,
+                  aresGraceCycleUsed: false,
                   verificationFeedback: null,
                   examinationFeedback: null,
                   pendingCompletionMessage: null,
@@ -2142,13 +2147,14 @@ class ProjectRunner {
 
       // ===== PHASE: IMPLEMENTATION (Ares + his workers) =====
       else if (this.phase === 'implementation') {
+        const aresGraceMode = this.milestoneCyclesUsed >= this.milestoneCyclesBudget;
         // Check if deadline missed (before running)
-        if (this.milestoneCyclesUsed >= this.milestoneCyclesBudget) {
+        if (aresGraceMode && this.aresGraceCycleUsed) {
           const failureReason = `Implementation deadline missed after ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles for ${this.currentMilestoneId || 'unknown milestone'}.`;
           await this.decideEpochPR('closed', { actor: 'apollo', reason: failureReason });
           await this.markCurrentMilestoneFailed(failureReason);
           log(`⏰ Implementation deadline missed (${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles)`, this.id);
-          this.setState({ currentEpochId: null, currentEpochPrId: null, phase: 'athena' });
+          this.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena' });
           continue;
         }
 
@@ -2180,38 +2186,74 @@ class ProjectRunner {
           if (epochStateChanged) this.saveState();
           const openEpochPr = await this.ensureEpochPRForCurrentMilestone();
           // Build context for Ares (remaining includes this cycle)
-          const cyclesRemaining = this.milestoneCyclesBudget - this.milestoneCyclesUsed;
-          let aresContext = `> **Milestone ID:** ${this.currentMilestoneId || 'unknown'}\n> **Milestone:** ${this.milestoneDescription}\n> **Epoch ID:** ${this.currentEpochId || 'unknown'}\n> **Cycles remaining:** ${cyclesRemaining} of ${this.milestoneCyclesBudget}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Epoch PR:** ${openEpochPr?.id ? `#${openEpochPr.id}` : 'not set'}\n> **Epoch PR rule:** The orchestrator assigned exactly one TBC PR to this milestone branch. Use it instead of creating competing PRs.\n\n`;
+          const cyclesRemaining = Math.max(0, this.milestoneCyclesBudget - this.milestoneCyclesUsed);
+          let aresContext = `> **Milestone ID:** ${this.currentMilestoneId || 'unknown'}
+> **Milestone:** ${this.milestoneDescription}
+> **Epoch ID:** ${this.currentEpochId || 'unknown'}
+> **Cycles remaining:** ${cyclesRemaining} of ${this.milestoneCyclesBudget}
+> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}
+> **Epoch PR:** ${openEpochPr?.id ? `#${openEpochPr.id}` : 'not set'}
+> **Epoch PR rule:** The orchestrator assigned exactly one TBC PR to this milestone branch. Use it instead of creating competing PRs.
+
+`;
+          if (aresGraceMode) {
+            aresContext += `> **Grace review mode:** Worker budget is exhausted. This is your final manager-only pass.
+> **Do not emit a schedule. Do not assign any workers.**
+> Review the existing evidence only. If the milestone is already complete, emit <!-- CLAIM_COMPLETE -->. Otherwise emit no completion block and the milestone will fail.
+
+`;
+          }
           if (this.isFixRound && this.verificationFeedback) {
-            aresContext += `> **Legacy verification feedback:**\n> ${this.verificationFeedback}\n\n`;
+            aresContext += `> **Legacy verification feedback:**
+> ${this.verificationFeedback}
+
+`;
           }
 
           const result = await this.runAgent(ares, config, null, aresContext);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
+          if (aresGraceMode) this.aresGraceCycleUsed = true;
 
           // Parse schedule and check for CLAIM_COMPLETE
           let schedule = null;
+          let claimedComplete = false;
           if (result && result.resultText) {
-            schedule = this.parseSchedule(result.resultText);
-            if (schedule) {
-              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
-              this.currentSchedule = schedule;
+            if (!aresGraceMode) {
+              schedule = this.parseSchedule(result.resultText);
+              if (schedule) {
+                log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
+                this.currentSchedule = schedule;
+              }
+            } else if (this.parseSchedule(result.resultText)) {
+              log('⚠️ Ignoring Ares schedule because grace review mode forbids worker scheduling', this.id);
             }
 
             // Check if Ares claims milestone complete
             if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
+              claimedComplete = true;
               const openEpochPr = await this.ensureEpochPRForCurrentMilestone();
               if (!openEpochPr) {
                 this.verificationFeedback = `Ares claimed milestone completion without an orchestrator-managed epoch PR on branch ${this.currentMilestoneBranch || 'unknown'}.`;
                 log('⚠️ CLAIM_COMPLETE ignored because no orchestrator-managed epoch PR exists for the current milestone branch', this.id);
                 this.saveState();
+                claimedComplete = false;
               } else {
                 log(`🎯 Ares claims milestone complete for epoch PR #${openEpochPr.id} — switching to verification`, this.id);
                 this.setState({ phase: 'verification', currentEpochPrId: openEpochPr.id });
                 broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: this.milestoneTitle });
               }
             }
+          }
+
+          if (aresGraceMode && !claimedComplete) {
+            const failureReason = `Implementation deadline missed after ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles for ${this.currentMilestoneId || 'unknown milestone'} (Ares grace review did not claim completion).`;
+            await this.decideEpochPR('closed', { actor: 'apollo', reason: failureReason });
+            await this.markCurrentMilestoneFailed(failureReason);
+            log(`⏰ ${failureReason}`, this.id);
+            this.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena', verificationFeedback: failureReason });
+            this.saveState();
+            continue;
           }
 
           // Execute schedule steps (delays + workers)
@@ -2335,6 +2377,7 @@ class ProjectRunner {
                 currentEpochId: null,
                 currentEpochPrId: null,
                 currentMilestoneBranch: parentMilestone?.branch_name || null,
+                aresGraceCycleUsed: false,
                 lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
@@ -2355,6 +2398,7 @@ class ProjectRunner {
                 currentEpochId: null,
                 currentEpochPrId: null,
                 currentMilestoneBranch: null,
+                aresGraceCycleUsed: false,
                 lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
@@ -2371,6 +2415,7 @@ class ProjectRunner {
                 currentEpochId: null,
                 currentEpochPrId: null,
                 currentMilestoneBranch: null,
+                aresGraceCycleUsed: false,
                 verificationFeedback: failureReason,
                 isFixRound: false,
                 phase: 'athena',
@@ -2387,6 +2432,7 @@ class ProjectRunner {
                 pendingMilestoneId: null,
                 currentEpochId: null,
                 currentEpochPrId: null,
+                aresGraceCycleUsed: false,
                 verificationFeedback: failureReason,
                 isFixRound: false,
                 phase: 'athena',
