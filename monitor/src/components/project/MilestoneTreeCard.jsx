@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { GitBranch, ChevronRight, ChevronDown } from 'lucide-react'
 import DashboardWidget from '@/components/ui/DashboardWidget'
 import StatusPill from '@/components/ui/status-pill'
+
+const PAGE_SIZE = 20
 
 function milestoneSortValue(id = '') {
   return String(id)
@@ -10,7 +12,7 @@ function milestoneSortValue(id = '') {
     .map((part) => Number(part) || 0)
 }
 
-function compareMilestones(a, b) {
+function compareMilestonesAsc(a, b) {
   const aa = milestoneSortValue(a?.milestone_id)
   const bb = milestoneSortValue(b?.milestone_id)
   const len = Math.max(aa.length, bb.length)
@@ -19,6 +21,10 @@ function compareMilestones(a, b) {
     if (diff !== 0) return diff
   }
   return String(a?.milestone_id || '').localeCompare(String(b?.milestone_id || ''))
+}
+
+function compareMilestonesDesc(a, b) {
+  return compareMilestonesAsc(b, a)
 }
 
 function buildTree(milestones = []) {
@@ -32,10 +38,10 @@ function buildTree(milestones = []) {
     else roots.push(node)
   })
   const sortNode = (node) => {
-    node.children.sort(compareMilestones)
+    node.children.sort(compareMilestonesDesc)
     node.children.forEach(sortNode)
   }
-  roots.sort(compareMilestones)
+  roots.sort(compareMilestonesDesc)
   roots.forEach(sortNode)
   return roots
 }
@@ -48,7 +54,7 @@ function statusVariant(node) {
 }
 
 function TreeNode({ node, currentMilestoneId, depth = 0 }) {
-  const [open, setOpen] = useState(depth < 2)
+  const [open, setOpen] = useState(false)
   const hasChildren = node.children?.length > 0
   const isCurrent = currentMilestoneId && node.milestone_id === currentMilestoneId
   return (
@@ -93,15 +99,36 @@ function TreeNode({ node, currentMilestoneId, depth = 0 }) {
 
 export default function MilestoneTreeCard({ milestones = [], currentMilestoneId = null }) {
   const tree = useMemo(() => buildTree(milestones), [milestones])
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const sentinelRef = useRef(null)
+  const visibleTree = tree.slice(0, visibleCount)
+  const hasMore = visibleCount < tree.length
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [milestones])
+
+  useEffect(() => {
+    if (!hasMore || !sentinelRef.current) return undefined
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisibleCount((count) => Math.min(count + PAGE_SIZE, tree.length))
+      }
+    }, { rootMargin: '120px 0px' })
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, tree.length])
+
   return (
     <DashboardWidget icon={GitBranch} title={`Milestones (${milestones.length})`}>
       {tree.length === 0 ? (
         <div className="text-sm text-neutral-500">No milestone records yet.</div>
       ) : (
-        <div className="space-y-3">
-          {tree.map((node) => (
+        <div className="space-y-3 max-h-[32rem] overflow-y-auto pr-1">
+          {visibleTree.map((node) => (
             <TreeNode key={node.milestone_id} node={node} currentMilestoneId={currentMilestoneId} />
           ))}
+          {hasMore && <div ref={sentinelRef} className="h-4" aria-hidden="true" />}
         </div>
       )}
     </DashboardWidget>

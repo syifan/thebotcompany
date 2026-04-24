@@ -27,4 +27,12 @@ describe('milestone tree widget', () => {
     assert.match(treeCard, /currentMilestoneId/)
     assert.match(treeCard, /node\.linked_pr_id/)
   })
+
+  it('shows recent milestones first, starts folded, and supports infinite scrolling', () => {
+    assert.match(treeCard, /compareMilestonesDesc/)
+    assert.match(treeCard, /const \[open, setOpen\] = useState\(false\)/)
+    assert.match(treeCard, /const PAGE_SIZE = 20/)
+    assert.match(treeCard, /IntersectionObserver/)
+    assert.match(treeCard, /setVisibleCount\(\(count\) => Math\.min\(count \+ PAGE_SIZE, tree\.length\)\)/)
+  })
 })
