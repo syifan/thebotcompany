@@ -227,3 +227,12 @@ describe('Report metadata in SQLite', () => {
     });
   });
 });
+
+
+describe('report milestone metadata UI', () => {
+  it('renders a milestone pill in the report header when milestone_id is present', () => {
+    const card = fs.readFileSync(path.resolve('monitor/src/components/project/AgentReportsCard.jsx'), 'utf8');
+    assert.match(card, /report\.milestone_id/);
+    assert.match(card, /StatusPill variant="meta" className="shrink-0 normal-case text-indigo-700 dark:text-indigo-300"/);
+  });
+});

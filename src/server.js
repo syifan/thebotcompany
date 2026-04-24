@@ -1511,6 +1511,7 @@ class ProjectRunner {
       agent TEXT NOT NULL,
       body TEXT NOT NULL,
       summary TEXT,
+      milestone_id TEXT,
       created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     )`);
     try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
@@ -1525,14 +1526,15 @@ class ProjectRunner {
     try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
-    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues, milestone_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       this.cycleCount, agentName, reportBody, new Date().toISOString(),
       null, durationMs,
       null, null, null,
       success ? 1 : 0, null, 0,
       null,
-      'full', JSON.stringify([])
+      'full', JSON.stringify([]), this.currentMilestoneId || null
     );
     const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
     db.close();
@@ -2762,6 +2764,7 @@ class ProjectRunner {
           agent TEXT NOT NULL,
           body TEXT NOT NULL,
           summary TEXT,
+          milestone_id TEXT,
           created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         )`);
         try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
@@ -2776,14 +2779,16 @@ class ProjectRunner {
         try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
-        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues, milestone_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           this.cycleCount, agent.name, reportBody, new Date().toISOString(),
           cost ?? null, durationMs ?? null,
           usage?.inputTokens ?? null, usage?.outputTokens ?? null, usage?.cacheReadTokens ?? null,
           success ? 1 : 0, this.currentAgentModel ?? null, killedByTimeout ? 1 : 0,
           this.currentAgentKeyId ?? null,
-          this.currentAgentVisibility?.mode || 'full', JSON.stringify(this.currentAgentVisibility?.issues || [])
+          this.currentAgentVisibility?.mode || 'full', JSON.stringify(this.currentAgentVisibility?.issues || []), this.currentMilestoneId || null
         );
         const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
         db.close();
@@ -4204,6 +4209,8 @@ const server = http.createServer(async (req, res) => {
         try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
+        try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
         const agent = url.searchParams.get('agent');
         const page = parseInt(url.searchParams.get('page')) || 1;
         const perPage = parseInt(url.searchParams.get('per_page')) || 20;
