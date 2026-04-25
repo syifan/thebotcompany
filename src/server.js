@@ -65,15 +65,15 @@ function parseSummarizeCooldown(message) {
 // Model tier system — maps abstract tiers to provider-specific models
 const MODEL_TIERS = {
   anthropic: {
-    high:  { model: 'claude-opus-4-6', reasoningEffort: 'high' },
+    high:  { model: 'claude-opus-4-7', reasoningEffort: 'high' },
     mid:   { model: 'claude-sonnet-4-6', reasoningEffort: 'high' },
     low:   { model: 'claude-sonnet-4-6' },
     xlow:  { model: 'claude-haiku-4-5-20251001' },
   },
   openai: {
-    high:  { model: 'gpt-5.3-codex', reasoningEffort: 'xhigh' },
-    mid:   { model: 'gpt-5.3-codex', reasoningEffort: 'high' },
-    low:   { model: 'gpt-5.3-codex', reasoningEffort: 'medium' },
+    high:  { model: 'gpt-5.5', reasoningEffort: 'xhigh' },
+    mid:   { model: 'gpt-5.5', reasoningEffort: 'high' },
+    low:   { model: 'gpt-5.5', reasoningEffort: 'medium' },
     xlow:  { model: 'gpt-4.1-mini' },
   },
   google: {
@@ -89,10 +89,10 @@ const MODEL_TIERS = {
     xlow:  { model: 'minimax/MiniMax-M2.5' },
   },
   'openai-codex': {
-    high:  { model: 'openai-codex/gpt-5.3-codex', reasoningEffort: 'xhigh' },
-    mid:   { model: 'openai-codex/gpt-5.3-codex', reasoningEffort: 'high' },
-    low:   { model: 'openai-codex/gpt-5.3-codex', reasoningEffort: 'medium' },
-    xlow:  { model: 'openai-codex/gpt-5.3-codex', reasoningEffort: 'low' },
+    high:  { model: 'openai-codex/gpt-5.5', reasoningEffort: 'xhigh' },
+    mid:   { model: 'openai-codex/gpt-5.5', reasoningEffort: 'high' },
+    low:   { model: 'openai-codex/gpt-5.5', reasoningEffort: 'medium' },
+    xlow:  { model: 'openai-codex/gpt-5.5', reasoningEffort: 'low' },
   },
 };
 
@@ -119,7 +119,7 @@ function resolveModelTier(tierOrModel, provider, projectModels) {
     const overrideModel = override.includes('@') ? override.split('@', 2)[0] : override;
     const overrideProvider = inferProviderFromModel(overrideModel);
     if (!overrideProvider || overrideProvider === provider) {
-      // Support "model@effort" format (e.g. "gpt-5.3-codex@xhigh")
+      // Support "model@effort" format (e.g. "gpt-5.5@xhigh")
       if (override.includes('@')) {
         const [model, reasoningEffort] = override.split('@', 2);
         return { model, reasoningEffort };

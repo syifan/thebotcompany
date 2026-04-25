@@ -321,7 +321,7 @@ function getChatToolDefinitions() {
  * @param {string} opts.projectPath  - Project repo path
  * @param {number} opts.chatId       - Chat session ID
  * @param {string} opts.userMessage  - User's message text
- * @param {string} opts.model        - Model name (e.g. 'claude-sonnet-4-6')
+ * @param {string} opts.model        - Model name (e.g. 'claude-opus-4-7')
  * @param {string} opts.token        - API key/token
  * @param {string} opts.provider     - Provider hint
  * @param {object|null} [opts.customConfig] - Custom provider config

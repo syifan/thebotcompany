@@ -19,9 +19,9 @@ import { callCustomModel } from './custom-adapter.js';
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a TBC model string (e.g. "openai/gpt-5.3-codex", "claude-opus-4-6",
+ * Parse a TBC model string (e.g. "openai/gpt-5.5", "claude-opus-4-7",
  * "google/gemini-3.1-pro-preview", "minimax/MiniMax-M2.5",
- * "openai-codex/gpt-5.3-codex") into a { provider, modelId } pair that pi-ai
+ * "openai-codex/gpt-5.5") into a { provider, modelId } pair that pi-ai
  * understands.
  */
 function parseTBCModel(rawModel) {
@@ -57,7 +57,7 @@ function parseTBCModel(rawModel) {
 /**
  * Resolve a TBC model string to a pi-ai Model object.
  *
- * @param {string} rawModel - TBC model string (e.g. "claude-opus-4-6")
+ * @param {string} rawModel - TBC model string (e.g. "claude-opus-4-7")
  * @returns {{ piModel: object, providerName: string }}
  */
 export function resolveModel(rawModel, providerOverride = null) {
