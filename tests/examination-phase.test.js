@@ -92,6 +92,15 @@ describe('Themis examination phase', () => {
       'Expected EXAM_PASS to exit examination phase cleanly');
   });
 
+  it('does not overwrite EXAM_PASS with failure just because no schedule exists', () => {
+    const src = readServer();
+    assert.doesNotMatch(
+      src,
+      /if \(result\.resultText\.includes\('\<\!-- EXAM_PASS --\>'\)\) \{\s*decision = 'pass';\s*\}[\s\S]*?else if \(!schedule\) \{\s*decision = 'fail';\s*\}/,
+      'EXAM_PASS must remain terminal success even when Themis returns no schedule'
+    );
+  });
+
   it('returns to athena and creates issues on EXAM_FAIL', () => {
     const src = readServer();
     const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
