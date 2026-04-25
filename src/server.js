@@ -4009,9 +4009,9 @@ const server = http.createServer(async (req, res) => {
       // Only show recent/relevant models, not the full historical catalog
       const EFFORT_LEVELS = ['medium', 'high', 'xhigh'];
       const ALLOWED_MODELS = {
-        anthropic: /^claude-(opus-4-7|opus-4-6|sonnet-4-6)$|^claude-haiku-4-5-/,
-        openai: /^(gpt-5\.[345]|o[34])/,
-        'openai-codex': /^(gpt-5\.[345])/,
+        anthropic: /^(claude-opus-4-7|claude-sonnet-4-6)$|^claude-haiku-4-5-/,
+        openai: /^(gpt-5\.5|o[34])/,
+        'openai-codex': /^(gpt-5\.5)/,
         google: /^gemini-[23]/,
         minimax: /MiniMax/,
       };
