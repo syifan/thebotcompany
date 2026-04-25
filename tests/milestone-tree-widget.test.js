@@ -28,11 +28,10 @@ describe('milestone tree widget', () => {
     assert.match(treeCard, /node\.linked_pr_id/)
   })
 
-  it('shows recent milestones first, starts folded, and supports infinite scrolling', () => {
+  it('shows recent milestones first, starts folded, and uses page scrolling like issues', () => {
     assert.match(treeCard, /compareMilestonesDesc/)
     assert.match(treeCard, /const \[open, setOpen\] = useState\(false\)/)
-    assert.match(treeCard, /const PAGE_SIZE = 20/)
-    assert.match(treeCard, /IntersectionObserver/)
-    assert.match(treeCard, /setVisibleCount\(\(count\) => Math\.min\(count \+ PAGE_SIZE, tree\.length\)\)/)
+    assert.doesNotMatch(treeCard, /max-h-\[32rem\] overflow-y-auto/)
+    assert.doesNotMatch(treeCard, /IntersectionObserver/)
   })
 })
