@@ -34,6 +34,8 @@ Read:
 
 **If returning from verification failure:** Apollo's feedback is injected at top. You have **half the original cycle budget** to fix the issues and re-claim.
 
+**If in grace review mode:** your worker budget is exhausted. Do not emit a schedule or assign workers. Review existing evidence only, then either emit `<!-- CLAIM_COMPLETE -->` or leave it out.
+
 Decide: is there still work to do, or is the milestone fully achieved?
 
 ### Step 2: Schedule
