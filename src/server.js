@@ -379,6 +379,7 @@ class ProjectRunner {
     this.currentEpochPrId = null;
     this.currentMilestoneBranch = null;
     this.lastMergedMilestoneBranch = null;
+    this.aresGraceCycleUsed = false;
     this.verificationFeedback = null;
     this.examinationFeedback = null;
     this.pendingCompletionMessage = null;
@@ -1103,12 +1104,89 @@ class ProjectRunner {
     }
   }
 
+  closeOpenEpochPRForBranch(branchName, { actor = 'apollo', reason = '' } = {}) {
+    if (!branchName) return null;
+    try {
+      const db = this.getDb();
+      const pr = db.prepare(`
+        SELECT * FROM tbc_prs
+        WHERE status = 'open'
+          AND (
+            (branch_name IS NOT NULL AND branch_name = ?)
+            OR head_branch = ?
+          )
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 1
+      `).get(branchName, branchName);
+      if (!pr) {
+        db.close();
+        return null;
+      }
+      const normalizedStatus = 'closed';
+      db.prepare(`
+        UPDATE tbc_prs
+        SET status = ?, decision = ?, decision_reason = ?, updated_by = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        normalizedStatus,
+        'close',
+        reason || '',
+        actor,
+        new Date().toISOString(),
+        pr.id,
+      );
+      db.close();
+      return { ...pr, status: normalizedStatus, decision: 'close', decision_reason: reason || '' };
+    } catch {
+      return null;
+    }
+  }
+
+  normalizeResetTargetMilestone(resetTo) {
+    const value = typeof resetTo === 'string' ? resetTo.trim() : '';
+    if (!value) return null;
+    if (/^root$/i.test(value)) return { milestoneId: null, label: 'root' };
+    const current = String(this.currentMilestoneId || '').trim();
+    if (!current) return null;
+    const candidate = value.replace(/^m/i, 'M');
+    const ancestors = [];
+    const parts = current.split('.');
+    for (let i = parts.length; i >= 1; i--) ancestors.push(parts.slice(0, i).join('.'));
+    if (!ancestors.includes(candidate)) return null;
+    return { milestoneId: candidate, label: candidate };
+  }
+
+  getParentMilestoneId(milestoneId = null) {
+    const value = String(milestoneId || '').trim();
+    if (!value || !value.includes('.')) return null;
+    return value.split('.').slice(0, -1).join('.') || null;
+  }
+
+  async getMilestoneRecord(milestoneId) {
+    if (!milestoneId) return null;
+    try {
+      const db = this.getDb();
+      const row = db.prepare(`SELECT * FROM milestones WHERE milestone_id = ?`).get(milestoneId);
+      db.close();
+      return row || null;
+    } catch {
+      return null;
+    }
+  }
+
   makeMilestoneBranchPrefix(milestoneId) {
     return String(milestoneId || 'M0').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
-  slugifyMilestoneTitle(title) {
-    return String(title || 'milestone').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'milestone';
+  slugifyMilestoneTitle(title, { stripLeadingMilestoneId = null } = {}) {
+    let normalizedTitle = String(title || 'milestone');
+    if (stripLeadingMilestoneId) {
+      const escapedMilestoneId = String(stripLeadingMilestoneId)
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\\\./g, '[\\s._-]*');
+      normalizedTitle = normalizedTitle.replace(new RegExp(`^\\s*${escapedMilestoneId}(?:[\\s:._-]+|\\b)`, 'i'), '');
+    }
+    return normalizedTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'milestone';
   }
 
   async allocateNextMilestoneId(parentMilestoneId = null) {
@@ -1371,6 +1449,7 @@ class ProjectRunner {
       currentEpochId: null,
       currentEpochPrId: null,
       currentMilestoneBranch: null,
+      aresGraceCycleUsed: false,
       verificationFeedback: null,
       examinationFeedback: null,
       pendingCompletionMessage: null,
@@ -1432,6 +1511,7 @@ class ProjectRunner {
       agent TEXT NOT NULL,
       body TEXT NOT NULL,
       summary TEXT,
+      milestone_id TEXT,
       created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     )`);
     try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
@@ -1446,14 +1526,15 @@ class ProjectRunner {
     try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
-    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+    db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues, milestone_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       this.cycleCount, agentName, reportBody, new Date().toISOString(),
       null, durationMs,
       null, null, null,
       success ? 1 : 0, null, 0,
       null,
-      'full', JSON.stringify([])
+      'full', JSON.stringify([]), this.currentMilestoneId || null
     );
     const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
     db.close();
@@ -1552,6 +1633,7 @@ class ProjectRunner {
         this.currentEpochPrId = state.currentEpochPrId || null;
         this.currentMilestoneBranch = state.currentMilestoneBranch || null;
         this.lastMergedMilestoneBranch = state.lastMergedMilestoneBranch || null;
+        this.aresGraceCycleUsed = state.aresGraceCycleUsed || false;
         this.verificationFeedback = state.verificationFeedback || null;
         this.examinationFeedback = state.examinationFeedback || null;
         this.pendingCompletionMessage = state.pendingCompletionMessage || null;
@@ -1596,6 +1678,7 @@ class ProjectRunner {
         currentEpochPrId: this.currentEpochPrId || null,
         currentMilestoneBranch: this.currentMilestoneBranch || null,
         lastMergedMilestoneBranch: this.lastMergedMilestoneBranch || null,
+        aresGraceCycleUsed: this.aresGraceCycleUsed || false,
         verificationFeedback: this.verificationFeedback,
         examinationFeedback: this.examinationFeedback,
         pendingCompletionMessage: this.pendingCompletionMessage,
@@ -1687,14 +1770,24 @@ class ProjectRunner {
     if (this.currentAgentProcess) {
       this.currentAgentProcess.kill('SIGTERM');
     }
+    if (this.currentMilestoneBranch) {
+      this.closeOpenEpochPRForBranch(this.currentMilestoneBranch, {
+        actor: 'ares',
+        reason: `Epoch killed manually while replanning milestone ${this.currentMilestoneId || 'unknown'}.`,
+      });
+    }
     this.currentSchedule = null;
     this.completedAgents = [];
     this.setState({
       phase: 'athena',
+      pendingMilestoneId: null,
       milestoneTitle: null,
       milestoneDescription: null,
       milestoneCyclesBudget: 0,
       milestoneCyclesUsed: 0,
+      currentEpochId: null,
+      currentEpochPrId: null,
+      currentMilestoneBranch: null,
       verificationFeedback: null,
       isFixRound: false,
     });
@@ -1919,7 +2012,11 @@ class ProjectRunner {
           } else {
             situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles without completing the milestone.\n> Previous milestone: ${this.currentMilestoneId || 'unknown'}\n> Current branch: ${this.currentMilestoneBranch || 'not set'}\n\n`;
           }
-          situation += `> **Assigned milestone ID:** ${this.pendingMilestoneId}\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n\n`;
+          situation += `> **Assigned milestone ID:** ${this.pendingMilestoneId}\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n`;
+          if (this.currentMilestoneId) {
+            situation += `> **Optional reset:** If the current subtree is wrong, you may return a milestone with \"reset_to\": \"${this.currentMilestoneId}\" or any ancestor milestone id (or \"root\") to abandon deeper branches and replan from that level.\n`;
+          }
+          situation += `\n`;
 
           const result = await this.runAgent(athena, config, null, situation);
           cycleTotal++;
@@ -1938,7 +2035,23 @@ class ProjectRunner {
               try {
                 const milestone = JSON.parse(milestoneMatch[1]);
                 const milestoneTitle = milestone.title || milestone.description.slice(0, 80);
-                const milestoneId = this.pendingMilestoneId || this.currentMilestoneId || await this.allocateNextMilestoneId(this.currentMilestoneId || null);
+                const resetTarget = this.normalizeResetTargetMilestone(milestone.reset_to);
+                const resetTo = resetTarget ? resetTarget.milestoneId : (this.currentMilestoneId || null);
+                const shouldReusePendingMilestoneId = !!this.pendingMilestoneId && resetTo === (this.currentMilestoneId || null);
+                const milestoneId = shouldReusePendingMilestoneId
+                  ? this.pendingMilestoneId
+                  : await this.allocateNextMilestoneId(resetTo);
+                if (milestone.reset_to && !resetTarget) {
+                  log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, this.id);
+                } else if (milestone.reset_to && resetTarget) {
+                  log(`Athena reset planning anchor to ${resetTarget.label}`, this.id);
+                  if (this.currentMilestoneBranch) {
+                    this.closeOpenEpochPRForBranch(this.currentMilestoneBranch, {
+                      actor: 'athena',
+                      reason: `Athena reset subtree to ${resetTarget.label} while replanning.`,
+                    });
+                  }
+                }
                 this.setState({
                   milestoneTitle,
                   milestoneDescription: milestone.description,
@@ -1949,6 +2062,7 @@ class ProjectRunner {
                   currentEpochId: null,
                   currentEpochPrId: null,
                   currentMilestoneBranch: null,
+                  aresGraceCycleUsed: false,
                   verificationFeedback: null,
                   examinationFeedback: null,
                   pendingCompletionMessage: null,
@@ -2025,6 +2139,8 @@ class ProjectRunner {
             const { total, failures } = await this.executeSchedule(schedule, config, 'athena');
             cycleTotal += total;
             cycleFailures += failures;
+            this.currentSchedule = null;
+            this.completedAgents = [];
           }
 
           this.saveState();
@@ -2033,13 +2149,14 @@ class ProjectRunner {
 
       // ===== PHASE: IMPLEMENTATION (Ares + his workers) =====
       else if (this.phase === 'implementation') {
+        const aresGraceMode = this.milestoneCyclesUsed >= this.milestoneCyclesBudget;
         // Check if deadline missed (before running)
-        if (this.milestoneCyclesUsed >= this.milestoneCyclesBudget) {
+        if (aresGraceMode && this.aresGraceCycleUsed) {
           const failureReason = `Implementation deadline missed after ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles for ${this.currentMilestoneId || 'unknown milestone'}.`;
           await this.decideEpochPR('closed', { actor: 'apollo', reason: failureReason });
           await this.markCurrentMilestoneFailed(failureReason);
           log(`⏰ Implementation deadline missed (${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles)`, this.id);
-          this.setState({ currentEpochId: null, currentEpochPrId: null, phase: 'athena' });
+          this.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena' });
           continue;
         }
 
@@ -2065,44 +2182,80 @@ class ProjectRunner {
           }
           if (!this.currentMilestoneBranch) {
             const branchPrefix = this.makeMilestoneBranchPrefix(this.currentMilestoneId);
-            this.currentMilestoneBranch = `${String(this.currentEpochId || 'E0').toLowerCase()}-${branchPrefix}-${this.slugifyMilestoneTitle(this.milestoneTitle)}`;
+            this.currentMilestoneBranch = `${String(this.currentEpochId || 'E0').toLowerCase()}-${branchPrefix}-${this.slugifyMilestoneTitle(this.milestoneTitle, { stripLeadingMilestoneId: this.currentMilestoneId })}`;
             epochStateChanged = true;
           }
           if (epochStateChanged) this.saveState();
           const openEpochPr = await this.ensureEpochPRForCurrentMilestone();
           // Build context for Ares (remaining includes this cycle)
-          const cyclesRemaining = this.milestoneCyclesBudget - this.milestoneCyclesUsed;
-          let aresContext = `> **Milestone ID:** ${this.currentMilestoneId || 'unknown'}\n> **Milestone:** ${this.milestoneDescription}\n> **Epoch ID:** ${this.currentEpochId || 'unknown'}\n> **Cycles remaining:** ${cyclesRemaining} of ${this.milestoneCyclesBudget}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Epoch PR:** ${openEpochPr?.id ? `#${openEpochPr.id}` : 'not set'}\n> **Epoch PR rule:** The orchestrator assigned exactly one TBC PR to this milestone branch. Use it instead of creating competing PRs.\n\n`;
+          const cyclesRemaining = Math.max(0, this.milestoneCyclesBudget - this.milestoneCyclesUsed);
+          let aresContext = `> **Milestone ID:** ${this.currentMilestoneId || 'unknown'}
+> **Milestone:** ${this.milestoneDescription}
+> **Epoch ID:** ${this.currentEpochId || 'unknown'}
+> **Cycles remaining:** ${cyclesRemaining} of ${this.milestoneCyclesBudget}
+> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}
+> **Epoch PR:** ${openEpochPr?.id ? `#${openEpochPr.id}` : 'not set'}
+> **Epoch PR rule:** The orchestrator assigned exactly one TBC PR to this milestone branch. Use it instead of creating competing PRs.
+
+`;
+          if (aresGraceMode) {
+            aresContext += `> **Grace review mode:** Worker budget is exhausted. This is your final manager-only pass.
+> **Do not emit a schedule. Do not assign any workers.**
+> Review the existing evidence only. If the milestone is already complete, emit <!-- CLAIM_COMPLETE -->. Otherwise emit no completion block and the milestone will fail.
+
+`;
+          }
           if (this.isFixRound && this.verificationFeedback) {
-            aresContext += `> **Legacy verification feedback:**\n> ${this.verificationFeedback}\n\n`;
+            aresContext += `> **Legacy verification feedback:**
+> ${this.verificationFeedback}
+
+`;
           }
 
           const result = await this.runAgent(ares, config, null, aresContext);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
+          if (aresGraceMode) this.aresGraceCycleUsed = true;
 
           // Parse schedule and check for CLAIM_COMPLETE
           let schedule = null;
+          let claimedComplete = false;
           if (result && result.resultText) {
-            schedule = this.parseSchedule(result.resultText);
-            if (schedule) {
-              log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
-              this.currentSchedule = schedule;
+            if (!aresGraceMode) {
+              schedule = this.parseSchedule(result.resultText);
+              if (schedule) {
+                log(`Schedule: ${JSON.stringify(schedule)}`, this.id);
+                this.currentSchedule = schedule;
+              }
+            } else if (this.parseSchedule(result.resultText)) {
+              log('⚠️ Ignoring Ares schedule because grace review mode forbids worker scheduling', this.id);
             }
 
             // Check if Ares claims milestone complete
             if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
+              claimedComplete = true;
               const openEpochPr = await this.ensureEpochPRForCurrentMilestone();
               if (!openEpochPr) {
                 this.verificationFeedback = `Ares claimed milestone completion without an orchestrator-managed epoch PR on branch ${this.currentMilestoneBranch || 'unknown'}.`;
                 log('⚠️ CLAIM_COMPLETE ignored because no orchestrator-managed epoch PR exists for the current milestone branch', this.id);
                 this.saveState();
+                claimedComplete = false;
               } else {
                 log(`🎯 Ares claims milestone complete for epoch PR #${openEpochPr.id} — switching to verification`, this.id);
                 this.setState({ phase: 'verification', currentEpochPrId: openEpochPr.id });
                 broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: this.milestoneTitle });
               }
             }
+          }
+
+          if (aresGraceMode && !claimedComplete) {
+            const failureReason = `Implementation deadline missed after ${this.milestoneCyclesUsed}/${this.milestoneCyclesBudget} cycles for ${this.currentMilestoneId || 'unknown milestone'} (Ares grace review did not claim completion).`;
+            await this.decideEpochPR('closed', { actor: 'apollo', reason: failureReason });
+            await this.markCurrentMilestoneFailed(failureReason);
+            log(`⏰ ${failureReason}`, this.id);
+            this.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena', verificationFeedback: failureReason });
+            this.saveState();
+            continue;
           }
 
           // Execute schedule steps (delays + workers)
@@ -2141,7 +2294,10 @@ class ProjectRunner {
         } else {
         const apollo = managers.find(m => m.name === 'apollo');
         if (apollo) {
-          const apolloContext = `> **Milestone to verify:** ${this.milestoneDescription}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${this.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
+          const isRollupVerification = !this.currentEpochPrId;
+          const apolloContext = isRollupVerification
+            ? `> **Milestone to verify:** ${this.milestoneDescription}\n> **Rollup verification target:** ${this.currentMilestoneId || 'unknown'}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
+            : `> **Milestone to verify:** ${this.milestoneDescription}\n> **Milestone branch:** ${this.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${this.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
 
           const result = await this.runAgent(apollo, config, null, apolloContext);
           cycleTotal++;
@@ -2187,46 +2343,103 @@ class ProjectRunner {
 
           // Process decision
           if (decision === 'pass') {
-            const mergedPr = await this.decideEpochPR('merged', {
+            const mergedPr = isRollupVerification ? null : await this.decideEpochPR('merged', {
               actor: 'apollo',
               reason: `Apollo passed milestone ${this.currentMilestoneId || ''} ${this.milestoneTitle || this.milestoneDescription || ''}`.trim(),
             });
+            const completedMilestoneId = this.currentMilestoneId;
+            const completedMilestoneTitle = this.milestoneTitle;
+            const parentMilestoneId = this.getParentMilestoneId(completedMilestoneId);
             await this.markCurrentMilestoneCompleted();
-            log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
-            broadcastEvent({ type: 'verified', project: this.id, title: this.milestoneTitle });
-            this.milestoneTitle = null;
-            this.setState({
-              milestoneTitle: null,
-              milestoneDescription: null,
-              milestoneCyclesBudget: 0,
-              milestoneCyclesUsed: 0,
-              currentMilestoneId: null,
-              pendingMilestoneId: null,
-              currentEpochId: null,
-              currentEpochPrId: null,
-              currentMilestoneBranch: null,
-              lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
-              verificationFeedback: null,
-              isFixRound: false,
-              phase: 'athena',
-            });
+            if (parentMilestoneId) {
+              const parentMilestone = await this.getMilestoneRecord(parentMilestoneId);
+              log(`✅ Milestone verified — escalating completion check to parent milestone ${parentMilestoneId}`, this.id);
+              broadcastEvent({ type: 'verified', project: this.id, title: completedMilestoneTitle });
+              if (parentMilestone) {
+                await this.upsertMilestoneRecord({
+                  milestoneId: parentMilestoneId,
+                  title: parentMilestone.title,
+                  description: parentMilestone.description,
+                  cyclesBudget: parentMilestone.cycles_budget,
+                  branchName: parentMilestone.branch_name,
+                  parentMilestoneId: parentMilestone.parent_milestone_id,
+                  phase: 'verification',
+                  status: 'active',
+                  linkedPrId: parentMilestone.linked_pr_id,
+                  failureReason: null,
+                });
+              }
+              this.setState({
+                milestoneTitle: parentMilestone?.title || parentMilestoneId,
+                milestoneDescription: parentMilestone?.description || `Parent rollup verification for ${parentMilestoneId}`,
+                milestoneCyclesBudget: parentMilestone?.cycles_budget || 0,
+                milestoneCyclesUsed: parentMilestone?.cycles_used || 0,
+                currentMilestoneId: parentMilestoneId,
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                currentMilestoneBranch: parentMilestone?.branch_name || null,
+                aresGraceCycleUsed: false,
+                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
+                verificationFeedback: null,
+                isFixRound: false,
+                phase: 'verification',
+              });
+              broadcastEvent({ type: 'phase', project: this.id, phase: 'verification', title: parentMilestone?.title || parentMilestoneId });
+            } else {
+              log(`✅ Milestone verified — waking Athena for next milestone`, this.id);
+              broadcastEvent({ type: 'verified', project: this.id, title: this.milestoneTitle });
+              this.milestoneTitle = null;
+              this.setState({
+                milestoneTitle: null,
+                milestoneDescription: null,
+                milestoneCyclesBudget: 0,
+                milestoneCyclesUsed: 0,
+                currentMilestoneId: null,
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                currentMilestoneBranch: null,
+                aresGraceCycleUsed: false,
+                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || this.currentMilestoneBranch || this.lastMergedMilestoneBranch,
+                verificationFeedback: null,
+                isFixRound: false,
+                phase: 'athena',
+              });
+            }
           } else if (decision === 'fail') {
             const failureReason = this.verificationFeedback || 'Apollo rejected the epoch PR and requested milestone splitting or narrowing.';
-            await this.decideEpochPR('closed', {
-              actor: 'apollo',
-              reason: failureReason,
-            });
-            await this.markCurrentMilestoneFailed(failureReason);
-            log('❌ Verification failed — returning to Athena for split/replan', this.id);
-            broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
-            this.setState({
-              pendingMilestoneId: null,
-              currentEpochId: null,
-              currentEpochPrId: null,
-              verificationFeedback: failureReason,
-              isFixRound: false,
-              phase: 'athena',
-            });
+            if (isRollupVerification) {
+              log('❌ Parent rollup verification incomplete — returning to Athena to plan the next child milestone', this.id);
+              broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
+              this.setState({
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                currentMilestoneBranch: null,
+                aresGraceCycleUsed: false,
+                verificationFeedback: failureReason,
+                isFixRound: false,
+                phase: 'athena',
+              });
+            } else {
+              await this.decideEpochPR('closed', {
+                actor: 'apollo',
+                reason: failureReason,
+              });
+              await this.markCurrentMilestoneFailed(failureReason);
+              log('❌ Verification failed — returning to Athena for split/replan', this.id);
+              broadcastEvent({ type: 'verify-fail', project: this.id, title: this.milestoneTitle });
+              this.setState({
+                pendingMilestoneId: null,
+                currentEpochId: null,
+                currentEpochPrId: null,
+                aresGraceCycleUsed: false,
+                verificationFeedback: failureReason,
+                isFixRound: false,
+                phase: 'athena',
+              });
+            }
           } else {
             // No decision yet, stay in verification phase — still save
             this.saveState();
@@ -2274,7 +2487,7 @@ class ProjectRunner {
                 failData = { feedback: 'Themis rejected project completion, but the response could not be parsed.' };
               }
               decision = 'fail';
-            } else if (!schedule) {
+            } else if (!schedule && decision == null) {
               decision = 'fail';
             }
           }
@@ -2551,6 +2764,7 @@ class ProjectRunner {
           agent TEXT NOT NULL,
           body TEXT NOT NULL,
           summary TEXT,
+          milestone_id TEXT,
           created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         )`);
         try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
@@ -2565,14 +2779,16 @@ class ProjectRunner {
         try { db.exec('ALTER TABLE reports ADD COLUMN key_id TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
-        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+        db.prepare(`INSERT INTO reports (cycle, agent, body, created_at, cost, duration_ms, input_tokens, output_tokens, cache_read_tokens, success, model, timed_out, key_id, visibility_mode, visibility_issues, milestone_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           this.cycleCount, agent.name, reportBody, new Date().toISOString(),
           cost ?? null, durationMs ?? null,
           usage?.inputTokens ?? null, usage?.outputTokens ?? null, usage?.cacheReadTokens ?? null,
           success ? 1 : 0, this.currentAgentModel ?? null, killedByTimeout ? 1 : 0,
           this.currentAgentKeyId ?? null,
-          this.currentAgentVisibility?.mode || 'full', JSON.stringify(this.currentAgentVisibility?.issues || [])
+          this.currentAgentVisibility?.mode || 'full', JSON.stringify(this.currentAgentVisibility?.issues || []), this.currentMilestoneId || null
         );
         const lastId = db.prepare('SELECT last_insert_rowid() as id').get().id;
         db.close();
@@ -3958,6 +4174,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // GET /api/projects/:id/milestones — list milestone records for tree rendering
+    if (req.method === 'GET' && subPath === 'milestones') {
+      try {
+        const db = runner.getDb();
+        const milestones = db.prepare(`
+          SELECT id, milestone_id, title, description, cycles_budget, cycles_used, branch_name, parent_milestone_id, linked_pr_id, failure_reason, phase, status, created_at, completed_at
+          FROM milestones
+          ORDER BY created_at ASC, id ASC
+        `).all();
+        db.close();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ milestones }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+      return;
+    }
+
     // GET /api/projects/:id/prs/:prId — single PR
     const prDetailMatch = req.method === 'GET' && subPath.match(/^prs\/(\d+)$/);
     if (prDetailMatch) {
@@ -3993,6 +4228,8 @@ const server = http.createServer(async (req, res) => {
         try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
         try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
+        try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
+    try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
         const agent = url.searchParams.get('agent');
         const page = parseInt(url.searchParams.get('page')) || 1;
         const perPage = parseInt(url.searchParams.get('per_page')) || 20;

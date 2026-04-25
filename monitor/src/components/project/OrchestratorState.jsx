@@ -57,6 +57,36 @@ export function OrchestratorStateCard({ selectedProject, globalUptime, controlAc
                selectedProject.phase || 'Unknown'}
             </StatusPill>
           </div>
+          {selectedProject.currentMilestoneId && (
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-neutral-600 dark:text-neutral-300">Milestone ID</span>
+              <span className="text-sm font-mono text-right break-all">{selectedProject.currentMilestoneId}</span>
+            </div>
+          )}
+          {!selectedProject.currentMilestoneId && selectedProject.pendingMilestoneId && (
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-neutral-600 dark:text-neutral-300">Pending Milestone</span>
+              <span className="text-sm font-mono text-right break-all">{selectedProject.pendingMilestoneId}</span>
+            </div>
+          )}
+          {selectedProject.currentEpochId && (
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-neutral-600 dark:text-neutral-300">Epoch ID</span>
+              <span className="text-sm font-mono text-right break-all">{selectedProject.currentEpochId}</span>
+            </div>
+          )}
+          {selectedProject.currentEpochPrId && (
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-neutral-600 dark:text-neutral-300">Epoch PR</span>
+              <span className="text-sm font-mono text-right">#{selectedProject.currentEpochPrId}</span>
+            </div>
+          )}
+          {selectedProject.currentMilestoneBranch && (
+            <div className="flex justify-between items-center gap-3">
+              <span className="text-neutral-600 dark:text-neutral-300">Milestone Branch</span>
+              <span className="text-sm font-mono text-right break-all">{selectedProject.currentMilestoneBranch}</span>
+            </div>
+          )}
           {selectedProject.phase === 'implementation' && selectedProject.milestoneCyclesBudget > 0 && (
             <div className="flex justify-between items-center">
               <span className="text-neutral-600 dark:text-neutral-300">Milestone Progress</span>

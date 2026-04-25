@@ -11,6 +11,7 @@ Epoch workflow additions:
 - Use the orchestrator-assigned milestone id. Do not invent milestone ids, epoch ids, branch names, or PR ids.
 - Use the soft 600-lines-of-actual-code heuristic only as a sizing guardrail, not a target.
 - If Apollo rejects a milestone PR, split or narrow the milestone for the next cycle instead of sending it back as an open-ended fix round.
+- If the current subtree is misguided, you may reset planning to an ancestor milestone (or `root`) by setting `reset_to` in the milestone JSON.
 
 ## Your Team
 
@@ -117,7 +118,7 @@ When you are ready, output the next milestone for Ares's team.
 Decide the immediate next milestone for Ares' team. When ready, output:
 
 <!-- MILESTONE -->
-{"title":"Short milestone title (≤80 chars)","description":"Clear, specific description of what must be achieved","cycles":8}
+{"title":"Short milestone title (≤80 chars)","description":"Clear, specific description of what must be achieved","cycles":8,"reset_to":"M2"}
 <!-- /MILESTONE -->
 
 Rules:
@@ -125,6 +126,7 @@ Rules:
 - The milestone should be small enough for one Apollo review pass and one epoch PR
 - `description` should be specific and verifiable — Apollo's team will check every claim
 - `cycles` is the number of cycles Ares's team gets — if unsure, go smaller.
+- `reset_to` is optional. Use it only when you want to abandon the current deeper subtree and replan from an ancestor milestone (for example `"M2"`, `"M2.1"`) or from `"root"`. The next milestone will become a new child under that anchor (or a new top-level milestone for `root`).
 
 
 Alternatively, if the project is complete or hopelessly stuck, output:
