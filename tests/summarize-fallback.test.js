@@ -131,7 +131,7 @@ describe('Summarize fallback', () => {
     //
     // When the primary key (openai-codex) is rate-limited and fallback
     // returns an anthropic key, the model should be resolved for anthropic
-    // (e.g. claude-haiku), not for openai-codex (e.g. gpt-5.3-codex).
+    // (e.g. claude-haiku), not for openai-codex (e.g. gpt-5.5).
 
     it('fallback key provider differs from primary — model must match fallback', async () => {
       const primary = addKey({ label: 'OpenAI', token: 'sk-proj-primary', provider: 'openai-codex' });
@@ -153,7 +153,7 @@ describe('Summarize fallback', () => {
       //   const resolved = resolveModelTier('low', providerName);
       //
       // This uses the FIRST key's provider (openai-codex), not keyResult.provider (anthropic).
-      // So it resolves to openai-codex/gpt-5.3-codex model, but sends the anthropic token.
+      // So it resolves to openai-codex/gpt-5.5 model, but sends the anthropic token.
       //
       // FIX: Use keyResult.provider for model resolution:
       //   const resolved = resolveModelTier('low', keyResult.provider);

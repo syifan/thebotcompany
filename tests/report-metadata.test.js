@@ -168,7 +168,7 @@ describe('Report metadata in SQLite', () => {
         cycle: 42, agent: 'ares', body: 'Fixed the bug',
         cost: 0.5432, durationMs: 120000,
         inputTokens: 50000, outputTokens: 2000, cacheReadTokens: 10000,
-        success: true, model: 'claude-opus-4-6', timedOut: false,
+        success: true, model: 'claude-opus-4-7', timedOut: false,
         visibilityMode: 'focused', visibilityIssues: ['123', '456'],
       });
 
@@ -182,7 +182,7 @@ describe('Report metadata in SQLite', () => {
       assert.strictEqual(row.output_tokens, 2000);
       assert.strictEqual(row.cache_read_tokens, 10000);
       assert.strictEqual(row.success, 1);
-      assert.strictEqual(row.model, 'claude-opus-4-6');
+      assert.strictEqual(row.model, 'claude-opus-4-7');
       assert.strictEqual(row.timed_out, 0);
       assert.strictEqual(row.visibility_mode, 'focused');
       assert.strictEqual(row.visibility_issues, JSON.stringify(['123', '456']));
