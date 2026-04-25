@@ -2487,7 +2487,7 @@ class ProjectRunner {
                 failData = { feedback: 'Themis rejected project completion, but the response could not be parsed.' };
               }
               decision = 'fail';
-            } else if (!schedule) {
+            } else if (!schedule && decision == null) {
               decision = 'fail';
             }
           }
