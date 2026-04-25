@@ -205,6 +205,11 @@ export function ReportCardHeader({ report }) {
               <VisibilityIcon className="w-2.5 h-2.5 mr-0.5" />
               {visibilityMeta.label}
             </StatusPill>
+            {report.milestone_id && (
+              <StatusPill variant="meta" className="shrink-0 normal-case text-indigo-700 dark:text-indigo-300">
+                {report.milestone_id}
+              </StatusPill>
+            )}
           </div>
         </div>
       </div>

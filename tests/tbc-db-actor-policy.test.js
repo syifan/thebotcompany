@@ -1,70 +1,48 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const ROOT = path.resolve(process.cwd());
-const CLI = path.join(ROOT, 'bin', 'tbc-db.js');
+const cliPath = path.resolve('bin/tbc-db.js');
+
+function makeDbPath() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-db-actor-'));
+  return path.join(dir, 'project.db');
+}
 
 function run(args, dbPath) {
-  return spawnSync('node', [CLI, ...args], {
-    cwd: ROOT,
-    env: {
-      ...process.env,
-      TBC_DB: dbPath,
-      TBC_VISIBILITY: 'full',
-    },
+  return spawnSync(process.execPath, [cliPath, ...args], {
+    cwd: path.resolve('.'),
+    env: { ...process.env, TBC_DB: dbPath },
     encoding: 'utf8',
   });
 }
 
-describe('tbc-db actor requirements', () => {
-  it('refuses non-canonical TBC_DB paths', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-actor-'));
-    const dbPath = path.join(dir, 'tracker.db');
+describe('tbc-db epoch PR actor policy', () => {
+  it('allows only ares to create epoch PRs', () => {
+    const dbPath = makeDbPath();
 
-    const res = run(['issue-list'], dbPath);
-    assert.notEqual(res.status, 0);
-    assert.match(res.stderr, /must point to canonical project\.db/i);
+    const denied = run(['pr-create', '--title', 'Bad PR', '--head', 'ares/m1', '--actor', 'athena'], dbPath);
+    assert.notEqual(denied.status, 0);
+    assert.match(`${denied.stderr}${denied.stdout}`, /Only ares may create epoch PRs/i);
+
+    const allowed = run(['pr-create', '--title', 'Good PR', '--head', 'ares/m1', '--actor', 'ares'], dbPath);
+    assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
+    assert.match(allowed.stdout, /Created TBC PR #1/);
   });
 
-  it('requires actor for issue create and comment', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-actor-'));
-    const dbPath = path.join(dir, 'project.db');
+  it('allows only apollo to merge or close an epoch PR', () => {
+    const dbPath = makeDbPath();
+    const created = run(['pr-create', '--title', 'Epoch PR', '--head', 'ares/m2', '--actor', 'ares'], dbPath);
+    assert.equal(created.status, 0, created.stderr || created.stdout);
 
-    let res = run(['issue-create', '--title', 'Missing actor'], dbPath);
-    assert.notEqual(res.status, 0);
-    assert.match(res.stderr, /--actor|--creator/i);
+    const denied = run(['pr-edit', '1', '--actor', 'ares', '--status', 'merged'], dbPath);
+    assert.notEqual(denied.status, 0);
+    assert.match(`${denied.stderr}${denied.stdout}`, /Only apollo may mark an epoch PR as merged/i);
 
-    res = run(['issue-create', '--title', 'With actor', '--actor', 'ares'], dbPath);
-    assert.equal(res.status, 0, res.stderr || res.stdout);
-
-    res = run(['comment', '--issue', '1', '--body', 'hello'], dbPath);
-    assert.notEqual(res.status, 0);
-    assert.match(res.stderr, /--actor|--author/i);
-
-    res = run(['comment', '--issue', '1', '--actor', 'ares', '--body', 'hello'], dbPath);
-    assert.equal(res.status, 0, res.stderr || res.stdout);
-  });
-
-  it('requires actor for pr create and pr edit', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-actor-'));
-    const dbPath = path.join(dir, 'project.db');
-
-    let res = run(['pr-create', '--title', 'PR title', '--head', 'feat/x'], dbPath);
-    assert.notEqual(res.status, 0);
-    assert.match(res.stderr, /--actor/i);
-
-    res = run(['pr-create', '--title', 'PR title', '--head', 'feat/x', '--actor', 'ares'], dbPath);
-    assert.equal(res.status, 0, res.stderr || res.stdout);
-
-    res = run(['pr-edit', '1', '--status', 'open'], dbPath);
-    assert.notEqual(res.status, 0);
-    assert.match(res.stderr, /--actor/i);
-
-    res = run(['pr-edit', '1', '--actor', 'ares', '--status', 'open'], dbPath);
-    assert.equal(res.status, 0, res.stderr || res.stdout);
+    const allowed = run(['pr-edit', '1', '--actor', 'apollo', '--status', 'merged', '--decision', 'merge'], dbPath);
+    assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
   });
 });

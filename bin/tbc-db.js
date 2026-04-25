@@ -64,9 +64,14 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS milestones (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
     description TEXT NOT NULL,
     cycles_budget INTEGER DEFAULT 20,
     cycles_used INTEGER DEFAULT 0,
+    branch_name TEXT,
+    parent_milestone_id TEXT,
+    linked_pr_id INTEGER,
+    failure_reason TEXT,
     phase TEXT DEFAULT 'implementation',
     status TEXT DEFAULT 'active' CHECK(status IN ('active', 'completed', 'failed')),
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
@@ -77,9 +82,15 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     summary TEXT DEFAULT '',
+    milestone_id TEXT,
+    parent_pr_id INTEGER,
+    epoch_index TEXT,
+    branch_name TEXT,
     base_branch TEXT NOT NULL,
     head_branch TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')),
+    decision TEXT,
+    decision_reason TEXT DEFAULT '',
     issue_ids TEXT DEFAULT '[]',
     test_status TEXT DEFAULT 'unknown',
     github_pr_number INTEGER,
@@ -116,6 +127,18 @@ db.exec(`
 const command = process.argv[2];
 try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
 try { db.exec('ALTER TABLE issues ADD COLUMN closed_by TEXT'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN title TEXT'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN branch_name TEXT'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN milestone_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN parent_milestone_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN linked_pr_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE milestones ADD COLUMN failure_reason TEXT'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN milestone_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN parent_pr_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN epoch_index TEXT'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN branch_name TEXT'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN decision TEXT'); } catch {}
+try { db.exec('ALTER TABLE tbc_prs ADD COLUMN decision_reason TEXT DEFAULT ""'); } catch {}
 try { db.exec('ALTER TABLE tbc_prs ADD COLUMN actor TEXT'); } catch {}
 try { db.exec('ALTER TABLE tbc_prs ADD COLUMN updated_by TEXT'); } catch {}
 
@@ -154,6 +177,28 @@ function resolveAllowedIssueCloser(issueCreator) {
 
 function jsonOut(data) {
   console.log(JSON.stringify(data, null, 2));
+}
+
+function assertPrCreateActor(actor) {
+  if (actor !== 'ares') {
+    throw new Error(`Only ares may create epoch PRs. Got: ${actor || '(missing actor)'}`);
+  }
+}
+
+function assertPrDecisionActor(actor, status) {
+  if (!status || status === 'open') return;
+  if (actor !== 'apollo') {
+    throw new Error(`Only apollo may mark an epoch PR as ${status}. Got: ${actor || '(missing actor)'}`);
+  }
+}
+
+function assertPrEditActor(actor, current, nextStatus) {
+  if (!actor) throw new Error('Missing --actor for PR mutation');
+  const targetStatus = nextStatus || current.status;
+  assertPrDecisionActor(actor, targetStatus);
+  if (targetStatus === 'open' && !new Set(['ares', 'apollo', current.actor]).has(actor)) {
+    throw new Error(`Only ${current.actor || 'ares'}, ares, or apollo may edit epoch PR #${current.id}. Got: ${actor}`);
+  }
 }
 
 function textOut(rows, columns) {
@@ -377,6 +422,10 @@ const commands = {
       options: {
         title: { type: 'string', short: 't' },
         summary: { type: 'string', short: 's', default: '' },
+        milestone: { type: 'string', default: '' },
+        parent: { type: 'string', default: '' },
+        epoch: { type: 'string', default: '' },
+        branch: { type: 'string', default: '' },
         base: { type: 'string', default: 'main' },
         head: { type: 'string' },
         status: { type: 'string', default: 'draft' },
@@ -389,7 +438,13 @@ const commands = {
       strict: false,
     });
     if (!values.title || !values.head || !values.actor) {
-      console.error('Usage: tbc-db pr-create --title "..." --head branch --actor name [--summary "..."] [--base main] [--status draft] [--issues "1,2"] [--test unknown]');
+      console.error('Usage: tbc-db pr-create --title "..." --head branch --actor name [--summary "..."] [--base main] [--milestone <id>] [--epoch <n>] [--branch <name>] [--issues "1,2"] [--test unknown]');
+      process.exit(1);
+    }
+    try {
+      assertPrCreateActor(values.actor);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
       process.exit(1);
     }
     if ((values.base || 'main') === values.head) {
@@ -398,18 +453,28 @@ const commands = {
     }
     const now = new Date().toISOString();
     const normalizedStatus = normalizePrStatus(values.status);
+    if (normalizedStatus !== 'open') {
+      console.error('Error: epoch PRs must be created in open status. Apollo decides merged/closed later.');
+      process.exit(1);
+    }
     const issueIds = values.issues
       ? JSON.stringify(values.issues.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite))
       : '[]';
     const result = db.prepare(`INSERT INTO tbc_prs
-      (title, summary, base_branch, head_branch, status, issue_ids, test_status, actor, updated_by, github_pr_number, github_pr_url, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (title, summary, milestone_id, parent_pr_id, epoch_index, branch_name, base_branch, head_branch, status, decision, decision_reason, issue_ids, test_status, actor, updated_by, github_pr_number, github_pr_url, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(
         values.title,
         values.summary || '',
+        values.milestone || null,
+        values.parent ? Number(values.parent) : null,
+        values.epoch || null,
+        values.branch || values.head,
         values.base || 'main',
         values.head,
         normalizedStatus,
+        null,
+        '',
         issueIds,
         values.test || 'unknown',
         values.actor,
@@ -448,7 +513,10 @@ const commands = {
     } else {
       for (const row of rows) {
         const issues = row.issue_ids.length ? ` issues=${row.issue_ids.join(',')}` : '';
-        console.log(`#${row.id} [${row.status}] ${row.title} (${row.head_branch} -> ${row.base_branch}) test=${row.test_status}${issues}`);
+        const milestone = row.milestone_id ? ` milestone=${row.milestone_id}` : '';
+        const epoch = row.epoch_index ? ` epoch=${row.epoch_index}` : '';
+        const actor = row.actor ? ` actor=${row.actor}` : '';
+        console.log(`#${row.id} [${row.status}] ${row.title} (${row.head_branch} -> ${row.base_branch}) test=${row.test_status}${issues}${milestone}${epoch}${actor}`);
       }
       if (rows.length === 0) console.log('(no TBC PRs)');
     }
@@ -462,6 +530,12 @@ const commands = {
     console.log(`# TBC PR #${pr.id}: ${pr.title}`);
     console.log(`Status: ${pr.status} | Base: ${pr.base_branch} | Head: ${pr.head_branch} | Test: ${pr.test_status}`);
     console.log(`Created: ${pr.created_at} | Updated: ${pr.updated_at}`);
+    if (pr.epoch_index != null) console.log(`Epoch: ${pr.epoch_index}`);
+    if (pr.milestone_id != null) console.log(`Milestone: ${pr.milestone_id}`);
+    if (pr.parent_pr_id != null) console.log(`Parent PR: ${pr.parent_pr_id}`);
+    if (pr.branch_name) console.log(`Branch: ${pr.branch_name}`);
+    if (pr.decision) console.log(`Decision: ${pr.decision}`);
+    if (pr.decision_reason) console.log(`Decision Reason: ${pr.decision_reason}`);
     const issueIds = (() => { try { return JSON.parse(pr.issue_ids || '[]'); } catch { return []; } })();
     if (issueIds.length) console.log(`Issues: ${issueIds.join(', ')}`);
     if (pr.github_pr_number || pr.github_pr_url) {
@@ -472,16 +546,22 @@ const commands = {
 
   'pr-edit'() {
     const id = args[0];
-    if (!id) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
+    if (!id) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]'); process.exit(1); }
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
         actor: { type: 'string' },
         title: { type: 'string', short: 't' },
         summary: { type: 'string', short: 's' },
+        milestone: { type: 'string' },
+        parent: { type: 'string' },
+        epoch: { type: 'string' },
+        branch: { type: 'string' },
         base: { type: 'string' },
         head: { type: 'string' },
         status: { type: 'string' },
+        decision: { type: 'string' },
+        'decision-reason': { type: 'string' },
         issues: { type: 'string' },
         test: { type: 'string' },
         github_number: { type: 'string' },
@@ -489,16 +569,31 @@ const commands = {
       },
       strict: false,
     });
-    if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
+    if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]'); process.exit(1); }
+    const current = db.prepare('SELECT id, base_branch, head_branch, actor, status FROM tbc_prs WHERE id = ?').get(id);
+    if (!current) { console.error(`TBC PR #${id} not found`); process.exit(1); }
+    const nextStatus = values.status !== undefined ? normalizePrStatus(values.status) : null;
+    try {
+      assertPrEditActor(values.actor, current, nextStatus);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
     const sets = [];
     const params = [];
     if (values.title !== undefined) { sets.push('title = ?'); params.push(values.title); }
     if (values.summary !== undefined) { sets.push('summary = ?'); params.push(values.summary); }
+    if (values.milestone !== undefined) { sets.push('milestone_id = ?'); params.push(values.milestone || null); }
+    if (values.parent !== undefined) { sets.push('parent_pr_id = ?'); params.push(values.parent ? Number(values.parent) : null); }
+    if (values.epoch !== undefined) { sets.push('epoch_index = ?'); params.push(values.epoch || null); }
+    if (values.branch !== undefined) { sets.push('branch_name = ?'); params.push(values.branch || null); }
     if (values.base !== undefined) { sets.push('base_branch = ?'); params.push(values.base); }
     const nextBase = values.base;
     const nextHead = values.head;
     if (values.head !== undefined) { sets.push('head_branch = ?'); params.push(values.head); }
-    if (values.status !== undefined) { sets.push('status = ?'); params.push(normalizePrStatus(values.status)); }
+    if (values.status !== undefined) { sets.push('status = ?'); params.push(nextStatus); }
+    if (values.decision !== undefined) { sets.push('decision = ?'); params.push(values.decision || null); }
+    if (values['decision-reason'] !== undefined) { sets.push('decision_reason = ?'); params.push(values['decision-reason'] || ''); }
     if (values.issues !== undefined) {
       const issueIds = JSON.stringify(values.issues.split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite));
       sets.push('issue_ids = ?'); params.push(issueIds);
@@ -507,8 +602,6 @@ const commands = {
     if (values.github_number !== undefined) { sets.push('github_pr_number = ?'); params.push(values.github_number ? Number(values.github_number) : null); }
     if (values.github_url !== undefined) { sets.push('github_pr_url = ?'); params.push(values.github_url || null); }
     if (sets.length === 0) { console.error('Nothing to update'); process.exit(1); }
-    const current = db.prepare('SELECT base_branch, head_branch FROM tbc_prs WHERE id = ?').get(id);
-    if (!current) { console.error(`TBC PR #${id} not found`); process.exit(1); }
     const finalBase = nextBase !== undefined ? nextBase : current.base_branch;
     const finalHead = nextHead !== undefined ? nextHead : current.head_branch;
     if (finalBase === finalHead) {
@@ -555,10 +648,10 @@ Comments:
   comments      <issue_id>
 
 TBC PRs:
-  pr-create     --title "..." --head branch [--summary "..."] [--base main] [--status open|merged|closed] [--issues "1,2"] [--test unknown]
+  pr-create     --title "..." --head branch --actor ares [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]
   pr-list       [--status open|merged|closed|all] [--json]
   pr-view       <id>
-  pr-edit       <id> [--title "..."] [--summary "..."] [--base main] [--head branch] [--status open|merged|closed] [--issues "1,2"] [--test pass]
+  pr-edit       <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]
 
 Advanced:
   query         "SQL statement"

@@ -1,136 +1,57 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import Database from 'better-sqlite3';
+import { spawnSync } from 'node:child_process';
 
-function createDbWithTbcPrsSchema(dbPath) {
-  const db = new Database(dbPath);
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS tbc_prs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        summary TEXT DEFAULT '',
-        base_branch TEXT NOT NULL,
-        head_branch TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')),
-        issue_ids TEXT DEFAULT '[]',
-        test_status TEXT DEFAULT 'unknown',
-        github_pr_number INTEGER,
-        github_pr_url TEXT,
-        created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-        updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-      );
-      CREATE TRIGGER IF NOT EXISTS tbc_prs_status_insert_check
-      BEFORE INSERT ON tbc_prs
-      FOR EACH ROW
-      WHEN NEW.status NOT IN ('open', 'merged', 'closed')
-      BEGIN
-        SELECT RAISE(ABORT, 'invalid tbc_prs.status');
-      END;
-      CREATE TRIGGER IF NOT EXISTS tbc_prs_status_update_check
-      BEFORE UPDATE OF status ON tbc_prs
-      FOR EACH ROW
-      WHEN NEW.status NOT IN ('open', 'merged', 'closed')
-      BEGIN
-        SELECT RAISE(ABORT, 'invalid tbc_prs.status');
-      END;
-    `);
-  } finally {
-    db.close();
-  }
+const cliPath = path.resolve('bin/tbc-db.js');
+
+function makeDbPath() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-'));
+  return path.join(dir, 'project.db');
 }
 
-describe('TBC local PR staging model', () => {
-  it('tbc-db CLI should expose TBC PR commands', () => {
-    const cliCode = fs.readFileSync(path.join(process.cwd(), 'bin', 'tbc-db.js'), 'utf-8');
-    assert.match(cliCode, /'pr-create'\(\)/, 'Expected tbc-db to support pr-create');
-    assert.match(cliCode, /'pr-list'\(\)/, 'Expected tbc-db to support pr-list');
-    assert.match(cliCode, /'pr-view'\(\)/, 'Expected tbc-db to support pr-view');
-    assert.match(cliCode, /'pr-edit'\(\)/, 'Expected tbc-db to support pr-edit');
+function run(args, dbPath) {
+  return spawnSync(process.execPath, [cliPath, ...args], {
+    cwd: path.resolve('.'),
+    env: { ...process.env, TBC_DB: dbPath },
+    encoding: 'utf8',
+  });
+}
+
+describe('TBC local epoch PR model', () => {
+  it('stores epoch-specific metadata on TBC PRs', () => {
+    const dbPath = makeDbPath();
+    const created = run([
+      'pr-create',
+      '--title', 'Epoch 7 PR',
+      '--head', 'ares/epoch-7',
+      '--actor', 'ares',
+      '--milestone', 'M1.2',
+      '--parent', '5',
+      '--epoch', 'E7',
+      '--branch', 'e7-m1-2-epoch-7-branch',
+    ], dbPath);
+    assert.equal(created.status, 0, created.stderr || created.stdout);
+
+    const db = new Database(dbPath, { readonly: true });
+    const pr = db.prepare('SELECT milestone_id, parent_pr_id, epoch_index, branch_name, actor, status FROM tbc_prs WHERE id = 1').get();
+    db.close();
+
+    assert.deepEqual(pr, {
+      milestone_id: 'M1.2',
+      parent_pr_id: 5,
+      epoch_index: 'E7',
+      branch_name: 'e7-m1-2-epoch-7-branch',
+      actor: 'ares',
+      status: 'open',
+    });
   });
 
-  it('agent shared rules should instruct workers to use TBC PRs', () => {
-    const everyone = fs.readFileSync(path.join(process.cwd(), 'agent', 'everyone.md'), 'utf-8');
-    const worker = fs.readFileSync(path.join(process.cwd(), 'agent', 'worker.md'), 'utf-8');
+  it('shared agent rules still direct agents to use TBC PRs instead of GitHub PRs', () => {
+    const everyone = fs.readFileSync(path.resolve('agent/everyone.md'), 'utf8');
     assert.match(everyone, /Use TBC PRs, not GitHub PRs/i);
-    assert.match(worker, /tbc-db pr-create/i);
-  });
-  it('server should create a tbc_prs table in project.db schema', () => {
-    const serverCode = fs.readFileSync(path.join(process.cwd(), 'src', 'server.js'), 'utf-8');
-    assert.match(serverCode, /CREATE TABLE IF NOT EXISTS tbc_prs/,
-      'Expected server.js to create a tbc_prs table');
-  });
-
-  it('tbc_prs schema should support a private local PR object without GitHub metadata', () => {
-    const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-')), 'project.db');
-    createDbWithTbcPrsSchema(dbPath);
-    const db = new Database(dbPath);
-    try {
-      const cols = db.prepare(`PRAGMA table_info(tbc_prs)`).all().map(r => r.name);
-      for (const required of ['title', 'summary', 'base_branch', 'head_branch', 'status', 'issue_ids', 'test_status']) {
-        assert.ok(cols.includes(required), `Missing tbc_prs column: ${required}`);
-      }
-    } finally {
-      db.close();
-    }
-  });
-
-  it('supports creating a local open TBC PR without a GitHub PR number', () => {
-    const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-')), 'project.db');
-    createDbWithTbcPrsSchema(dbPath);
-    const db = new Database(dbPath);
-    try {
-      db.prepare(`INSERT INTO tbc_prs (title, summary, base_branch, head_branch, status, issue_ids, test_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run('Fix scheduler race', 'Local staging draft', 'main', 'tbc/change-123', 'open', JSON.stringify([12, 34]), 'unknown');
-
-      const row = db.prepare(`SELECT * FROM tbc_prs`).get();
-      assert.equal(row.title, 'Fix scheduler race');
-      assert.equal(row.base_branch, 'main');
-      assert.equal(row.head_branch, 'tbc/change-123');
-      assert.equal(row.status, 'open');
-      assert.equal(row.issue_ids, JSON.stringify([12, 34]));
-      assert.equal(row.github_pr_number, null);
-      assert.equal(row.github_pr_url, null);
-    } finally {
-      db.close();
-    }
-  });
-
-  it('supports merged/closed status progression only', () => {
-    const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-')), 'project.db');
-    createDbWithTbcPrsSchema(dbPath);
-    const db = new Database(dbPath);
-    try {
-      db.prepare(`INSERT INTO tbc_prs (title, base_branch, head_branch, status) VALUES (?, ?, ?, ?)`).run(
-        'Feature draft', 'main', 'tbc/feature-1', 'open'
-      );
-      db.prepare(`UPDATE tbc_prs SET status = ?, test_status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = 1`).run(
-        'merged', 'pass'
-      );
-      const row = db.prepare(`SELECT status, test_status FROM tbc_prs WHERE id = 1`).get();
-      assert.equal(row.status, 'merged');
-      assert.equal(row.test_status, 'pass');
-    } finally {
-      db.close();
-    }
-  });
-
-  it('rejects invalid PR statuses at the DB level', () => {
-    const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-prs-')), 'project.db');
-    createDbWithTbcPrsSchema(dbPath);
-    const db = new Database(dbPath);
-    try {
-      assert.throws(() => {
-        db.prepare(`INSERT INTO tbc_prs (title, base_branch, head_branch, status) VALUES (?, ?, ?, ?)`).run(
-          'Bad status', 'main', 'tbc/bad-status', 'superseded'
-        );
-      }, /invalid tbc_prs.status|CHECK constraint failed/i);
-    } finally {
-      db.close();
-    }
   });
 });

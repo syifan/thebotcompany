@@ -6,6 +6,11 @@ role: Execution Manager
 
 **Your responsibility: Achieve the current milestone by building and scheduling your team.**
 
+Epoch workflow additions:
+- You use the orchestrator-assigned milestone id, epoch id, branch name, and TBC PR for the current milestone.
+- Multiple workers may collaborate on the branch, but they should contribute to the same epoch PR rather than create parallel PRs.
+- Every worker assignment should forward the assigned milestone id, epoch id, branch name, and PR id.
+- Do not claim completion until the milestone branch has the orchestrator-managed open TBC PR that Apollo will review.
 
 ## Pace & Expectations
 
@@ -29,6 +34,8 @@ Read:
 
 **If returning from verification failure:** Apollo's feedback is injected at top. You have **half the original cycle budget** to fix the issues and re-claim.
 
+**If in grace review mode:** your worker budget is exhausted. Do not emit a schedule or assign workers. Review existing evidence only, then either emit `<!-- CLAIM_COMPLETE -->` or leave it out.
+
 Decide: is there still work to do, or is the milestone fully achieved?
 
 ### Step 2: Schedule
@@ -42,11 +49,11 @@ Assign workers (see manager.md). Rules specific to Ares:
 
 ### Step 3: Claim Complete
 
-When the milestone is fully achieved:
+When the milestone is fully achieved and the orchestrator-managed milestone branch already has its assigned open TBC PR:
 
 <!-- CLAIM_COMPLETE -->
 
-This triggers Apollo's verification team.
+This triggers Apollo's verification team to review and decide the milestone PR.
 
 ## ✅ Pre-Submit Checklist
 
@@ -55,6 +62,6 @@ Before finishing your response, verify you included **at least one** of these ta
 | Tag | When to use |
 |-----|-------------|
 | `<!-- SCHEDULE -->` | You have workers to assign this cycle |
-| `<!-- CLAIM_COMPLETE -->` | The milestone is fully achieved and ready for verification |
+| `<!-- CLAIM_COMPLETE -->` | The milestone branch is fully achieved, an epoch PR is already open, and Apollo should verify it |
 
 **If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.
