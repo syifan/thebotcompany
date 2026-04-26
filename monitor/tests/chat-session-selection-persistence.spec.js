@@ -15,7 +15,7 @@ const KEY_POOL = {
 const AVAILABLE_MODELS = {
   anthropic: [
     { id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6' },
-    { id: 'claude-opus-4-6', name: 'claude-opus-4-6' },
+    { id: 'claude-opus-4-7', name: 'claude-opus-4-7' },
   ],
 }
 
@@ -84,16 +84,16 @@ test.describe('Chat session key/model persistence', () => {
       selectedModel: 'claude-sonnet-4-6',
     })
 
-    await modelSelect.selectOption('claude-opus-4-6')
+    await modelSelect.selectOption('claude-opus-4-7')
     await expect.poll(() => savedPreferences).toEqual({
       selectedKeyId: KEY_ID_2,
-      selectedModel: 'claude-opus-4-6',
+      selectedModel: 'claude-opus-4-7',
     })
 
     await page.reload()
     await page.waitForLoadState('networkidle')
 
     await expect(page.locator('select[aria-label="Key"]').last()).toHaveValue(KEY_ID_2)
-    await expect(page.locator('select[aria-label="Model"]').last()).toHaveValue('claude-opus-4-6')
+    await expect(page.locator('select[aria-label="Model"]').last()).toHaveValue('claude-opus-4-7')
   })
 })
