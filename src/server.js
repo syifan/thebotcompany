@@ -2982,7 +2982,7 @@ function syncProjects() {
 }
 
 // --- Basic Auth ---
-const { isAuthenticated, requireWrite } = createAuth({
+const { isAuthenticated, requireWrite, passwordRequired } = createAuth({
   password: process.env.TBC_PASSWORD || null,
 });
 
@@ -3090,7 +3090,7 @@ const server = http.createServer(async (req, res) => {
   // --- Auth status ---
   if (req.method === 'GET' && url.pathname === '/api/auth') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ authenticated: isAuthenticated(req), passwordRequired: !!TBC_PASSWORD }));
+    res.end(JSON.stringify({ authenticated: isAuthenticated(req), passwordRequired }));
     return;
   }
 

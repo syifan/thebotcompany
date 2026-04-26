@@ -17,5 +17,5 @@ export function createAuth({ password }) {
     return false;
   }
 
-  return { isAuthenticated, requireWrite };
+  return { isAuthenticated, requireWrite, passwordRequired: !!password };
 }
