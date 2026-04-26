@@ -4,8 +4,9 @@ dist/
 .DS_Store
 .env
 .env.*
-.historybin/tbc
 .history
+restart.sh
+test-results/
 monitor/test-results/
 monitor/playwright-report/
 
