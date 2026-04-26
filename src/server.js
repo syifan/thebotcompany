@@ -23,6 +23,9 @@ import {
   getKeyPoolSafe, resolveKeyForProject, markRateLimited, markKeySucceeded, migrateFromEnv,
   detectTokenProvider as detectTokenProviderFromPool,
 } from './key-pool.js';
+import { LocalOrchestrator } from './orchestrator/LocalOrchestrator.js';
+import { createAuth } from './server/auth.js';
+import { serveStatic } from './server/static.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -240,7 +243,7 @@ function broadcastStatusUpdate(projectId) {
   if (_statusBroadcastTimers.has(projectId)) return; // already scheduled
   _statusBroadcastTimers.set(projectId, setTimeout(() => {
     _statusBroadcastTimers.delete(projectId);
-    const runner = projects.get(projectId);
+    const runner = orchestrator.getProject(projectId);
     if (!runner) return;
     const data = JSON.stringify({ type: 'status-update', project: projectId, status: runner.getStatus() });
     for (const client of sseClients) {
@@ -314,7 +317,7 @@ function log(msg, projectId = null) {
   const line = `${ts} ${prefix} ${msg}`;
   console.log(line);
   if (projectId) {
-    const runner = projects.get(projectId);
+    const runner = orchestrator.getProject(projectId);
     if (runner) {
       const logPath = runner.orchestratorLogPath;
       try { fs.appendFileSync(logPath, line + '\n'); } catch {}
@@ -333,20 +336,6 @@ function parseGithubUrl(url) {
   const cloneUrl = `https://github.com/${username}/${reponame}.git`;
   return { id, username, reponame, projectDir, repoDir, cloneUrl };
 }
-
-// --- MIME Types ---
-const MIME_TYPES = {
-  '.html': 'text/html',
-  '.js': 'application/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-};
 
 // --- Project Runner ---
 class ProjectRunner {
@@ -2976,94 +2965,26 @@ class ProjectRunner {
   }
 }
 
+const orchestrator = new LocalOrchestrator({
+  tbcHome: TBC_HOME,
+  RunnerClass: ProjectRunner,
+  projects,
+  log,
+});
+
 // --- Load Projects ---
 function loadProjects() {
-  const projectsPath = path.join(TBC_HOME, 'projects.yaml');
-  try {
-    if (!fs.existsSync(projectsPath)) {
-      const defaultConfig = `# TheBotCompany - Project Registry
-projects:
-  # Example:
-  # m2sim:
-  #   path: ~/dev/src/github.com/sarchlab/m2sim
-  #   enabled: true
-`;
-      fs.writeFileSync(projectsPath, defaultConfig);
-      log(`Created ${projectsPath}`);
-      return {};
-    }
-    const raw = fs.readFileSync(projectsPath, 'utf-8');
-    const config = yaml.load(raw) || {};
-    return config.projects || {};
-  } catch (e) {
-    log(`Failed to load projects.yaml: ${e.message}`);
-    return {};
-  }
+  return orchestrator.loadProjectRegistry();
 }
 
 function syncProjects() {
-  const config = loadProjects();
-  
-  for (const [id, cfg] of Object.entries(config)) {
-    if (!projects.has(id)) {
-      const runner = new ProjectRunner(id, cfg);
-      projects.set(id, runner);
-      if (runner.enabled) {
-        runner.start();
-      }
-    }
-  }
-  
-  for (const [id, runner] of projects) {
-    if (!(id in config)) {
-      runner.stop();
-      projects.delete(id);
-    }
-  }
-}
-
-// --- Static File Serving ---
-function serveStatic(req, res, urlPath) {
-  let filePath = path.join(MONITOR_DIST, urlPath === '/' ? 'index.html' : urlPath);
-  
-  // SPA fallback
-  if (!fs.existsSync(filePath) && !path.extname(filePath)) {
-    filePath = path.join(MONITOR_DIST, 'index.html');
-  }
-  
-  if (!fs.existsSync(filePath)) {
-    res.writeHead(404);
-    res.end('Not found');
-    return;
-  }
-  
-  const ext = path.extname(filePath);
-  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-  
-  res.writeHead(200, { 'Content-Type': contentType });
-  fs.createReadStream(filePath).pipe(res);
+  return orchestrator.syncProjects();
 }
 
 // --- Basic Auth ---
-const TBC_PASSWORD = process.env.TBC_PASSWORD || null;
-
-function isAuthenticated(req) {
-  if (!TBC_PASSWORD) return true;
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith('Basic ')) {
-    const decoded = Buffer.from(auth.slice(6), 'base64').toString();
-    const [, pass] = decoded.split(':');
-    if (pass === TBC_PASSWORD) return true;
-  }
-  return false;
-}
-
-function requireWrite(req, res) {
-  if (isAuthenticated(req)) return true;
-  res.writeHead(403, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ error: 'Authentication required for write operations' }));
-  return false;
-}
+const { isAuthenticated, requireWrite } = createAuth({
+  password: process.env.TBC_PASSWORD || null,
+});
 
 // --- HTTP API ---
 const server = http.createServer(async (req, res) => {
@@ -3550,8 +3471,8 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       uptime: Math.floor((Date.now() - startTime) / 1000),
-      projectCount: projects.size,
-      projects: Array.from(projects.values()).map(p => p.getStatus())
+      projectCount: orchestrator.projectCount(),
+      projects: orchestrator.listProjectStatuses()
     }));
     return;
   }
@@ -3559,7 +3480,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/projects') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      projects: Array.from(projects.values()).map(p => p.getStatus())
+      projects: orchestrator.listProjectStatuses()
     }));
     return;
   }
@@ -3568,7 +3489,7 @@ const server = http.createServer(async (req, res) => {
     if (!requireWrite(req, res)) return;
     syncProjects();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, projectCount: projects.size }));
+    res.end(JSON.stringify({ success: true, projectCount: orchestrator.projectCount() }));
     return;
   }
 
@@ -3683,7 +3604,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        if (projects.has(parsed.id)) {
+        if (orchestrator.hasProject(parsed.id)) {
           res.writeHead(409, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: `Project "${parsed.id}" is already registered` }));
           return;
@@ -3765,19 +3686,12 @@ const server = http.createServer(async (req, res) => {
           fs.writeFileSync(specPath, specContent);
         }
 
-        const projectsPath = path.join(TBC_HOME, 'projects.yaml');
-        const raw = fs.readFileSync(projectsPath, 'utf-8');
-        const projConfig = yaml.load(raw) || {};
-        if (!projConfig.projects) projConfig.projects = {};
-
-        projConfig.projects[id] = { path: resolvedPath, enabled: true };
-
-        fs.writeFileSync(projectsPath, yaml.dump(projConfig, { lineWidth: -1 }));
+        orchestrator.addProjectConfig(id, { path: resolvedPath, enabled: true });
         syncProjects();
 
         // Write initial project config with budget
         if (budgetPer24h !== undefined) {
-          const runner = projects.get(id);
+          const runner = orchestrator.getProject(id);
           if (runner) {
             const config = runner.loadConfig();
             config.budgetPer24h = parseFloat(budgetPer24h) || 0;
@@ -3800,25 +3714,13 @@ const server = http.createServer(async (req, res) => {
   // DELETE /api/projects/:id — only match exact project path (no sub-routes like /chats/1)
   const isExactProjectDelete = req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2] && (
     pathParts.length === 3 || // single-segment: /api/projects/m2sim
-    (pathParts.length === 4 && `${pathParts[2]}/${pathParts[3]}` && projects.has(`${pathParts[2]}/${pathParts[3]}`)) // two-segment: /api/projects/sarchlab/m2sim
+    (pathParts.length === 4 && `${pathParts[2]}/${pathParts[3]}` && orchestrator.hasProject(`${pathParts[2]}/${pathParts[3]}`)) // two-segment: /api/projects/sarchlab/m2sim
   ) && !(pathParts.length > 4); // NOT a sub-route like /chats/1
   if (isExactProjectDelete) {
     const twoSegId = pathParts[3] ? `${pathParts[2]}/${pathParts[3]}` : null;
-    const projectId = (twoSegId && projects.has(twoSegId)) ? twoSegId : pathParts[2];
+    const projectId = (twoSegId && orchestrator.hasProject(twoSegId)) ? twoSegId : pathParts[2];
     try {
-      const projectsPath = path.join(TBC_HOME, 'projects.yaml');
-      const raw = fs.readFileSync(projectsPath, 'utf-8');
-      const config = yaml.load(raw) || {};
-      
-      if (config.projects && config.projects[projectId]) {
-        // Stop the runner if running
-        const runner = projects.get(projectId);
-        if (runner) runner.stop();
-        projects.delete(projectId);
-        
-        delete config.projects[projectId];
-        fs.writeFileSync(projectsPath, yaml.dump(config, { lineWidth: -1 }));
-        
+      if (orchestrator.removeProjectConfig(projectId)) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, id: projectId }));
       } else {
@@ -3838,14 +3740,14 @@ const server = http.createServer(async (req, res) => {
   if (pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2]) {
     const twoSegId = pathParts[3] ? `${pathParts[2]}/${pathParts[3]}` : null;
     let projectId, subPathStart;
-    if (twoSegId && projects.has(twoSegId)) {
+    if (twoSegId && orchestrator.hasProject(twoSegId)) {
       projectId = twoSegId;
       subPathStart = 4;
     } else {
       projectId = pathParts[2];
       subPathStart = 3;
     }
-    const runner = projects.get(projectId);
+    const runner = orchestrator.getProject(projectId);
 
     if (!runner) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -4987,20 +4889,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && (subPath === 'archive' || subPath === 'unarchive')) {
       if (!requireWrite(req, res)) return;
       const archive = subPath === 'archive';
-      runner.archived = archive;
-      // Update projects.yaml
       try {
-        const configPath = path.join(TBC_HOME, 'projects.yaml');
-        const raw = fs.readFileSync(configPath, 'utf-8');
-        const config = yaml.load(raw) || {};
-        if (config.projects && config.projects[projectId]) {
-          if (archive) {
-            config.projects[projectId].archived = true;
-          } else {
-            delete config.projects[projectId].archived;
-          }
-          fs.writeFileSync(configPath, yaml.dump(config));
-        }
+        orchestrator.setProjectArchived(projectId, archive);
       } catch (e) {
         log(`Failed to update projects.yaml for archive: ${e.message}`);
       }
@@ -5014,16 +4904,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && ['pause', 'resume', 'skip', 'start', 'stop', 'kill-run', 'kill-cycle', 'kill-epoch'].includes(subPath)) {
       if (!requireWrite(req, res)) return;
-      switch (subPath) {
-        case 'pause': runner.pause(); break;
-        case 'resume': runner.resume(); break;
-        case 'skip': runner.skip(); break;
-        case 'start': runner.start(); break;
-        case 'stop': runner.stop(); break;
-        case 'kill-run': runner.killRun(); break;
-        case 'kill-cycle': runner.killCycle(); break;
-        case 'kill-epoch': runner.killEpoch(); break;
-      }
+      orchestrator.dispatchProjectAction(projectId, subPath);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, action: subPath, projectId }));
       return;
@@ -5032,7 +4913,7 @@ const server = http.createServer(async (req, res) => {
 
   // --- Static Files ---
   if (SERVE_STATIC && fs.existsSync(MONITOR_DIST)) {
-    serveStatic(req, res, url.pathname);
+    serveStatic(req, res, url.pathname, MONITOR_DIST);
     return;
   }
 
@@ -5072,14 +4953,14 @@ server.listen(PORT, () => {
 
 process.on('SIGINT', () => {
   log('Shutting down...');
-  for (const runner of projects.values()) {
+  for (const runner of orchestrator.listProjects()) {
     runner.stop();
   }
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   log('Shutting down...');
-  for (const runner of projects.values()) {
+  for (const runner of orchestrator.listProjects()) {
     runner.stop();
   }
   process.exit(0);
