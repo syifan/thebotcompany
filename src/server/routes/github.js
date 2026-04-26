@@ -1,0 +1,77 @@
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import { readJson, sendJson } from '../http.js';
+
+export async function handleGithubRoutes(req, res, url, ctx) {
+  const { requireWrite, tbcHome } = ctx;
+
+  if (req.method === 'GET' && url.pathname === '/api/github/orgs') {
+    try {
+      const user = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
+      let orgs = [];
+      try {
+        orgs = execSync('gh api user/orgs --jq \".[].login\"', { encoding: 'utf-8', timeout: 15000 })
+          .trim().split('\n').filter(Boolean);
+      } catch {}
+      sendJson(res, 200, { user, orgs: [user, ...orgs] });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message });
+    }
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/github/repos') {
+    const owner = url.searchParams.get('owner');
+    if (!owner) {
+      sendJson(res, 400, { error: 'Missing owner parameter' });
+      return true;
+    }
+    try {
+      const output = execSync(
+        `gh repo list ${owner} --json nameWithOwner,name,description --limit 100`,
+        { encoding: 'utf-8', timeout: 30000 }
+      );
+      sendJson(res, 200, { repos: JSON.parse(output) });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/github/create-repo') {
+    if (!requireWrite(req, res)) return true;
+    try {
+      const { name, owner, isPrivate, description } = await readJson(req);
+      if (!name) {
+        sendJson(res, 400, { error: 'Missing repo name' });
+        return true;
+      }
+
+      const currentUser = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
+      const resolvedOwner = owner || currentUser;
+      const isOrg = owner && owner !== currentUser;
+
+      let cmd = 'gh repo create';
+      cmd += isOrg ? ` ${owner}/${name}` : ` ${name}`;
+      cmd += isPrivate ? ' --private' : ' --public';
+      if (description) cmd += ` --description ${JSON.stringify(description)}`;
+
+      const repoId = `${resolvedOwner}/${name}`;
+      const projectDir = path.join(tbcHome, 'dev', 'src', 'github.com', resolvedOwner, name);
+      fs.mkdirSync(projectDir, { recursive: true });
+      const repoDir = path.join(projectDir, 'repo');
+
+      execSync(cmd, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
+      const cloneUrl = `https://github.com/${resolvedOwner}/${name}.git`;
+      execSync(`git clone ${cloneUrl} repo`, { cwd: projectDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
+
+      sendJson(res, 200, { success: true, id: repoId, path: repoDir });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message });
+    }
+    return true;
+  }
+
+  return false;
+}

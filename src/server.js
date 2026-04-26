@@ -32,6 +32,8 @@ import { handleKeyRoutes } from './server/routes/keys.js';
 import { handleOAuthRoutes } from './server/routes/oauth.js';
 import { handleSettingsRoutes } from './server/routes/settings.js';
 import { handleModelRoutes } from './server/routes/models.js';
+import { handleGithubRoutes } from './server/routes/github.js';
+import { handleProjectRegistryRoutes } from './server/routes/projects.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -3020,6 +3022,8 @@ const routeContext = {
   detectTokenProvider,
   loadOAuthCredentials,
   loadKeyPool,
+  parseGithubUrl,
+  log,
 };
 
 // --- HTTP API ---
@@ -3055,246 +3059,9 @@ const server = http.createServer(async (req, res) => {
 
   if (await handleGlobalRoutes(req, res, url, routeContext)) return;
 
-  // GET /api/github/orgs - List GitHub orgs + current user
-  if (req.method === 'GET' && url.pathname === '/api/github/orgs') {
-    try {
-      const user = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
-      let orgs = [];
-      try {
-        orgs = execSync('gh api user/orgs --jq ".[].login"', { encoding: 'utf-8', timeout: 15000 })
-          .trim().split('\n').filter(Boolean);
-      } catch {}
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ user, orgs: [user, ...orgs] }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
-  }
+  if (await handleGithubRoutes(req, res, url, routeContext)) return;
 
-  // GET /api/github/repos?owner=xxx - List repos for an owner
-  if (req.method === 'GET' && url.pathname === '/api/github/repos') {
-    const owner = url.searchParams.get('owner');
-    if (!owner) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Missing owner parameter' }));
-      return;
-    }
-    try {
-      const output = execSync(
-        `gh repo list ${owner} --json nameWithOwner,name,description --limit 100`,
-        { encoding: 'utf-8', timeout: 30000 }
-      );
-      const repos = JSON.parse(output);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ repos }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
-  }
-
-  // POST /api/github/create-repo - Create a new GitHub repo
-  if (req.method === 'POST' && url.pathname === '/api/github/create-repo') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', () => {
-      try {
-        const { name, owner, isPrivate, description } = JSON.parse(body);
-        if (!name) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Missing repo name' }));
-          return;
-        }
-        
-        // Get current user to check if owner is user or org
-        const currentUser = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000 }).trim();
-        const isOrg = owner && owner !== currentUser;
-        
-        let cmd = `gh repo create`;
-        if (isOrg) {
-          cmd += ` ${owner}/${name}`;
-        } else {
-          cmd += ` ${name}`;
-        }
-        cmd += isPrivate ? ' --private' : ' --public';
-        if (description) cmd += ` --description ${JSON.stringify(description)}`;
-        // Create in TBC_HOME
-        const repoId = `${owner || currentUser}/${name}`;
-        const projectDir = path.join(TBC_HOME, 'dev', 'src', 'github.com', owner || currentUser, name);
-        fs.mkdirSync(projectDir, { recursive: true });
-        const repoDir = path.join(projectDir, 'repo');
-        
-        // Create the repo on GitHub (without --clone)
-        execSync(cmd, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe' });
-        
-        // Clone into the 'repo' subdirectory
-        const cloneUrl = `https://github.com/${owner || currentUser}/${name}.git`;
-        execSync(`git clone ${cloneUrl} repo`, { cwd: projectDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, id: repoId, path: repoDir }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // POST /api/projects/clone - Clone a GitHub repo and check for spec.md
-  if (req.method === 'POST' && url.pathname === '/api/projects/clone') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', async () => {
-      try {
-        const { url: repoUrl } = JSON.parse(body);
-        if (!repoUrl) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Missing url' }));
-          return;
-        }
-
-        const parsed = parseGithubUrl(repoUrl);
-        if (!parsed) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid GitHub URL. Expected format: https://github.com/username/reponame' }));
-          return;
-        }
-
-        if (orchestrator.hasProject(parsed.id)) {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `Project "${parsed.id}" is already registered` }));
-          return;
-        }
-
-        fs.mkdirSync(parsed.projectDir, { recursive: true });
-
-        if (fs.existsSync(path.join(parsed.repoDir, '.git'))) {
-          try {
-            execSync('git pull', { cwd: parsed.repoDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
-            log(`Pulled latest for ${parsed.id}`);
-          } catch (e) {
-            log(`Git pull failed for ${parsed.id}: ${e.message}`);
-          }
-        } else {
-          try {
-            execSync(`git clone ${parsed.cloneUrl} repo`, {
-              cwd: parsed.projectDir,
-              encoding: 'utf-8',
-              timeout: 120000,
-              stdio: 'pipe'
-            });
-            log(`Cloned ${parsed.id}`);
-          } catch (e) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: `Failed to clone repository: ${e.message}` }));
-            return;
-          }
-        }
-
-        const knowledgeSpecPath = path.join(parsed.projectDir, 'knowledge', 'spec.md');
-        const repoSpecPath = path.join(parsed.repoDir, 'spec.md');
-        const specPath = fs.existsSync(knowledgeSpecPath) ? knowledgeSpecPath : repoSpecPath;
-        const hasSpec = fs.existsSync(specPath);
-        let specContent = null;
-        if (hasSpec) {
-          specContent = fs.readFileSync(specPath, 'utf-8');
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          success: true,
-          id: parsed.id,
-          path: parsed.repoDir,
-          hasSpec,
-          specContent,
-        }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // POST /api/projects/add - Add a new project
-  if (req.method === 'POST' && url.pathname === '/api/projects/add') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', c => body += c);
-    req.on('end', () => {
-      try {
-        const { id, path: projectPath, spec, budgetPer24h } = JSON.parse(body);
-        if (!id || !projectPath) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Missing id or path' }));
-          return;
-        }
-
-        const resolvedPath = projectPath.replace(/^~/, process.env.HOME);
-
-        // Write project-private knowledge/spec.md if spec data provided
-        if (spec && (spec.whatToBuild || spec.successCriteria)) {
-          const projectRoot = path.dirname(resolvedPath);
-          const knowledgeDir = path.join(projectRoot, 'knowledge');
-          const specPath = path.join(knowledgeDir, 'spec.md');
-          const specContent = `# Project Specification\n\n## What do you want to build?\n\n${spec.whatToBuild || ''}\n\n## How do you consider the project is success?\n\n${spec.successCriteria || ''}\n`;
-          fs.mkdirSync(knowledgeDir, { recursive: true });
-          fs.writeFileSync(specPath, specContent);
-        }
-
-        orchestrator.addProjectConfig(id, { path: resolvedPath, enabled: true });
-        syncProjects();
-
-        // Write initial project config with budget
-        if (budgetPer24h !== undefined) {
-          const runner = orchestrator.getProject(id);
-          if (runner) {
-            const config = runner.loadConfig();
-            config.budgetPer24h = parseFloat(budgetPer24h) || 0;
-            fs.mkdirSync(runner.projectDir, { recursive: true });
-            fs.writeFileSync(runner.configPath, yaml.dump(config, { lineWidth: -1 }));
-          }
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, id, path: resolvedPath }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // DELETE /api/projects/:id - Remove a project
-  // DELETE /api/projects/:id — only match exact project path (no sub-routes like /chats/1)
-  const isExactProjectDelete = req.method === 'DELETE' && pathParts[0] === 'api' && pathParts[1] === 'projects' && pathParts[2] && (
-    pathParts.length === 3 || // single-segment: /api/projects/m2sim
-    (pathParts.length === 4 && `${pathParts[2]}/${pathParts[3]}` && orchestrator.hasProject(`${pathParts[2]}/${pathParts[3]}`)) // two-segment: /api/projects/sarchlab/m2sim
-  ) && !(pathParts.length > 4); // NOT a sub-route like /chats/1
-  if (isExactProjectDelete) {
-    const twoSegId = pathParts[3] ? `${pathParts[2]}/${pathParts[3]}` : null;
-    const projectId = (twoSegId && orchestrator.hasProject(twoSegId)) ? twoSegId : pathParts[2];
-    try {
-      if (orchestrator.removeProjectConfig(projectId)) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, id: projectId }));
-      } else {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Project not found' }));
-      }
-    } catch (e) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
-  }
+  if (await handleProjectRegistryRoutes(req, res, url, pathParts, routeContext)) return;
 
   // --- Project-scoped API ---
   // Support both single-segment (m2sim) and two-segment (sarchlab/m2sim) IDs
