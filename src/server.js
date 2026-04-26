@@ -27,6 +27,11 @@ import { LocalOrchestrator } from './orchestrator/LocalOrchestrator.js';
 import { createAuth } from './server/auth.js';
 import { serveStatic } from './server/static.js';
 import { handleRealtimeRoutes } from './server/routes/realtime.js';
+import { handleGlobalRoutes } from './server/routes/global.js';
+import { handleKeyRoutes } from './server/routes/keys.js';
+import { handleOAuthRoutes } from './server/routes/oauth.js';
+import { handleSettingsRoutes } from './server/routes/settings.js';
+import { handleModelRoutes } from './server/routes/models.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -2994,6 +2999,27 @@ const routeContext = {
   sseClients,
   isAuthenticated,
   passwordRequired,
+  orchestrator,
+  startTime,
+  requireWrite,
+  syncProjects,
+  allowCustomProvider: ALLOW_CUSTOM_PROVIDER,
+  getKeyPoolSafe,
+  addKey,
+  addOAuthKey,
+  updateKey,
+  removeKey,
+  reorderKeys,
+  listOAuthProviders,
+  startOAuthLogin,
+  submitManualCode,
+  checkOAuthStatus,
+  clearOAuthCredentials,
+  tbcHome: TBC_HOME,
+  maskToken,
+  detectTokenProvider,
+  loadOAuthCredentials,
+  loadKeyPool,
 };
 
 // --- HTTP API ---
@@ -3019,404 +3045,15 @@ const server = http.createServer(async (req, res) => {
 
   if (await handleRealtimeRoutes(req, res, url, routeContext)) return;
 
-  // --- Settings (global token) ---
+  if (await handleSettingsRoutes(req, res, url, routeContext)) return;
 
-  if (req.method === 'GET' && url.pathname === '/api/settings') {
-    const anthropicToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
-    const openaiToken = process.env.OPENAI_API_KEY || null;
-    const googleToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
-    const codexCreds = loadOAuthCredentials('openai-codex');
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      // Backward compat fields
-      hasGlobalToken: !!anthropicToken,
-      globalTokenPreview: anthropicToken ? maskToken(anthropicToken) : null,
-      tokenType: anthropicToken ? (anthropicToken.startsWith('sk-ant-oat') ? 'oauth' : 'api_key') : null,
-      providers: {
-        anthropic: { hasToken: !!anthropicToken, preview: anthropicToken ? maskToken(anthropicToken) : null },
-        openai: { hasToken: !!openaiToken, preview: openaiToken ? maskToken(openaiToken) : null },
-        google: { hasToken: !!googleToken, preview: googleToken ? maskToken(googleToken) : null },
-        'openai-codex': { hasToken: !!codexCreds?.access, type: 'oauth' },
-      },
-      // New: key pool
-      keyPool: getKeyPoolSafe(),
-    }));
-    return;
-  }
+  if (await handleKeyRoutes(req, res, url, routeContext)) return;
 
-  if (req.method === 'POST' && url.pathname === '/api/settings/token') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', () => {
-      try {
-        const { token, provider: forceProvider } = JSON.parse(body);
-        const envPath = path.join(TBC_HOME, '.env');
-        let envContent = '';
-        try { envContent = fs.readFileSync(envPath, 'utf-8'); } catch {}
+  if (await handleOAuthRoutes(req, res, url, routeContext)) return;
 
-        // Detect provider from token or explicit provider field
-        const provider = forceProvider || detectTokenProvider(token) || 'anthropic';
+  if (await handleModelRoutes(req, res, url)) return;
 
-        // Provider → env var mapping
-        const providerEnvVars = {
-          anthropic: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'],
-          openai: ['OPENAI_API_KEY'],
-          google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-        };
-
-        // Clear existing env vars for this provider
-        const varsToClean = providerEnvVars[provider] || [];
-        for (const v of varsToClean) {
-          envContent = envContent.replace(new RegExp(`^${v}=.*\\n?`, 'm'), '');
-          delete process.env[v];
-        }
-
-        if (token) {
-          // Pick the right env var
-          let envVar;
-          if (provider === 'anthropic') {
-            envVar = token.startsWith('sk-ant-oat') ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY';
-          } else if (provider === 'openai') {
-            envVar = 'OPENAI_API_KEY';
-          } else if (provider === 'google') {
-            envVar = 'GEMINI_API_KEY';
-          } else {
-            envVar = 'ANTHROPIC_API_KEY';
-          }
-          envContent = envContent.trimEnd() + `\n${envVar}=${token}\n`;
-          process.env[envVar] = token;
-
-          // Also add to key pool (backward compat)
-          addKey({ label: `${provider.charAt(0).toUpperCase() + provider.slice(1)}`, token, provider });
-        } else {
-          // Token removal — remove matching pool entries for this provider
-          const pool = loadKeyPool();
-          const toRemove = pool.keys.filter(k => k.provider === provider && k.type === 'api_key');
-          for (const k of toRemove) removeKey(k.id);
-        }
-
-        fs.writeFileSync(envPath, envContent);
-
-        // Return updated status for all providers
-        const anthropicToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
-        const openaiToken = process.env.OPENAI_API_KEY || null;
-        const googleToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
-        const codexCreds = loadOAuthCredentials('openai-codex');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          success: true,
-          provider,
-          hasGlobalToken: !!anthropicToken,
-          tokenType: anthropicToken ? (anthropicToken.startsWith('sk-ant-oat') ? 'oauth' : 'api_key') : null,
-          providers: {
-            anthropic: { hasToken: !!anthropicToken, preview: anthropicToken ? maskToken(anthropicToken) : null },
-            openai: { hasToken: !!openaiToken, preview: openaiToken ? maskToken(openaiToken) : null },
-            google: { hasToken: !!googleToken, preview: googleToken ? maskToken(googleToken) : null },
-            'openai-codex': { hasToken: !!codexCreds?.access, type: 'oauth' },
-          },
-        }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // --- Key Pool CRUD endpoints ---
-
-  if (req.method === 'GET' && url.pathname === '/api/keys') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ...getKeyPoolSafe(), allowCustomProvider: ALLOW_CUSTOM_PROVIDER }));
-    return;
-  }
-
-  const keyGetMatch = url.pathname.match(/^\/api\/keys\/([^/]+)$/);
-  if (req.method === 'GET' && keyGetMatch) {
-    if (!requireWrite(req, res)) return;
-    const key = getKeyPoolSafe().keys.find(k => k.id === keyGetMatch[1]);
-    if (!key) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Key not found' }));
-      return;
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ key }));
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/keys') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', () => {
-      try {
-        const { label, token, provider, type, authFile, customConfig } = JSON.parse(body);
-        if (provider === 'custom' && !ALLOW_CUSTOM_PROVIDER) {
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Custom provider is disabled on this instance (set TBC_ALLOW_CUSTOM_PROVIDER=true to enable)' }));
-          return;
-        }
-        if (type === 'oauth' && authFile) {
-          // OAuth credential (browser sign-in) — no token, has authFile
-          addOAuthKey({ label, provider, authFile });
-        } else if (token) {
-          addKey({ label, token, provider, type, customConfig });
-        } else {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Token is required (or authFile for OAuth)' }));
-          return;
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(getKeyPoolSafe()));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // PUT /api/keys/:id
-  const keysPutMatch = url.pathname.match(/^\/api\/keys\/([^/]+)$/);
-  if (req.method === 'PUT' && keysPutMatch) {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', () => {
-      try {
-        const patch = JSON.parse(body);
-        if (patch.customConfig && !ALLOW_CUSTOM_PROVIDER) {
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Custom provider is disabled on this instance' }));
-          return;
-        }
-        const updated = updateKey(keysPutMatch[1], patch);
-        if (!updated) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Key not found' }));
-          return;
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(getKeyPoolSafe()));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // DELETE /api/keys/:id
-  const keysDeleteMatch = url.pathname.match(/^\/api\/keys\/([^/]+)$/);
-  if (req.method === 'DELETE' && keysDeleteMatch) {
-    if (!requireWrite(req, res)) return;
-    removeKey(keysDeleteMatch[1]);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(getKeyPoolSafe()));
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/keys/reorder') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', () => {
-      try {
-        const { orderedIds } = JSON.parse(body);
-        reorderKeys(orderedIds);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(getKeyPoolSafe()));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // --- OAuth endpoints (generic, supports all pi-ai providers) ---
-
-  // List available OAuth providers
-  if (req.method === 'GET' && url.pathname === '/api/oauth/providers') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(listOAuthProviders()));
-    return;
-  }
-
-  // Start OAuth login flow
-  if (req.method === 'POST' && url.pathname === '/api/oauth/login') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', async () => {
-      try {
-        const { provider: providerId, project: projectId } = JSON.parse(body);
-        if (!providerId) throw new Error('provider is required');
-        const flow = await startOAuthLogin(providerId, projectId || null);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ authorization_url: flow.authorization_url, flowId: flow.flowId }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // Submit manual code/redirect URL for active flow
-  if (req.method === 'POST' && url.pathname === '/api/oauth/submit-code') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', async () => {
-      try {
-        const { flowId, code } = JSON.parse(body);
-        if (!flowId || !code) throw new Error('flowId and code are required');
-        submitManualCode(flowId, code);
-        // Wait briefly for the flow to complete
-        const { waitForFlow } = await import('./oauth.js');
-        const completed = await waitForFlow(flowId, 10000);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, completed }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // Check OAuth status for a provider
-  if (req.method === 'GET' && url.pathname === '/api/oauth/status') {
-    const providerId = url.searchParams.get('provider');
-    const projectId = url.searchParams.get('project') || null;
-    if (!providerId) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'provider param required' }));
-      return;
-    }
-    const status = await checkOAuthStatus(providerId, projectId);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(status));
-    return;
-  }
-
-  // Logout / clear OAuth credentials
-  if (req.method === 'POST' && url.pathname === '/api/oauth/logout') {
-    if (!requireWrite(req, res)) return;
-    let body = '';
-    req.on('data', d => body += d);
-    req.on('end', () => {
-      try {
-        const { provider: providerId, project: projectId } = JSON.parse(body);
-        if (!providerId) throw new Error('provider is required');
-        clearOAuthCredentials(providerId, projectId || null);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-    });
-    return;
-  }
-
-  // Backward-compatible OpenAI Codex endpoints
-  if (req.method === 'POST' && url.pathname === '/api/openai-codex/login') {
-    if (!requireWrite(req, res)) return;
-    const projectId = url.searchParams.get('project') || null;
-    try {
-      const flow = await startOAuthLogin('openai-codex', projectId);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ authorization_url: flow.authorization_url, flowId: flow.flowId }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/openai-codex/status') {
-    const projectId = url.searchParams.get('project') || null;
-    const status = await checkOAuthStatus('openai-codex', projectId);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(status));
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/openai-codex/logout') {
-    if (!requireWrite(req, res)) return;
-    const projectId = url.searchParams.get('project') || null;
-    clearOAuthCredentials('openai-codex', projectId);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true }));
-    return;
-  }
-
-  // --- Models API (fetch from Anthropic) ---
-
-  if (req.method === 'GET' && url.pathname === '/api/models') {
-    const token = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
-    if (!token) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'No auth token configured' }));
-      return;
-    }
-    try {
-      const isOAuth = token.startsWith('sk-ant-oat');
-      const headers = { 'anthropic-version': '2023-06-01' };
-      if (isOAuth) {
-        headers['Authorization'] = `Bearer ${token}`;
-        headers['anthropic-beta'] = 'claude-code-20250219,oauth-2025-04-20';
-      } else {
-        headers['x-api-key'] = token;
-      }
-      const resp = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers });
-      if (!resp.ok) {
-        const err = await resp.text();
-        res.writeHead(resp.status, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: `Anthropic API error: ${resp.status}`, details: err }));
-        return;
-      }
-      const data = await resp.json();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(data));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
-  }
-
-  // --- Global API ---
-  
-  if (req.method === 'GET' && url.pathname === '/api/status') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      uptime: Math.floor((Date.now() - startTime) / 1000),
-      projectCount: orchestrator.projectCount(),
-      projects: orchestrator.listProjectStatuses()
-    }));
-    return;
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/projects') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      projects: orchestrator.listProjectStatuses()
-    }));
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/reload') {
-    if (!requireWrite(req, res)) return;
-    syncProjects();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, projectCount: orchestrator.projectCount() }));
-    return;
-  }
+  if (await handleGlobalRoutes(req, res, url, routeContext)) return;
 
   // GET /api/github/orgs - List GitHub orgs + current user
   if (req.method === 'GET' && url.pathname === '/api/github/orgs') {
