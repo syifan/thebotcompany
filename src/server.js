@@ -26,6 +26,7 @@ import {
 import { LocalOrchestrator } from './orchestrator/LocalOrchestrator.js';
 import { createAuth } from './server/auth.js';
 import { serveStatic } from './server/static.js';
+import { handleRealtimeRoutes } from './server/routes/realtime.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -2986,6 +2987,15 @@ const { isAuthenticated, requireWrite, passwordRequired } = createAuth({
   password: process.env.TBC_PASSWORD || null,
 });
 
+const routeContext = {
+  get vapidPublic() { return VAPID_PUBLIC; },
+  pushSubscriptions,
+  notifications,
+  sseClients,
+  isAuthenticated,
+  passwordRequired,
+};
+
 // --- HTTP API ---
 const server = http.createServer(async (req, res) => {
 
@@ -3007,92 +3017,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // --- VAPID public key ---
-  if (req.method === 'GET' && url.pathname === '/api/push/vapid-key') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ key: VAPID_PUBLIC || null }));
-    return;
-  }
-
-  // --- Push subscription ---
-  if (req.method === 'POST' && url.pathname === '/api/push/subscribe') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const sub = JSON.parse(body);
-        if (sub.endpoint) {
-          pushSubscriptions.set(sub.endpoint, sub);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true }));
-        } else {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Missing endpoint' }));
-        }
-      } catch {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid JSON' }));
-      }
-    });
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/push/unsubscribe') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const { endpoint } = JSON.parse(body);
-        pushSubscriptions.delete(endpoint);
-      } catch {}
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-    });
-    return;
-  }
-
-  // --- Notifications API ---
-  if (req.method === 'GET' && url.pathname === '/api/notifications') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(notifications));
-    return;
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/notifications/read-all') {
-    for (const n of notifications) n.read = true;
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true }));
-    return;
-  }
-
-  if (req.method === 'POST' && /^\/api\/notifications\/[^/]+\/read$/.test(url.pathname)) {
-    const id = url.pathname.split('/')[3];
-    const n = notifications.find(x => x.id === id);
-    if (n) n.read = true;
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true }));
-    return;
-  }
-
-  // --- SSE endpoint ---
-  if (req.method === 'GET' && url.pathname === '/api/events') {
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    });
-    res.write('data: {"type":"connected"}\n\n');
-    sseClients.add(res);
-    req.on('close', () => sseClients.delete(res));
-    return;
-  }
-
-  // --- Auth status ---
-  if (req.method === 'GET' && url.pathname === '/api/auth') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ authenticated: isAuthenticated(req), passwordRequired }));
-    return;
-  }
+  if (await handleRealtimeRoutes(req, res, url, routeContext)) return;
 
   // --- Settings (global token) ---
 
