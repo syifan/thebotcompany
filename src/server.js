@@ -36,6 +36,9 @@ import { handleGithubRoutes } from './server/routes/github.js';
 import { handleProjectRegistryRoutes } from './server/routes/projects.js';
 import { handleProjectStatusRoutes } from './server/routes/project/status.js';
 import { handleProjectConfigRoutes } from './server/routes/project/config.js';
+import { handleProjectActivityRoutes } from './server/routes/project/activity.js';
+import { handleProjectIssueRoutes } from './server/routes/project/issues.js';
+import { handleProjectActionRoutes } from './server/routes/project/actions.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -3103,66 +3106,9 @@ const server = http.createServer(async (req, res) => {
 
     if (await handleProjectConfigRoutes(req, res, url, projectRouteContext)) return;
 
-    // GET /api/projects/:id/comments
-    if (req.method === 'GET' && subPath === 'comments') {
-      const author = url.searchParams.get('author');
-      const page = parseInt(url.searchParams.get('page')) || 1;
-      const perPage = parseInt(url.searchParams.get('per_page')) || 20;
-      const result = await runner.getComments(author, page, perPage);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(result));
-      return;
-    }
+    if (await handleProjectActivityRoutes(req, res, url, projectRouteContext)) return;
 
-    // GET /api/projects/:id/prs
-    if (req.method === 'GET' && subPath === 'prs') {
-      const status = ['open', 'merged', 'closed', 'all'].includes(url.searchParams.get('status'))
-        ? url.searchParams.get('status')
-        : 'open';
-      const prs = await runner.getPRs(status);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ prs }));
-      return;
-    }
-
-    // GET /api/projects/:id/milestones — list milestone records for tree rendering
-    if (req.method === 'GET' && subPath === 'milestones') {
-      try {
-        const db = runner.getDb();
-        const milestones = db.prepare(`
-          SELECT id, milestone_id, title, description, cycles_budget, cycles_used, branch_name, parent_milestone_id, linked_pr_id, failure_reason, phase, status, created_at, completed_at
-          FROM milestones
-          ORDER BY created_at ASC, id ASC
-        `).all();
-        db.close();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ milestones }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-      return;
-    }
-
-    // GET /api/projects/:id/prs/:prId — single PR
-    const prDetailMatch = req.method === 'GET' && subPath.match(/^prs\/(\d+)$/);
-    if (prDetailMatch) {
-      try {
-        const prId = parseInt(prDetailMatch[1], 10);
-        const pr = await runner.getPR(prId);
-        if (!pr) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'PR not found' }));
-        } else {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ pr }));
-        }
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-      return;
-    }
+    if (await handleProjectIssueRoutes(req, res, url, projectRouteContext)) return;
 
     // GET /api/projects/:id/reports — agent cycle reports (posted by orchestrator)
     if (req.method === 'GET' && subPath === 'reports') {
@@ -3286,147 +3232,6 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       }
-      return;
-    }
-
-    // GET /api/projects/:id/issues/:issueId — single issue + comments
-    const issueDetailMatch = req.method === 'GET' && subPath.match(/^issues\/(\d+)$/);
-    if (issueDetailMatch) {
-      try {
-        const issueId = parseInt(issueDetailMatch[1], 10);
-        const db = runner.getDb();
-        const issue = db.prepare('SELECT * FROM issues WHERE id = ?').get(issueId);
-        const comments = issue ? db.prepare('SELECT * FROM comments WHERE issue_id = ? ORDER BY created_at ASC').all(issueId) : [];
-        db.close();
-        if (!issue) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Issue not found' }));
-        } else {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ issue, comments }));
-        }
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-      return;
-    }
-
-    // POST /api/projects/:id/issues/:issueId/comments — add comment
-    const commentPostMatch = req.method === 'POST' && subPath.match(/^issues\/(\d+)\/comments$/);
-    if (commentPostMatch) {
-      if (!requireWrite(req, res)) return;
-      let body = '';
-      req.on('data', d => body += d);
-      req.on('end', () => {
-        try {
-          const issueId = parseInt(commentPostMatch[1], 10);
-          const { author, body: commentBody } = JSON.parse(body);
-          if (!commentBody?.trim()) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Comment body required' }));
-            return;
-          }
-          const db = runner.getDb();
-          const now = new Date().toISOString();
-          const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, author || 'human', commentBody.trim(), now);
-          db.prepare('UPDATE issues SET updated_at = ? WHERE id = ?').run(now, issueId);
-          db.close();
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ id: result.lastInsertRowid }));
-        } catch (e) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: e.message }));
-        }
-      });
-      return;
-    }
-
-    // PATCH /api/projects/:id/issues/:issueId — update issue status
-    const issuePatchMatch = req.method === 'PATCH' && subPath.match(/^issues\/(\d+)$/);
-    if (issuePatchMatch) {
-      if (!requireWrite(req, res)) return;
-      let body = '';
-      req.on('data', d => body += d);
-      req.on('end', () => {
-        let db = null;
-        try {
-          const issueId = parseInt(issuePatchMatch[1], 10);
-          const { status, actor } = JSON.parse(body);
-          if (!['open', 'closed'].includes(status)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Status must be "open" or "closed"' }));
-            return;
-          }
-          db = runner.getDb();
-          const issue = db.prepare('SELECT id, creator, status FROM issues WHERE id = ?').get(issueId);
-          if (!issue) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Issue not found' }));
-            return;
-          }
-          const actingAs = actor || 'human';
-          if (status === 'closed' && issue.status !== 'closed') {
-            const { allowed, special } = runner._resolveAllowedIssueClosers(db, issue.creator);
-            if (!allowed.has(actingAs)) {
-              const error = special === 'chat-human'
-                ? `Issue #${issueId} was opened by ${issue.creator} and can only be closed by chat or human`
-                : `Issue #${issueId} was opened by ${issue.creator} and can only be closed by ${issue.creator} or athena`;
-              res.writeHead(403, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error }));
-              return;
-            }
-          }
-          const now = new Date().toISOString();
-          const closedAt = status === 'closed' ? now : null;
-          const closedBy = status === 'closed' ? actingAs : null;
-          db.prepare('UPDATE issues SET status = ?, updated_at = ?, updated_by = ?, closed_at = ?, closed_by = ? WHERE id = ?').run(status, now, actingAs, closedAt, closedBy, issueId);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true }));
-        } catch (e) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: e.message }));
-        } finally {
-          try { db?.close(); } catch {}
-        }
-      });
-      return;
-    }
-
-    // GET /api/projects/:id/issues
-    if (req.method === 'GET' && subPath === 'issues') {
-      const issues = await runner.getIssues();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ issues }));
-      return;
-    }
-
-    // POST /api/projects/:id/issues/create
-    if (req.method === 'POST' && subPath === 'issues/create') {
-      if (!requireWrite(req, res)) return;
-      let body = '';
-      req.on('data', c => body += c);
-      req.on('end', async () => {
-        try {
-          const { title, body: issueBody, creator, assignee, text } = JSON.parse(body);
-          // Support both structured and text input
-          if (title) {
-            const result = await runner.createIssue(title, issueBody, creator, assignee);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));
-          } else if (text) {
-            const lines = text.trim().split('\n');
-            const result = await runner.createIssue(lines[0], lines.slice(1).join('\n'), 'human');
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));
-          } else {
-            throw new Error('Missing title or text');
-          }
-        } catch (e) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: e.message }));
-        }
-      });
       return;
     }
 
@@ -3933,31 +3738,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // POST /api/projects/:id/:action (pause, resume, skip, start, stop)
-    // POST /api/projects/:id/archive or /unarchive
-    if (req.method === 'POST' && (subPath === 'archive' || subPath === 'unarchive')) {
-      if (!requireWrite(req, res)) return;
-      const archive = subPath === 'archive';
-      try {
-        orchestrator.setProjectArchived(projectId, archive);
-      } catch (e) {
-        log(`Failed to update projects.yaml for archive: ${e.message}`);
-      }
-      if (archive && runner.running) {
-        runner.pause('Archived');
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, archived: archive }));
-      return;
-    }
-
-    if (req.method === 'POST' && ['pause', 'resume', 'skip', 'start', 'stop', 'kill-run', 'kill-cycle', 'kill-epoch'].includes(subPath)) {
-      if (!requireWrite(req, res)) return;
-      orchestrator.dispatchProjectAction(projectId, subPath);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, action: subPath, projectId }));
-      return;
-    }
+    if (await handleProjectActionRoutes(req, res, url, projectRouteContext)) return;
   }
 
   // --- Static Files ---
