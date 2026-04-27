@@ -6,16 +6,26 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
+const schedulerPath = path.join(__dirname, '..', 'src', 'orchestrator', 'scheduler.js');
+const stateControlPath = path.join(__dirname, '..', 'src', 'orchestrator', 'state-control.js');
 
 function readServer() {
   return fs.readFileSync(serverPath, 'utf-8');
 }
 
+function readStateControl() {
+  return fs.readFileSync(stateControlPath, 'utf-8');
+}
+
+function readScheduler() {
+  return fs.readFileSync(schedulerPath, 'utf-8');
+}
+
 describe('killEpoch interrupts in-flight worker retries', () => {
   it('killEpoch should set an explicit cycle-abort flag', () => {
-    const src = readServer();
-    const killEpochMatch = src.match(/killEpoch\(\)\s*\{([\s\S]*?)\n  \}/);
-    assert.ok(killEpochMatch, 'Could not find killEpoch() in ProjectRunner.js');
+    const src = readStateControl();
+    const killEpochMatch = src.match(/killRunnerEpoch\([^)]*\)\s*\{([\s\S]*?)\n\s*\}/);
+    assert.ok(killEpochMatch, 'Could not find killRunnerEpoch() in state-control.js');
     const body = killEpochMatch[1];
 
     assert.ok(
@@ -25,8 +35,8 @@ describe('killEpoch interrupts in-flight worker retries', () => {
   });
 
   it('worker retry loop should check the cycle-abort flag before retrying', () => {
-    const src = readServer();
-    const retryMatch = src.match(/while \(attempt <= maxRetries && !succeeded && this\.running([^)]*)\) \{([\s\S]*?)\n      \}/);
+    const src = readScheduler();
+    const retryMatch = src.match(/while \(attempt <= maxRetries && !succeeded && runner\.running([^)]*)\) \{([\s\S]*?)\n      \}/);
     assert.ok(retryMatch, 'Could not find worker retry loop in executeSchedule()');
     const loopConditionSuffix = retryMatch[1] || '';
     const loopBody = retryMatch[2];
@@ -38,10 +48,10 @@ describe('killEpoch interrupts in-flight worker retries', () => {
   });
 
   it('executeSchedule should stop dispatching additional steps after killEpoch', () => {
-    const src = readServer();
-    const executeScheduleMatch = src.match(/async executeSchedule\(schedule, config(?:, managerName = null)?\) \{([\s\S]*?)\n  \}\n\n  async runLoop/);
-    assert.ok(executeScheduleMatch, 'Could not find executeSchedule() in ProjectRunner.js');
-    const body = executeScheduleMatch[1];
+    const src = readScheduler();
+    const executeScheduleMatch = src.match(/export async function executeSchedule\(runner, deps = \{\}, schedule, config, managerName = null\)/);
+    assert.ok(executeScheduleMatch, 'Could not find executeSchedule() in scheduler.js');
+    const body = src;
 
     assert.ok(
       /abortCurrentCycle|epochKilled|cancelCurrentSchedule|stopCurrentCycle/.test(body),
