@@ -3,15 +3,15 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const server = fs.readFileSync(path.resolve('src/server.js'), 'utf8')
+const activityRoutes = fs.readFileSync(path.resolve('src/server/routes/project/activity.js'), 'utf8')
 const projectView = fs.readFileSync(path.resolve('monitor/src/components/layout/ProjectView.jsx'), 'utf8')
 const treeCard = fs.readFileSync(path.resolve('monitor/src/components/project/MilestoneTreeCard.jsx'), 'utf8')
 
 describe('milestone tree widget', () => {
   it('exposes milestone records through the project API', () => {
-    assert.match(server, /GET \/api\/projects\/:id\/milestones/)
-    assert.match(server, /FROM milestones/)
-    assert.match(server, /parent_milestone_id/)
+    assert.match(activityRoutes, /subPath === 'milestones'/)
+    assert.match(activityRoutes, /FROM milestones/)
+    assert.match(activityRoutes, /parent_milestone_id/)
   })
 
   it('loads milestones in ProjectView and renders the tree widget', () => {
