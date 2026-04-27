@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const serverPath = path.join(__dirname, '..', 'src', 'server.js');
+const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
 const athenaPath = path.join(__dirname, '..', 'agent', 'managers', 'athena.md');
 
 function read(file) {
@@ -15,7 +15,7 @@ function read(file) {
 describe('private knowledge base for spec, roadmap, and internal analysis docs', () => {
   it('defines a shared knowledge-base path outside the repo root', () => {
     const src = read(serverPath);
-    assert.match(src, /get knowledgeDir\(\)/, 'Expected a knowledgeDir getter in server.js');
+    assert.match(src, /get knowledgeDir\(\)/, 'Expected a knowledgeDir getter in ProjectRunner.js');
     assert.match(src, /path\.join\(this\.projectDir, 'knowledge'\)/,
       'Expected knowledge base to live under project knowledge/, not the repo root');
   });
@@ -59,6 +59,6 @@ describe('private knowledge base for spec, roadmap, and internal analysis docs',
   it('repo-root spec/roadmap and internal analysis docs should no longer be canonical private artifacts', () => {
     const src = read(serverPath);
     assert.doesNotMatch(src, /Read spec\.md and check roadmap\.md from project repo/,
-      'server.js comments should not describe repo-root planning files as canonical');
+      'ProjectRunner.js comments should not describe repo-root planning files as canonical');
   });
 });

@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const serverPath = path.join(__dirname, '..', 'src', 'server.js');
+const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
 
 function readServer() {
   return fs.readFileSync(serverPath, 'utf-8');
@@ -15,7 +15,7 @@ describe('killEpoch interrupts in-flight worker retries', () => {
   it('killEpoch should set an explicit cycle-abort flag', () => {
     const src = readServer();
     const killEpochMatch = src.match(/killEpoch\(\)\s*\{([\s\S]*?)\n  \}/);
-    assert.ok(killEpochMatch, 'Could not find killEpoch() in server.js');
+    assert.ok(killEpochMatch, 'Could not find killEpoch() in ProjectRunner.js');
     const body = killEpochMatch[1];
 
     assert.ok(
@@ -40,7 +40,7 @@ describe('killEpoch interrupts in-flight worker retries', () => {
   it('executeSchedule should stop dispatching additional steps after killEpoch', () => {
     const src = readServer();
     const executeScheduleMatch = src.match(/async executeSchedule\(schedule, config(?:, managerName = null)?\) \{([\s\S]*?)\n  \}\n\n  async runLoop/);
-    assert.ok(executeScheduleMatch, 'Could not find executeSchedule() in server.js');
+    assert.ok(executeScheduleMatch, 'Could not find executeSchedule() in ProjectRunner.js');
     const body = executeScheduleMatch[1];
 
     assert.ok(
@@ -53,7 +53,7 @@ describe('killEpoch interrupts in-flight worker retries', () => {
     const src = readServer();
     assert.ok(
       /abortCurrentCycle\s*=\s*false|epochKilled\s*=\s*false|cancelCurrentSchedule\s*=\s*false|stopCurrentCycle\s*=\s*false/.test(src),
-      'server.js should reset the killEpoch abort flag before the next clean cycle begins'
+      'ProjectRunner.js should reset the killEpoch abort flag before the next clean cycle begins'
     );
   });
 });
