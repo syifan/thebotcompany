@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const serverPath = path.join(__dirname, '..', 'src', 'server.js');
+const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
 const managerPromptPath = path.join(__dirname, '..', 'agent', 'manager.md');
 const everyonePromptPath = path.join(__dirname, '..', 'agent', 'everyone.md');
 
@@ -16,8 +16,8 @@ function read(file) {
 describe('worker skill directory layout', () => {
   it('stores worker skills under skills/workers', () => {
     const src = read(serverPath);
-    assert.ok(src.includes("get skillsDir()"), 'Expected skillsDir getter in server.js');
-    assert.ok(src.includes("get workerSkillsDir()"), 'Expected workerSkillsDir getter in server.js');
+    assert.ok(src.includes("get skillsDir()"), 'Expected skillsDir getter in ProjectRunner.js');
+    assert.ok(src.includes("get workerSkillsDir()"), 'Expected workerSkillsDir getter in ProjectRunner.js');
     assert.ok(src.includes("path.join(this.skillsDir, 'workers')"), 'Expected worker skills under skills/workers');
   });
 

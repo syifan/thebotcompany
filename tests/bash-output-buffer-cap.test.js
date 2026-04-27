@@ -26,7 +26,7 @@ describe('bash output buffering', () => {
     const result = await executeToolDetailed(
       'Bash',
       {
-        command: `node -e "process.stdout.write('stdout-head'); process.stderr.write('E'.repeat(60000)); process.stderr.write('F'.repeat(60000)); process.exit(7);"`,
+        command: `node -e "process.stdout.write('stdout-head'); process.stderr.write('E'.repeat(60000)); process.stderr.write('F'.repeat(60000)); process.exitCode = 7;"`,
       },
       process.cwd(),
     );

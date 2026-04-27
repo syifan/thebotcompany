@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const server = fs.readFileSync(path.resolve('src/server.js'), 'utf8');
+const server = fs.readFileSync(path.resolve('src/orchestrator/ProjectRunner.js'), 'utf8');
 const athena = fs.readFileSync(path.resolve('agent/managers/athena.md'), 'utf8');
 const ares = fs.readFileSync(path.resolve('agent/managers/ares.md'), 'utf8');
 

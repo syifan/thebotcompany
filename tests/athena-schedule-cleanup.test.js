@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const server = fs.readFileSync(path.resolve('src/server.js'), 'utf8')
+const server = fs.readFileSync(path.resolve('src/orchestrator/ProjectRunner.js'), 'utf8')
 
 describe('athena schedule cleanup', () => {
   it('clears currentSchedule and completedAgents after an Athena worker schedule finishes', () => {

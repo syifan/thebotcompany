@@ -5,8 +5,8 @@
  * reports are in SQLite. Token usage, model, success, and timed_out
  * are not persisted at all. All metadata should be in the reports table.
  *
- * These tests verify that the ACTUAL report-saving code in server.js
- * writes metadata columns. They will FAIL until server.js is updated.
+ * These tests verify that the ACTUAL report-saving code in ProjectRunner.js
+ * writes metadata columns. They will FAIL until ProjectRunner.js is updated.
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,8 +18,8 @@ import Database from 'better-sqlite3';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-report-meta-'));
 
 /**
- * Simulate what server.js _postProcessAgentRun does when saving a report.
- * This mirrors the ACTUAL code at src/server.js line ~1800.
+ * Simulate what ProjectRunner.js _postProcessAgentRun does when saving a report.
+ * This mirrors the ACTUAL code at src/ProjectRunner.js line ~1800.
  */
 function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, inputTokens, outputTokens, cacheReadTokens, success, model, timedOut, visibilityMode, visibilityIssues }) {
   const db = new Database(dbPath);
@@ -44,7 +44,7 @@ function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, in
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
 
-    // THIS IS THE LINE THAT MATTERS — currently server.js only writes 4 fields:
+    // THIS IS THE LINE THAT MATTERS — currently ProjectRunner.js only writes 4 fields:
     // db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(...)
     //
     // After the fix, it should write all metadata fields:
@@ -61,11 +61,11 @@ function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, in
 }
 
 /**
- * Read the ACTUAL server.js INSERT statement and check if it includes
+ * Read the ACTUAL ProjectRunner.js INSERT statement and check if it includes
  * the metadata columns. This is the real failing test.
  */
 function getServerInsertColumns() {
-  const serverPath = path.join(process.cwd(), 'src', 'server.js');
+  const serverPath = path.join(process.cwd(), 'src', 'orchestrator', 'ProjectRunner.js');
   const serverCode = fs.readFileSync(serverPath, 'utf-8');
   // Find the INSERT INTO reports statement
   const match = serverCode.match(/INSERT INTO reports\s*\(([^)]+)\)/);
@@ -74,68 +74,68 @@ function getServerInsertColumns() {
 }
 
 describe('Report metadata in SQLite', () => {
-  describe('server.js INSERT includes metadata columns', () => {
+  describe('ProjectRunner.js INSERT includes metadata columns', () => {
     const requiredColumns = ['cost', 'duration_ms', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'success', 'model', 'timed_out', 'visibility_mode', 'visibility_issues'];
 
-    it('server.js INSERT INTO reports should include cost', () => {
+    it('ProjectRunner.js INSERT INTO reports should include cost', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('cost'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'cost'. ` +
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'cost'. ` +
         `Currently writes to cost.csv instead of SQLite.`);
     });
 
-    it('server.js INSERT INTO reports should include duration_ms', () => {
+    it('ProjectRunner.js INSERT INTO reports should include duration_ms', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('duration_ms'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'duration_ms'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'duration_ms'`);
     });
 
-    it('server.js INSERT INTO reports should include input_tokens', () => {
+    it('ProjectRunner.js INSERT INTO reports should include input_tokens', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('input_tokens'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'input_tokens'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'input_tokens'`);
     });
 
-    it('server.js INSERT INTO reports should include output_tokens', () => {
+    it('ProjectRunner.js INSERT INTO reports should include output_tokens', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('output_tokens'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'output_tokens'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'output_tokens'`);
     });
 
-    it('server.js INSERT INTO reports should include model', () => {
+    it('ProjectRunner.js INSERT INTO reports should include model', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('model'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'model'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'model'`);
     });
 
-    it('server.js INSERT INTO reports should include success', () => {
+    it('ProjectRunner.js INSERT INTO reports should include success', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('success'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'success'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'success'`);
     });
 
-    it('server.js INSERT INTO reports should include timed_out', () => {
+    it('ProjectRunner.js INSERT INTO reports should include timed_out', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('timed_out'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'timed_out'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'timed_out'`);
     });
 
-    it('server.js INSERT INTO reports should include visibility_mode', () => {
+    it('ProjectRunner.js INSERT INTO reports should include visibility_mode', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('visibility_mode'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'visibility_mode'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'visibility_mode'`);
     });
 
-    it('server.js INSERT INTO reports should include visibility_issues', () => {
+    it('ProjectRunner.js INSERT INTO reports should include visibility_issues', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('visibility_issues'),
-        `server.js INSERT only has [${cols.join(', ')}] — missing 'visibility_issues'`);
+        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'visibility_issues'`);
     });
   });
 
   describe('getCostSummary reads from SQLite (not cost.csv)', () => {
-    it('server.js getCostSummary should query reports table', () => {
-      const serverPath = path.join(process.cwd(), 'src', 'server.js');
+    it('ProjectRunner.js getCostSummary should query reports table', () => {
+      const serverPath = path.join(process.cwd(), 'src', 'orchestrator', 'ProjectRunner.js');
       const serverCode = fs.readFileSync(serverPath, 'utf-8');
 
       // Find getCostSummary function
