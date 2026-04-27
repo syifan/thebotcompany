@@ -1,4 +1,5 @@
 export async function runRunnerLoop(runner, deps = {}) {
+    const broadcastEvent = deps.broadcastEvent || (() => {});
     while (runner.running) {
       while (runner.isPaused && runner.running) {
         await deps.sleep(1000);
