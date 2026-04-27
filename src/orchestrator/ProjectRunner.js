@@ -426,7 +426,7 @@ class ProjectRunner {
   }
 
   async runLoop() {
-    return runRunnerLoop(this, { getKeyPoolSafe, log, sleep });
+    return runRunnerLoop(this, { broadcastEvent, getKeyPoolSafe, log, sleep });
   }
 
   // Build the full prompt for an agent (shared across CLI and API paths)
