@@ -23,8 +23,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function readPhaseMachine() {
+  return fs.readFileSync(path.join(__dirname, '..', 'src', 'orchestrator', 'phase-machine.js'), 'utf-8');
+}
+
 function extractResumeCondition() {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js'), 'utf-8');
+  const src = readPhaseMachine();
   // Find the resume condition line — look for the if() that gates schedule resumption
   const match = src.match(/Resume interrupted schedule[^]*?\bif \(([^)]+)\)/);
   return match ? match[1].trim() : null;
@@ -55,7 +59,7 @@ describe('Schedule resume after reboot', () => {
       // There's a second resume check at cycle start that gates whether to
       // increment cycle count and clear state. It must also not require
       // completedAgents.length > 0.
-      const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js'), 'utf-8');
+      const src = readPhaseMachine();
       const match = src.match(/const resuming\s*=\s*([^;]+);/);
       assert.ok(match, 'Could not find cycle-start resuming check in ProjectRunner.js');
       const expr = match[1].trim();

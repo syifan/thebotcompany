@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
+const stateControlPath = path.join(__dirname, '..', 'src', 'orchestrator', 'state-control.js');
 const athenaPath = path.join(__dirname, '..', 'agent', 'managers', 'athena.md');
 
 function read(file) {
@@ -33,7 +34,7 @@ describe('private knowledge base for spec, roadmap, and internal analysis docs',
   });
 
   it('startup/bootstrap should create the private knowledge directory and subfolders for internal docs', () => {
-    const src = read(serverPath);
+    const src = `${read(serverPath)}\n${read(stateControlPath)}`;
     assert.match(src, /'knowledge'/,
       'Expected startup/bootstrap logic to create a knowledge directory');
     assert.match(src, /knowledge', 'analysis'|path\.join\('knowledge', 'analysis'\)|'knowledge\/analysis'/,

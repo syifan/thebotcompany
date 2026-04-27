@@ -5,8 +5,8 @@
  * reports are in SQLite. Token usage, model, success, and timed_out
  * are not persisted at all. All metadata should be in the reports table.
  *
- * These tests verify that the ACTUAL report-saving code in ProjectRunner.js
- * writes metadata columns. They will FAIL until ProjectRunner.js is updated.
+ * These tests verify that the ACTUAL report-saving code in project-db.js
+ * writes metadata columns. They will FAIL until project-db.js is updated.
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,8 +18,8 @@ import Database from 'better-sqlite3';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-report-meta-'));
 
 /**
- * Simulate what ProjectRunner.js _postProcessAgentRun does when saving a report.
- * This mirrors the ACTUAL code at src/ProjectRunner.js line ~1800.
+ * Simulate what project-db.js _postProcessAgentRun does when saving a report.
+ * This mirrors the ACTUAL code at src/project-db.js line ~1800.
  */
 function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, inputTokens, outputTokens, cacheReadTokens, success, model, timedOut, visibilityMode, visibilityIssues }) {
   const db = new Database(dbPath);
@@ -44,7 +44,7 @@ function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, in
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
     try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
 
-    // THIS IS THE LINE THAT MATTERS — currently ProjectRunner.js only writes 4 fields:
+    // THIS IS THE LINE THAT MATTERS — currently project-db.js only writes 4 fields:
     // db.prepare('INSERT INTO reports (cycle, agent, body, created_at) VALUES (?, ?, ?, ?)').run(...)
     //
     // After the fix, it should write all metadata fields:
@@ -61,11 +61,11 @@ function saveReportLikeServer(dbPath, { cycle, agent, body, cost, durationMs, in
 }
 
 /**
- * Read the ACTUAL ProjectRunner.js INSERT statement and check if it includes
+ * Read the ACTUAL project-db.js INSERT statement and check if it includes
  * the metadata columns. This is the real failing test.
  */
 function getServerInsertColumns() {
-  const serverPath = path.join(process.cwd(), 'src', 'orchestrator', 'ProjectRunner.js');
+  const serverPath = path.join(process.cwd(), 'src', 'orchestrator', 'project-db.js');
   const serverCode = fs.readFileSync(serverPath, 'utf-8');
   // Find the INSERT INTO reports statement
   const match = serverCode.match(/INSERT INTO reports\s*\(([^)]+)\)/);
@@ -74,80 +74,80 @@ function getServerInsertColumns() {
 }
 
 describe('Report metadata in SQLite', () => {
-  describe('ProjectRunner.js INSERT includes metadata columns', () => {
+  describe('project-db.js INSERT includes metadata columns', () => {
     const requiredColumns = ['cost', 'duration_ms', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'success', 'model', 'timed_out', 'visibility_mode', 'visibility_issues'];
 
-    it('ProjectRunner.js INSERT INTO reports should include cost', () => {
+    it('project-db.js INSERT INTO reports should include cost', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('cost'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'cost'. ` +
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'cost'. ` +
         `Currently writes to cost.csv instead of SQLite.`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include duration_ms', () => {
+    it('project-db.js INSERT INTO reports should include duration_ms', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('duration_ms'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'duration_ms'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'duration_ms'`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include input_tokens', () => {
+    it('project-db.js INSERT INTO reports should include input_tokens', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('input_tokens'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'input_tokens'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'input_tokens'`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include output_tokens', () => {
+    it('project-db.js INSERT INTO reports should include output_tokens', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('output_tokens'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'output_tokens'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'output_tokens'`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include model', () => {
+    it('project-db.js INSERT INTO reports should include model', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('model'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'model'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'model'`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include success', () => {
+    it('project-db.js INSERT INTO reports should include success', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('success'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'success'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'success'`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include timed_out', () => {
+    it('project-db.js INSERT INTO reports should include timed_out', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('timed_out'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'timed_out'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'timed_out'`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include visibility_mode', () => {
+    it('project-db.js INSERT INTO reports should include visibility_mode', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('visibility_mode'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'visibility_mode'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'visibility_mode'`);
     });
 
-    it('ProjectRunner.js INSERT INTO reports should include visibility_issues', () => {
+    it('project-db.js INSERT INTO reports should include visibility_issues', () => {
       const cols = getServerInsertColumns();
       assert.ok(cols.includes('visibility_issues'),
-        `ProjectRunner.js INSERT only has [${cols.join(', ')}] — missing 'visibility_issues'`);
+        `project-db.js INSERT only has [${cols.join(', ')}] — missing 'visibility_issues'`);
     });
   });
 
   describe('getCostSummary reads from SQLite (not cost.csv)', () => {
-    it('ProjectRunner.js getCostSummary should query reports table', () => {
-      const serverPath = path.join(process.cwd(), 'src', 'orchestrator', 'ProjectRunner.js');
+    it('project-db.js getProjectCostSummary should query reports table', () => {
+      const serverPath = path.join(process.cwd(), 'src', 'orchestrator', 'project-db.js');
       const serverCode = fs.readFileSync(serverPath, 'utf-8');
 
-      // Find getCostSummary function
-      const fnMatch = serverCode.match(/getCostSummary\(\)\s*\{[\s\S]*?\n  \}/);
-      assert.ok(fnMatch, 'getCostSummary function not found');
+      // Find getProjectCostSummary function
+      const fnMatch = serverCode.match(/getProjectCostSummary\(runner\)\s*\{[\s\S]*?\n\}/);
+      assert.ok(fnMatch, 'getProjectCostSummary function not found');
 
       const fnBody = fnMatch[0];
 
       // Should query from SQLite, not read cost.csv
       assert.ok(
         !fnBody.includes('cost.csv') || fnBody.includes('SELECT'),
-        'getCostSummary should query reports table (SELECT), not read cost.csv'
+        'getProjectCostSummary should query reports table (SELECT), not read cost.csv'
       );
     });
   });

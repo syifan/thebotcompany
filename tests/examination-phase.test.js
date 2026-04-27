@@ -6,10 +6,18 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
+const phaseMachinePath = path.join(__dirname, '..', 'src', 'orchestrator', 'phase-machine.js');
+const schedulerPath = path.join(__dirname, '..', 'src', 'orchestrator', 'scheduler.js');
 const themisPath = path.join(__dirname, '..', 'agent', 'managers', 'themis.md');
 
 function readServer() {
   return fs.readFileSync(serverPath, 'utf-8');
+}
+
+function readOrchestratorSource() {
+  return [serverPath, phaseMachinePath, schedulerPath]
+    .map(file => fs.readFileSync(file, 'utf-8'))
+    .join('\n');
 }
 
 function readThemis() {
@@ -28,7 +36,7 @@ describe('Themis examination phase', () => {
   });
 
   it('routes successful PROJECT_COMPLETE claims into examination instead of finalizing immediately', () => {
-    const src = readServer();
+    const src = readOrchestratorSource();
     const match = src.match(/if \(completeMatch\) \{([\s\S]*?)continue;/);
     assert.ok(match, 'Could not find PROJECT_COMPLETE handling block');
     const block = match[1];
@@ -43,26 +51,26 @@ describe('Themis examination phase', () => {
   });
 
   it('adds a dedicated examination phase that runs themis in full view', () => {
-    const src = readServer();
-    assert.match(src, /else if \(this\.phase === 'examination'\)/,
+    const src = readOrchestratorSource();
+    assert.match(src, /else if \((?:this|runner)\.phase === 'examination'\)/,
       'Expected a dedicated examination phase block in runLoop');
     assert.match(src, /const themis = managers\.find\(m => m\.name === 'themis'\)/,
       'Expected examination phase to run Themis');
-    assert.match(src, /runAgent\(themis, config, null, themisContext, \{ mode: 'full', issues: \[\] \}\)/,
+    assert.match(src, /(?:this|runner)\.runAgent\(themis, config, null, themisContext, \{ mode: 'full', issues: \[\] \}\)/,
       'Expected Themis to run in full view');
-    assert.doesNotMatch(src, /runAgent\(themis, config, null, themisContext, \{ mode: 'blind', issues: \[\] \}\)/,
+    assert.doesNotMatch(src, /(?:this|runner)\.runAgent\(themis, config, null, themisContext, \{ mode: 'blind', issues: \[\] \}\)/,
       'Themis should no longer run blind');
   });
 
   it('lets Themis schedule its own independent team across multiple cycles', () => {
-    const src = readServer();
+    const src = readOrchestratorSource();
     assert.match(src, /Resuming interrupted examination schedule/,
       'Expected examination schedules to resume after interruption');
-    assert.match(src, /schedule = this\.parseSchedule\(result\.resultText\)/,
+    assert.match(src, /schedule = (?:this|runner)\.parseSchedule\(result\.resultText\)/,
       'Expected examination phase to parse Themis schedules');
     assert.match(src, /executeSchedule\(schedule, config, 'themis'\)/,
       'Expected examination workers to run under Themis ownership');
-    assert.match(src, /executeSchedule\(this\.currentSchedule, config, 'themis'\)/,
+    assert.match(src, /executeSchedule\((?:this|runner)\.currentSchedule, config, 'themis'\)/,
       'Expected interrupted Themis schedules to resume under Themis ownership');
     assert.match(src, /let decision = null/,
       'Expected examination to support non-terminal cycles');
@@ -71,7 +79,7 @@ describe('Themis examination phase', () => {
   });
 
   it('filters scheduled workers by manager ownership', () => {
-    const src = readServer();
+    const src = readOrchestratorSource();
     assert.match(src, /const ownerName = typeof managerName === 'string' \? managerName\.toLowerCase\(\) : null/,
       'Expected executeSchedule to accept a manager owner');
     assert.match(src, /return \(worker\.reportsTo \|\| ''\)\.toLowerCase\(\) === ownerName/,
@@ -79,8 +87,8 @@ describe('Themis examination phase', () => {
   });
 
   it('finalizes completion only on EXAM_PASS', () => {
-    const src = readServer();
-    const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
+    const src = readOrchestratorSource();
+    const examBlock = src.match(/else if \((?:this|runner)\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
     assert.ok(examBlock, 'Could not find examination phase block');
     const block = examBlock[1];
 
@@ -93,7 +101,7 @@ describe('Themis examination phase', () => {
   });
 
   it('does not overwrite EXAM_PASS with failure just because no schedule exists', () => {
-    const src = readServer();
+    const src = readOrchestratorSource();
     assert.doesNotMatch(
       src,
       /if \(result\.resultText\.includes\('\<\!-- EXAM_PASS --\>'\)\) \{\s*decision = 'pass';\s*\}[\s\S]*?else if \(!schedule\) \{\s*decision = 'fail';\s*\}/,
@@ -102,8 +110,8 @@ describe('Themis examination phase', () => {
   });
 
   it('returns to athena and creates issues on EXAM_FAIL', () => {
-    const src = readServer();
-    const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
+    const src = readOrchestratorSource();
+    const examBlock = src.match(/else if \((?:this|runner)\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
     assert.ok(examBlock, 'Could not find examination phase block');
     const block = examBlock[1];
 
@@ -116,8 +124,8 @@ describe('Themis examination phase', () => {
   });
 
   it('still falls back to raw feedback when EXAM_FAIL JSON is absent or incomplete', () => {
-    const src = readServer();
-    const examBlock = src.match(/else if \(this\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
+    const src = readOrchestratorSource();
+    const examBlock = src.match(/else if \((?:this|runner)\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
     assert.ok(examBlock, 'Could not find examination phase block');
     const block = examBlock[1];
 
@@ -140,7 +148,7 @@ describe('Themis examination phase', () => {
   });
 
   it('gives Athena context when Themis rejects project completion', () => {
-    const src = readServer();
+    const src = readOrchestratorSource();
     const athenaSituation = src.match(/let situation = '';/);
     assert.ok(athenaSituation, 'Could not find Athena situation builder');
     assert.match(src, /examinationFeedback/,
