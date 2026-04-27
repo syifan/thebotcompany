@@ -10,7 +10,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import yaml from 'js-yaml';
 import Database from 'better-sqlite3';
 import { runAgentWithAPI } from './agent-runner.js';
@@ -39,6 +39,8 @@ import { handleProjectConfigRoutes } from './server/routes/project/config.js';
 import { handleProjectActivityRoutes } from './server/routes/project/activity.js';
 import { handleProjectIssueRoutes } from './server/routes/project/issues.js';
 import { handleProjectActionRoutes } from './server/routes/project/actions.js';
+import { handleProjectReportRoutes } from './server/routes/project/reports.js';
+import { handleProjectRepoRoutes } from './server/routes/project/repo.js';
 import webpush from 'web-push';
 import { config as loadDotenv } from 'dotenv';
 
@@ -3100,6 +3102,9 @@ const server = http.createServer(async (req, res) => {
       buildCustomTierMap,
       modelTiers: MODEL_TIERS,
       getPiModels,
+      getOAuthAccessToken,
+      getProviderRuntimeSelection,
+      parseSummarizeCooldown,
     };
 
     if (await handleProjectStatusRoutes(req, res, url, projectRouteContext)) return;
@@ -3110,231 +3115,9 @@ const server = http.createServer(async (req, res) => {
 
     if (await handleProjectIssueRoutes(req, res, url, projectRouteContext)) return;
 
-    // GET /api/projects/:id/reports — agent cycle reports (posted by orchestrator)
-    if (req.method === 'GET' && subPath === 'reports') {
-      try {
-        const db = runner.getDb();
-        db.exec(`CREATE TABLE IF NOT EXISTS reports (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          cycle INTEGER NOT NULL,
-          agent TEXT NOT NULL,
-          body TEXT NOT NULL,
-          created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-        )`);
-        // Migrate: add summary/visibility columns if missing
-        try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
-        try { db.exec('ALTER TABLE reports ADD COLUMN visibility_mode TEXT'); } catch {}
-        try { db.exec('ALTER TABLE reports ADD COLUMN visibility_issues TEXT'); } catch {}
-        try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
-    try { db.exec('ALTER TABLE reports ADD COLUMN milestone_id TEXT'); } catch {}
-        const agent = url.searchParams.get('agent');
-        const page = parseInt(url.searchParams.get('page')) || 1;
-        const perPage = parseInt(url.searchParams.get('per_page')) || 20;
-        let query = 'SELECT * FROM reports';
-        const params = [];
-        if (agent) { query += ' WHERE agent = ?'; params.push(agent); }
-        query += ' ORDER BY id DESC LIMIT ? OFFSET ?';
-        params.push(perPage, (page - 1) * perPage);
-        const reports = db.prepare(query).all(...params);
-        const total = db.prepare(`SELECT COUNT(*) as count FROM reports${agent ? ' WHERE agent = ?' : ''}`).get(...(agent ? [agent] : [])).count;
-        db.close();
-        // Enrich reports with key labels from key pool
-        const keyPool = getKeyPoolSafe();
-        const keyMap = new Map((keyPool.keys || []).map(k => [k.id, k.label]));
-        for (const r of reports) {
-          if (r.key_id) r.key_label = keyMap.get(r.key_id) || null;
-          try { r.visibility_issues = r.visibility_issues ? JSON.parse(r.visibility_issues) : []; } catch { r.visibility_issues = []; }
-          if (!r.visibility_mode) r.visibility_mode = 'full';
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ reports, total, page, perPage }));
-      } catch (e) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ reports: [], total: 0, page: 1, perPage: 20 }));
-      }
-      return;
-    }
+    if (await handleProjectReportRoutes(req, res, url, projectRouteContext)) return;
 
-    // POST /api/projects/:id/reports/:reportId/summarize — lazy summarization
-    const summarizeMatch = req.method === 'POST' && subPath.match(/^reports\/(\d+)\/summarize$/);
-    if (summarizeMatch) {
-      const reportId = parseInt(summarizeMatch[1], 10);
-      let keyResult = null;
-      try {
-        const db = runner.getDb();
-        try { db.exec('ALTER TABLE reports ADD COLUMN summary TEXT'); } catch {}
-        const report = db.prepare('SELECT * FROM reports WHERE id = ?').get(reportId);
-        if (!report) { db.close(); res.writeHead(404); res.end('Not found'); return; }
-        if (report.summary) { db.close(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ summary: report.summary })); return; }
-
-        // Use key pool for token resolution
-        const config = runner.loadConfig() || {};
-        const oauthGetter = async (authFile, provider) => {
-          return getOAuthAccessToken(provider);
-        };
-        const poolSafe = getKeyPoolSafe();
-        const firstKey = poolSafe.keys.find(k => k.enabled);
-        const providerHintForSummary = config.setupTokenProvider || firstKey?.provider || 'anthropic';
-
-        keyResult = await resolveKeyForProject(config, providerHintForSummary, oauthGetter);
-        const token = keyResult?.token || config.setupToken || null;
-
-        if (!token) { db.close(); res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'No API token configured' })); return; }
-
-        // Use the resolved key's actual provider for model resolution (not the hint)
-        const actualProvider = keyResult?.provider || providerHintForSummary;
-        const runtimeSelection = getProviderRuntimeSelection({
-          provider: actualProvider,
-          modelTier: 'xlow',
-          keyResult,
-          projectModels: null,
-        });
-        const model = runtimeSelection.selectedModel;
-
-        log(`Summarize report ${reportId}: provider=${actualProvider}, model=${model}`, runner.id);
-
-        // Strip meta blocks from body for cleaner summarization
-        const cleanBody = report.body
-          .replace(/^>\s*⏱.*$/m, '')
-          .replace(/<!--[\s\S]*?-->/g, '')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim()
-          .slice(0, 4000);
-
-        const prompt = `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}`;
-
-        // Use pi-ai adapter for summarization (same auth logic as agent calls)
-        const { piModel } = resolveModel(model, actualProvider);
-        const isOAuth = keyResult?.type === 'oauth';
-        const summaryResponse = await callModel(
-          piModel,
-          'You are a helpful assistant. Return ONLY the summary, nothing else.',
-          [buildUserMessage(prompt)],
-          [], // no tools
-          { token, isOAuth, provider: actualProvider, customConfig: runtimeSelection.customConfig || null },
-        );
-        const summary = summaryResponse.content?.trim() || null;
-
-        if (summary) {
-          db.prepare('UPDATE reports SET summary = ? WHERE id = ?').run(summary, reportId);
-        }
-        db.close();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ summary }));
-      } catch (e) {
-        log(`Summarize error: ${e.message}`, runner.id);
-        // Mark key as rate-limited if the error indicates a usage/rate limit
-        if (keyResult?.keyId && /rate.limit|usage.limit|quota|429/i.test(e.message)) {
-          const cooldownMs = parseSummarizeCooldown(e.message);
-          markRateLimited(keyResult.keyId, cooldownMs);
-          log(`Summarize: marked key ${keyResult.keyId} rate-limited for ${Math.ceil(cooldownMs / 60_000)}m`, runner.id);
-        }
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-      return;
-    }
-
-    // GET /api/projects/:id/repo
-    if (req.method === 'GET' && subPath === 'repo') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        repo: runner.repo, 
-        url: runner.repo ? `https://github.com/${runner.repo}` : null 
-      }));
-      return;
-    }
-
-    // GET /api/projects/:id/download - zip and download project data
-    if (req.method === 'GET' && subPath === 'download') {
-      try {
-        const projectDataDir = runner.projectDir;
-        if (!fs.existsSync(projectDataDir)) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Project data not found' }));
-          return;
-        }
-        const filename = `${runner.id.replace(/\//g, '-')}-project.zip`;
-        res.writeHead(200, {
-          'Content-Type': 'application/zip',
-          'Content-Disposition': `attachment; filename="${filename}"`,
-        });
-        const zip = spawn('zip', ['-r', '-q', '-', '.'], { cwd: projectDataDir, stdio: ['ignore', 'pipe', 'ignore'] });
-        zip.stdout.pipe(res);
-        zip.on('error', () => {
-          // Fallback to tar if zip not available
-          const tar = spawn('tar', ['-czf', '-', '-C', projectDataDir, '.'], { stdio: ['ignore', 'pipe', 'ignore'] });
-          res.writeHead(200, {
-            'Content-Type': 'application/gzip',
-            'Content-Disposition': `attachment; filename="${filename.replace('.zip', '.tar.gz')}"`,
-          });
-          tar.stdout.pipe(res);
-          tar.on('error', () => { res.end(); });
-        });
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-      return;
-    }
-
-    // GET /api/projects/:id/bootstrap - preview what bootstrap will do
-    if (req.method === 'GET' && subPath === 'bootstrap') {
-      if (!requireWrite(req, res)) return;
-      try {
-        const result = runner.bootstrapPreview();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-      return;
-    }
-
-    // POST /api/projects/:id/bootstrap - execute bootstrap
-    if (req.method === 'POST' && subPath === 'bootstrap') {
-      if (!requireWrite(req, res)) return;
-      let body = '';
-      req.on('data', chunk => body += chunk);
-      req.on('end', () => {
-        try {
-          const options = body ? JSON.parse(body) : {};
-          fs.mkdirSync(runner.chatsDir, { recursive: true });
-          const result = runner.bootstrap(options);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, ...result }));
-        } catch (e) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: e.message }));
-        }
-      });
-      return;
-    }
-
-    // POST /api/projects/:id/doctor - run AI Doctor agent
-    if (req.method === 'POST' && subPath === 'doctor') {
-      if (!requireWrite(req, res)) return;
-      try {
-        if (!runner.isPaused || runner.currentAgent) {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Doctor is only available when the project is fully paused.' }));
-          return;
-        }
-        const result = await runner.runDoctor();
-        if (!result.success) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Doctor agent failed', ...result }));
-          return;
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, ...result }));
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
-      return;
-    }
+    if (await handleProjectRepoRoutes(req, res, url, projectRouteContext)) return;
 
     // --- Chat endpoints ---
 
