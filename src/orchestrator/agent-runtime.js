@@ -71,7 +71,7 @@ export function postProcessAgentRun(runner, deps = {}, agent, config, { resultTe
         const agentStartTime = new Date(runner.currentAgentStartTime).toLocaleString('sv-SE');
         const endTime = new Date().toLocaleString('sv-SE');
         reportBody = `> ⏱ Started: ${agentStartTime} | Ended: ${endTime} | Duration: ${durationStr}\n\n${reportBody}`;
-        const { reportId } = writeRunnerReport(this, agent.name, reportBody, {
+        const { reportId } = writeRunnerReport(runner, agent.name, reportBody, {
           cost: cost ?? null,
           durationMs: durationMs ?? null,
           inputTokens: usage?.inputTokens ?? null,
