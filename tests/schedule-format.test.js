@@ -4,9 +4,9 @@ import fs from 'fs';
 import path from 'path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'url';
+import { parseSchedule as parseServerSchedule } from '../src/orchestrator/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const serverPath = path.join(__dirname, '..', 'src', 'server.js');
 const scheduleDiagramPath = path.join(__dirname, '..', 'monitor', 'src', 'components', 'ScheduleDiagram.jsx');
 
 function extractMethod(source, signature) {
@@ -52,11 +52,7 @@ function extractFunction(source, signature) {
 }
 
 function loadServerParseSchedule() {
-  const src = fs.readFileSync(serverPath, 'utf-8');
-  const method = extractMethod(src, 'parseSchedule(resultText)');
-  const fnSource = method.replace('parseSchedule(resultText)', 'function parseSchedule(resultText)');
-  const wrapped = `(() => { ${fnSource}; return parseSchedule; })()`;
-  return vm.runInNewContext(wrapped, { log: () => {} });
+  return (text) => parseServerSchedule({}, { log: () => {} }, text);
 }
 
 function loadFrontendParseScheduleBlock() {

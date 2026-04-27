@@ -13,9 +13,9 @@ import assert from 'node:assert/strict';
  * These tests verify the resume condition logic.
  */
 
-// Import the actual resume logic from server.js
+// Import the actual resume logic from ProjectRunner.js
 // We extract and test the condition used in the implementation phase
-// Current code in server.js (line ~1446):
+// Current code in ProjectRunner.js (line ~1446):
 //   if (this.currentSchedule && this.completedAgents.length > 0)
 // We import via a dynamic approach — read the source and extract the pattern
 import fs from 'fs';
@@ -23,20 +23,24 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function readPhaseMachine() {
+  return fs.readFileSync(path.join(__dirname, '..', 'src', 'orchestrator', 'phase-machine.js'), 'utf-8');
+}
+
 function extractResumeCondition() {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'server.js'), 'utf-8');
+  const src = readPhaseMachine();
   // Find the resume condition line — look for the if() that gates schedule resumption
   const match = src.match(/Resume interrupted schedule[^]*?\bif \(([^)]+)\)/);
   return match ? match[1].trim() : null;
 }
 
 describe('Schedule resume after reboot', () => {
-  describe('resume condition in server.js', () => {
+  describe('resume condition in ProjectRunner.js', () => {
     it('should resume when schedule exists even with no completed agents (delay-first)', () => {
       // The resume condition should NOT require completedAgents.length > 0
       // because a schedule starting with a delay has no completed agents on reboot
       const condition = extractResumeCondition();
-      assert.ok(condition, 'Could not find resume condition in server.js');
+      assert.ok(condition, 'Could not find resume condition in ProjectRunner.js');
       // The condition should NOT contain completedAgents.length > 0
       assert.ok(
         !condition.includes('completedAgents.length > 0'),
@@ -55,9 +59,9 @@ describe('Schedule resume after reboot', () => {
       // There's a second resume check at cycle start that gates whether to
       // increment cycle count and clear state. It must also not require
       // completedAgents.length > 0.
-      const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'server.js'), 'utf-8');
+      const src = readPhaseMachine();
       const match = src.match(/const resuming\s*=\s*([^;]+);/);
-      assert.ok(match, 'Could not find cycle-start resuming check in server.js');
+      assert.ok(match, 'Could not find cycle-start resuming check in ProjectRunner.js');
       const expr = match[1].trim();
       assert.ok(
         !expr.includes('completedAgents.length > 0'),
