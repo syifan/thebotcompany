@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
 const stateControlPath = path.join(__dirname, '..', 'src', 'orchestrator', 'state-control.js');
+const lifecyclePath = path.join(__dirname, '..', 'src', 'orchestrator', 'lifecycle.js');
 const athenaPath = path.join(__dirname, '..', 'agent', 'managers', 'athena.md');
 
 function read(file) {
@@ -22,14 +23,14 @@ describe('private knowledge base for spec, roadmap, and internal analysis docs',
   });
 
   it('bootstrap preview should read spec/roadmap from knowledge base, not repo root', () => {
-    const src = read(serverPath);
-    assert.doesNotMatch(src, /path\.join\(this\.path, 'spec\.md'\)/,
+    const src = `${read(serverPath)}\n${read(lifecyclePath)}`;
+    assert.doesNotMatch(src, /path\.join\((?:this|runner)\.path, 'spec\.md'\)/,
       'bootstrap preview should not read spec.md from the repo root');
-    assert.doesNotMatch(src, /path\.join\(this\.path, 'roadmap\.md'\)/,
+    assert.doesNotMatch(src, /path\.join\((?:this|runner)\.path, 'roadmap\.md'\)/,
       'bootstrap preview should not read roadmap.md from the repo root');
-    assert.match(src, /path\.join\(this\.knowledgeDir, 'spec\.md'\)/,
+    assert.match(src, /path\.join\((?:this|runner)\.knowledgeDir, 'spec\.md'\)/,
       'bootstrap preview should read spec.md from private knowledge dir');
-    assert.match(src, /path\.join\(this\.knowledgeDir, 'roadmap\.md'\)/,
+    assert.match(src, /path\.join\((?:this|runner)\.knowledgeDir, 'roadmap\.md'\)/,
       'bootstrap preview should read roadmap.md from private knowledge dir');
   });
 
