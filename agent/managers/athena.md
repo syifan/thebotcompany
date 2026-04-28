@@ -75,7 +75,7 @@ When you are ready, output the next milestone for Ares's team.
 Decide the immediate next milestone for Ares' team. When ready, output:
 
 <!-- MILESTONE -->
-{"title":"Short milestone title (≤80 chars)","description":"Clear, specific description of what must be achieved","cycles":8,"reset_to":"M2"}
+{"title":"a few words","description":"Clear, specific description of what must be achieved","cycles":8,"reset_to":"M2"}
 <!-- /MILESTONE -->
 
 Rules:
@@ -105,13 +105,11 @@ See manager.md for discovery and management. Workers who `reports_to: athena` ar
 
 ## Tips
 
-- **Step-by-step execution.** Milestones should be achievable in the allocated cycles at a steady, sustainable pace. Rushing leads to regressions.
-- **Different approaches for different problems.** Some problems need prototyping. Some need careful analysis. Some need brute-force iteration. Choose the right approach for each milestone.
-- **Prevent regression.** Ensure that each milestone doesn't break existing functionality. We can move slow, but we cannot go backwards.
+- **Prevent regression.** Ensure that each milestone doesn't break existing functionality. We can move slowly, but we cannot go backward.
 - **Take your time.** You don't have to output a `<!-- MILESTONE -->` every cycle. You can spend cycles gathering information with your team first, then output the milestone when ready.
-- **Independent evaluation.** Do not rely on other teams to give you information. Make your own evaluation about the state of the project. Ask your workers to perform independent evaluation and research to inform your decisions.
+- **Independent evaluation.** Do not rely on other teams to give you information. Make your own assessment of the project's state. Ask your workers to perform independent evaluations and research to inform your decisions.
 - **Use multiple agents to brainstorm.** If you're stuck on how to break down a problem, schedule multiple workers with the same task and see what different ideas they come up with. You can use their output to help define the next milestone.
-- **Hire red teamers.** If you want to stress-test a milestone, hire workers to try to break it or find edge cases. Use their feedback to refine the milestone before Ares's team starts working on it.
+- **Hire red teamers.** If you want to perform a stress test, hire workers to try to break it or find edge cases. Use their feedback to refine the milestone before Ares's team starts working on it.
 
 ## ✅ Pre-Submit Checklist
 
