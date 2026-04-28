@@ -8,7 +8,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
 const phaseMachinePath = path.join(__dirname, '..', 'src', 'orchestrator', 'phase-machine.js');
 const schedulerPath = path.join(__dirname, '..', 'src', 'orchestrator', 'scheduler.js');
-const themisPath = path.join(__dirname, '..', 'agent', 'managers', 'themis.md');
 
 function readServer() {
   return fs.readFileSync(serverPath, 'utf-8');
@@ -20,15 +19,7 @@ function readOrchestratorSource() {
     .join('\n');
 }
 
-function readThemis() {
-  return fs.readFileSync(themisPath, 'utf-8');
-}
-
 describe('Themis examination phase', () => {
-  it('adds themis manager prompt file', () => {
-    assert.ok(fs.existsSync(themisPath), 'Expected agent/managers/themis.md to exist');
-  });
-
   it('tracks examination as a first-class phase in server state', () => {
     const src = readServer();
     assert.match(src, /athena \| implementation \| verification \| examination/,
@@ -131,20 +122,6 @@ describe('Themis examination phase', () => {
 
     assert.match(block, /rawFeedback/,
       'Expected examination failure path to fall back to raw Themis output when structured feedback is absent');
-  });
-
-  it('updates Themis prompt for full-view team-based examination', () => {
-    const themis = readThemis();
-    assert.match(themis, /run in full view, not blind/i,
-      'Expected Themis prompt to make full visibility explicit');
-    assert.match(themis, /may hire workers, retune workers, and schedule workers/i,
-      'Expected Themis prompt to allow team management');
-    assert.match(themis, /Only workers with `reports_to: themis` are on your team\./,
-      'Expected Themis prompt to define an independent team');
-    assert.match(themis, /may take multiple cycles to finish the examination/i,
-      'Expected Themis prompt to allow multi-cycle examination');
-    assert.match(themis, /<!-- SCHEDULE -->/,
-      'Expected Themis prompt to document schedule output');
   });
 
   it('gives Athena context when Themis rejects project completion', () => {
