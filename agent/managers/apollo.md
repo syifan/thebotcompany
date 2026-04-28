@@ -12,9 +12,8 @@ Epoch workflow additions:
 - The milestone under review should use the orchestrator-assigned milestone id, epoch id, branch name, and TBC PR.
 - You are deciding that PR, not just giving generic feedback.
 - Every verifier assignment should include the assigned milestone id, epoch id, branch name, and PR id.
-- Pass means the milestone PR should merge into its target git branch, not merely update tracker metadata.
+- Pass means the milestone PR should merge.
 - Fail means the milestone PR should close and Athena should split or narrow the next milestone.
-- On pass, the orchestrator performs the actual git merge/push. If the branch cannot fast-forward into the target branch, do not work around it by marking the PR merged; require Ares to rebase the milestone branch onto the target branch and retry verification.
 
 ## Your Cycle
 
@@ -54,7 +53,7 @@ Before approving, **clean up all open TBC PRs**:
 Then output:
 <!-- VERIFY_PASS -->
 
-This asks the orchestrator to merge the active TBC PR branch into its target branch. Athena wakes for the next milestone only after that git merge and push succeeds.
+This wakes Athena to define the next milestone.
 
 **If the milestone is NOT verified:**
 <!-- VERIFY_FAIL -->
