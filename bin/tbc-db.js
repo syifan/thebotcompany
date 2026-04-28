@@ -12,6 +12,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { mergeEpochPrBranch } from '../src/orchestrator/epoch-pr-merge.js';
 
 const dbPath = process.env.TBC_DB;
 if (!dbPath) {
@@ -570,7 +571,7 @@ const commands = {
       strict: false,
     });
     if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]'); process.exit(1); }
-    const current = db.prepare('SELECT id, base_branch, head_branch, actor, status FROM tbc_prs WHERE id = ?').get(id);
+    const current = db.prepare('SELECT id, base_branch, head_branch, branch_name, actor, status FROM tbc_prs WHERE id = ?').get(id);
     if (!current) { console.error(`TBC PR #${id} not found`); process.exit(1); }
     const nextStatus = values.status !== undefined ? normalizePrStatus(values.status) : null;
     try {
@@ -608,11 +609,29 @@ const commands = {
       console.error('Error: base and head branches must differ for a TBC PR record.');
       process.exit(1);
     }
+    let mergeResult = null;
+    if (nextStatus === 'merged') {
+      try {
+        mergeResult = mergeEpochPrBranch(
+          { path: path.join(path.dirname(dbPath), 'repo') },
+          { ...current, base_branch: finalBase, head_branch: finalHead },
+          { actor: values.actor },
+        );
+      } catch (err) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+      if (values.decision === undefined) { sets.push('decision = ?'); params.push('merge'); }
+      if (values['decision-reason'] === undefined) {
+        sets.push('decision_reason = ?');
+        params.push(`Merged ${mergeResult.headBranch} into ${mergeResult.baseBranch} at ${mergeResult.headSha}.`);
+      }
+    }
     sets.push('updated_at = ?'); params.push(new Date().toISOString());
     sets.push('updated_by = ?'); params.push(values.actor);
     params.push(id);
     db.prepare(`UPDATE tbc_prs SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-    console.log(`Updated TBC PR #${id}`);
+    console.log(`Updated TBC PR #${id}${mergeResult ? ` and merged ${mergeResult.headBranch} into ${mergeResult.baseBranch}` : ''}`);
   },
 
   // ===== QUERY =====

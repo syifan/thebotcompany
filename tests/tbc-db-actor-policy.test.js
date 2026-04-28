@@ -42,7 +42,7 @@ describe('tbc-db epoch PR actor policy', () => {
     assert.notEqual(denied.status, 0);
     assert.match(`${denied.stderr}${denied.stdout}`, /Only apollo may mark an epoch PR as merged/i);
 
-    const allowed = run(['pr-edit', '1', '--actor', 'apollo', '--status', 'merged', '--decision', 'merge'], dbPath);
+    const allowed = run(['pr-edit', '1', '--actor', 'apollo', '--status', 'closed', '--decision', 'close'], dbPath);
     assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
   });
 });

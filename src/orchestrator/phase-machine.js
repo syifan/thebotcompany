@@ -402,10 +402,29 @@ export async function runRunnerLoop(runner, deps = {}) {
 
           // Process decision
           if (decision === 'pass') {
-            const mergedPr = isRollupVerification ? null : await runner.decideEpochPR('merged', {
-              actor: 'apollo',
-              reason: `Apollo passed milestone ${runner.currentMilestoneId || ''} ${runner.milestoneTitle || runner.milestoneDescription || ''}`.trim(),
-            });
+            let mergedPr = null;
+            if (!isRollupVerification) {
+              try {
+                mergedPr = await runner.decideEpochPR('merged', {
+                  actor: 'apollo',
+                  reason: `Apollo passed milestone ${runner.currentMilestoneId || ''} ${runner.milestoneTitle || runner.milestoneDescription || ''}`.trim(),
+                });
+              } catch (err) {
+                const message = err?.message || 'Unknown git merge failure';
+                runner.verificationFeedback = `${message} Rebase the milestone branch onto the target branch, push it, then retry verification.`;
+                deps.log(`❌ TBC PR merge blocked — ${runner.verificationFeedback}`, runner.id);
+                runner.saveState();
+                broadcastEvent({ type: 'verify-blocked', project: runner.id, title: runner.milestoneTitle });
+                continue;
+              }
+              if (!mergedPr) {
+                runner.verificationFeedback = 'TBC PR merge did not complete; rebase/push the milestone branch and retry verification.';
+                deps.log(`❌ TBC PR merge blocked — ${runner.verificationFeedback}`, runner.id);
+                runner.saveState();
+                broadcastEvent({ type: 'verify-blocked', project: runner.id, title: runner.milestoneTitle });
+                continue;
+              }
+            }
             const completedMilestoneId = runner.currentMilestoneId;
             const completedMilestoneTitle = runner.milestoneTitle;
             const parentMilestoneId = runner.getParentMilestoneId(completedMilestoneId);

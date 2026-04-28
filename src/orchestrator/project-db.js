@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
+import { mergeEpochPrBranch } from './epoch-pr-merge.js';
 
 function syncAgentRegistry(db, runner, { root }) {
   const upsert = db.prepare(`
@@ -294,9 +295,15 @@ export function getOpenEpochPrForBranch(runner, branchName) {
 
 export function decideProjectEpochPr(runner, pr, status, { actor = 'apollo', reason = '' } = {}) {
   if (!pr) return null;
+  const normalizedStatus = status === 'merged' ? 'merged' : 'closed';
+  const mergeResult = normalizedStatus === 'merged'
+    ? mergeEpochPrBranch(runner, pr, { actor })
+    : null;
   try {
     const db = runner.getDb();
-    const normalizedStatus = status === 'merged' ? 'merged' : 'closed';
+    const decisionReason = reason || (mergeResult
+      ? `Merged ${mergeResult.headBranch} into ${mergeResult.baseBranch} at ${mergeResult.headSha}.`
+      : '');
     db.prepare(`
       UPDATE tbc_prs
       SET status = ?, decision = ?, decision_reason = ?, updated_by = ?, updated_at = ?
@@ -304,13 +311,13 @@ export function decideProjectEpochPr(runner, pr, status, { actor = 'apollo', rea
     `).run(
       normalizedStatus,
       normalizedStatus === 'merged' ? 'merge' : 'close',
-      reason || '',
+      decisionReason,
       actor,
       new Date().toISOString(),
       pr.id,
     );
     db.close();
-    return { ...pr, status: normalizedStatus, decision: normalizedStatus === 'merged' ? 'merge' : 'close', decision_reason: reason || '' };
+    return { ...pr, status: normalizedStatus, decision: normalizedStatus === 'merged' ? 'merge' : 'close', decision_reason: decisionReason, mergeResult };
   } catch {
     return null;
   }
