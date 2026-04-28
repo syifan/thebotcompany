@@ -250,31 +250,59 @@ function checkPathAccessInCommand(command, cwd, allowedPaths = null) {
   return null;
 }
 
-function buildSandboxProfile(allowedPaths) {
+export function buildSandboxProfile(allowedPaths) {
+  const quotePath = (value) => normalizePath(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
   const lines = [
     '(version 1)',
-    '(allow default)',
+    '(deny default)',
+    '(allow process*)',
+    '(allow signal)',
+    '(allow sysctl-read)',
+    '(allow mach-lookup)',
+    '(allow network*)',
+    '(allow file-read-metadata)',
+    '(allow file-read* (literal "/"))',
+    '(allow file-read* (literal "/dev/null"))',
+    '(allow file-write* (literal "/dev/null"))',
   ];
-  for (const denyPath of (allowedPaths?.denied || [])) {
-    const p = normalizePath(denyPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    lines.push(`(deny file-read-data (subpath "${p}"))`);
-    lines.push(`(deny file-read-metadata (subpath "${p}"))`);
-    lines.push(`(deny file-write* (subpath "${p}"))`);
+
+  const systemReadPaths = [
+    '/bin',
+    '/sbin',
+    '/usr',
+    '/System',
+    '/Library',
+    '/opt/homebrew',
+    '/etc',
+    '/dev',
+  ];
+  for (const allowPath of systemReadPaths) {
+    if (!fs.existsSync(allowPath)) continue;
+    const p = quotePath(allowPath);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
   }
-  for (const allowPath of (allowedPaths?.read || [])) {
-    const p = normalizePath(allowPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    lines.push(`(allow file-read-data (subpath "${p}"))`);
-    lines.push(`(allow file-read-metadata (subpath "${p}"))`);
+  const hostTempDir = os.tmpdir();
+  if (hostTempDir && fs.existsSync(hostTempDir)) {
+    const p = quotePath(hostTempDir);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
+    lines.push(`(allow file-write* (subpath "${p}"))`);
   }
-  for (const allowPath of (allowedPaths?.write || [])) {
-    const p = normalizePath(allowPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+
+  const readPaths = new Set(allowedPaths?.read || []);
+  const writePaths = new Set(allowedPaths?.write || []);
+  for (const allowPath of readPaths) {
+    const p = quotePath(allowPath);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
+  }
+  for (const allowPath of writePaths) {
+    const p = quotePath(allowPath);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
     lines.push(`(allow file-write* (subpath "${p}"))`);
   }
   if (allowedPaths?.dbPath) {
-    const p = normalizePath(allowedPaths.dbPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    lines.push(`(allow file-read-data (literal "${p}"))`);
-    lines.push(`(allow file-read-metadata (literal "${p}"))`);
-    lines.push(`(allow file-write* (literal "${p}"))`);
+    const p = quotePath(allowedPaths.dbPath);
+    lines.push(`(deny file-read* (literal "${p}"))`);
+    lines.push(`(deny file-write* (literal "${p}"))`);
   }
   return lines.join('\n');
 }
@@ -513,9 +541,29 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     let spawnCmd = 'bash';
     let spawnArgs = ['-c', command];
     let sandboxProfilePath = null;
+    let sandboxTempDir = null;
+    let env = bashEnv ? { ...process.env, ...bashEnv } : { ...process.env };
     if (allowedPaths && os.platform() === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) {
+      const sandboxTempParent = fs.existsSync(cwd) ? cwd : os.tmpdir();
+      sandboxTempDir = fs.mkdtempSync(path.join(sandboxTempParent, '.tbc-agent-tmp-'));
+      const sandboxAllowedPaths = {
+        ...allowedPaths,
+        read: [...(allowedPaths.read || []), sandboxTempDir],
+        write: [...(allowedPaths.write || []), sandboxTempDir],
+      };
       sandboxProfilePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-sb-')), 'profile.sb');
-      fs.writeFileSync(sandboxProfilePath, buildSandboxProfile(allowedPaths));
+      fs.writeFileSync(sandboxProfilePath, buildSandboxProfile(sandboxAllowedPaths));
+      const sandboxTempEnv = sandboxTempDir.endsWith(path.sep) ? sandboxTempDir : `${sandboxTempDir}${path.sep}`;
+      env = {
+        ...env,
+        TMPDIR: sandboxTempEnv,
+        TMP: sandboxTempEnv,
+        TEMP: sandboxTempEnv,
+        DARWIN_USER_TEMP_DIR: sandboxTempEnv,
+        XDG_CACHE_HOME: sandboxTempEnv,
+        XDG_CONFIG_HOME: sandboxTempEnv,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+      };
       spawnCmd = '/usr/bin/sandbox-exec';
       spawnArgs = ['-f', sandboxProfilePath, 'bash', '-c', command];
     }
@@ -525,7 +573,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,  // new process group so grandchildren can be killed too
       timeout,
-      env: bashEnv ? { ...process.env, ...bashEnv } : process.env,
+      env,
     });
     proc.unref();  // don't keep the event loop alive
     runtime?.registerProcess?.(proc);
@@ -568,6 +616,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
+      if (sandboxTempDir) {
+        try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
+      }
       resolve({ output: result || '(no output)', exitCode: code, ok: code === 0 });
     });
 
@@ -579,6 +630,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       runtime?.unregisterProcess?.(proc);
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
+      }
+      if (sandboxTempDir) {
+        try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
       }
       resolve({ output: `Error executing command: ${err.message}`, exitCode: null, ok: false });
     });

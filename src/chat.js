@@ -552,7 +552,15 @@ export async function streamChatMessage(opts) {
       for (const tc of toolCalls) {
         try {
           const chatEnv = { TBC_DB: tbcDbPath };
-          const normalized = await executeToolDetailed(tc.name, tc.input, worktreePath, 0, chatEnv);
+          const projectRoot = path.dirname(worktreePath);
+          const chatAllowedPaths = {
+            read: [projectRoot],
+            write: [projectRoot],
+            denied: [],
+            dbPath: null,
+            projectDir: projectRoot,
+          };
+          const normalized = await executeToolDetailed(tc.name, tc.input, worktreePath, 0, chatEnv, null, null, chatAllowedPaths);
           toolResults.push({
             toolCallId: tc.id,
             toolName: tc.name,
