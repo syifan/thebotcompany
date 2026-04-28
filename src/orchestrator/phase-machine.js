@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 export async function runRunnerLoop(runner, deps = {}) {
     const broadcastEvent = deps.broadcastEvent || (() => {});
     while (runner.running) {

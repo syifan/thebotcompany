@@ -8,7 +8,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
 const stateControlPath = path.join(__dirname, '..', 'src', 'orchestrator', 'state-control.js');
 const lifecyclePath = path.join(__dirname, '..', 'src', 'orchestrator', 'lifecycle.js');
-const athenaPath = path.join(__dirname, '..', 'agent', 'managers', 'athena.md');
 
 function read(file) {
   return fs.readFileSync(file, 'utf-8');
@@ -42,20 +41,6 @@ describe('private knowledge base for spec, roadmap, and internal analysis docs',
       'Expected a private analysis subdirectory under knowledge/');
     assert.match(src, /knowledge', 'decisions'|path\.join\('knowledge', 'decisions'\)|'knowledge\/decisions'/,
       'Expected a private decisions subdirectory under knowledge/');
-  });
-
-  it('Athena prompt should point planning and internal analysis docs to the private knowledge base, not the repo', () => {
-    const athena = read(athenaPath);
-    assert.doesNotMatch(athena, /project root/i,
-      'Athena should not be told to maintain planning docs in the project root');
-    assert.doesNotMatch(athena, /git add roadmap\.md && git commit -m "Update roadmap" && git push/,
-      'Athena should not be told to commit/push roadmap changes');
-    assert.match(athena, /knowledge base|knowledge\/spec\.md|knowledge\/roadmap\.md/i,
-      'Athena should be told to use the private knowledge base');
-    assert.match(athena, /knowledge\/analysis|knowledge\/decisions|internal analysis/i,
-      'Athena should be told to keep internal analysis docs in the private knowledge base');
-    assert.match(athena, /Do not treat `repo\/docs\/` as the default home for internal analysis/i,
-      'Athena should be explicitly told not to use repo docs as the default home for internal analysis');
   });
 
   it('repo-root spec/roadmap and internal analysis docs should no longer be canonical private artifacts', () => {

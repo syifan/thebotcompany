@@ -30,4 +30,11 @@ describe('phase-machine broadcast event dependency', () => {
       'ProjectRunner.runLoop should pass broadcastEvent into phase-machine deps'
     );
   });
+
+  it('imports fs for STOP-file checks after module extraction', () => {
+    const src = readSource('src/orchestrator/phase-machine.js');
+
+    assert.match(src, /import\s+fs\s+from ['"]fs['"];?/);
+    assert.match(src, /fs\.existsSync\(runner\.stopPath\)/);
+  });
 });

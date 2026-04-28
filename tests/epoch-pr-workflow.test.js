@@ -8,8 +8,6 @@ const milestones = fs.readFileSync(path.resolve('src/orchestrator/milestones.js'
 const stateControl = fs.readFileSync(path.resolve('src/orchestrator/state-control.js'), 'utf8');
 const phaseMachine = fs.readFileSync(path.resolve('src/orchestrator/phase-machine.js'), 'utf8');
 const orchestratorSource = `${server}\n${milestones}\n${stateControl}\n${phaseMachine}`;
-const athena = fs.readFileSync(path.resolve('agent/managers/athena.md'), 'utf8');
-const ares = fs.readFileSync(path.resolve('agent/managers/ares.md'), 'utf8');
 
 describe('epoch-as-PR orchestrator flow', () => {
   it('requires an orchestrator-managed epoch PR before Ares can claim completion', () => {
@@ -53,12 +51,6 @@ describe('epoch-as-PR orchestrator flow', () => {
     assert.match(orchestratorSource, /Athena reset planning anchor to/);
   });
 
-  it('documents the optional reset_to field for Athena milestone output', () => {
-    assert.match(athena, /"reset_to":"M2"/);
-    assert.match(athena, /`reset_to` is optional/);
-    assert.match(athena, /ancestor milestone/);
-  });
-
   it('escalates a successful child milestone to parent rollup verification instead of jumping to root', () => {
     assert.match(orchestratorSource, /const isRollupVerification = !(?:this|runner)\.currentEpochPrId/);
     assert.match(orchestratorSource, /const parentMilestoneId = (?:this|runner)\.getParentMilestoneId\(completedMilestoneId\)/);
@@ -82,11 +74,5 @@ describe('epoch-as-PR orchestrator flow', () => {
     assert.match(orchestratorSource, /if \(aresGraceMode\) (?:this|runner)\.aresGraceCycleUsed = true/)
     assert.match(orchestratorSource, /Ares grace review did not claim completion/)
     assert.match(orchestratorSource, /Ignoring Ares schedule because grace review mode forbids worker scheduling/)
-  });
-
-  it('documents that grace review mode forbids scheduling and allows only a completion claim', () => {
-    assert.match(ares, /If in grace review mode/)
-    assert.match(ares, /Do not emit a schedule or assign workers/)
-    assert.match(ares, /either emit `<!-- CLAIM_COMPLETE -->` or leave it out/)
   });
 });

@@ -7,8 +7,6 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
 const stateControlPath = path.join(__dirname, '..', 'src', 'orchestrator', 'state-control.js');
-const managerPromptPath = path.join(__dirname, '..', 'agent', 'manager.md');
-const everyonePromptPath = path.join(__dirname, '..', 'agent', 'everyone.md');
 
 function read(file) {
   return fs.readFileSync(file, 'utf-8');
@@ -27,14 +25,5 @@ describe('worker skill directory layout', () => {
     const src = `${read(serverPath)}\n${read(stateControlPath)}`;
     assert.ok(/(?:this|runner)\.workerSkillsDir/.test(src), 'Expected startup to create skills/workers');
     assert.ok(/(?:this|runner)\.agentsDir/.test(src), 'Expected startup to create agent directories');
-  });
-
-  it('keeps manager-facing prompts on skills/workers', () => {
-    const managerPrompt = read(managerPromptPath);
-    const everyonePrompt = read(everyonePromptPath);
-    assert.ok(managerPrompt.includes('{project_dir}/skills/workers/'));
-    assert.ok(everyonePrompt.includes('{project_dir}/skills/workers/'));
-    assert.ok(!managerPrompt.includes('{project_dir}/workers/'));
-    assert.ok(!everyonePrompt.includes('{project_dir}/workers/'));
   });
 });

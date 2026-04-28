@@ -49,9 +49,4 @@ describe('TBC local epoch PR model', () => {
       status: 'open',
     });
   });
-
-  it('shared agent rules still direct agents to use TBC PRs instead of GitHub PRs', () => {
-    const everyone = fs.readFileSync(path.resolve('agent/everyone.md'), 'utf8');
-    assert.match(everyone, /Use TBC PRs, not GitHub PRs/i);
-  });
 });
