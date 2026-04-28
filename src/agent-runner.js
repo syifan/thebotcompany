@@ -9,6 +9,7 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   resolveModel,
   formatTools,
@@ -18,6 +19,10 @@ import {
   buildUserMessage,
   calculateCost,
 } from './providers/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const TBC_DB_CLI_PATH = path.resolve(__dirname, '..', 'bin', 'tbc-db.js');
 
 // ---------------------------------------------------------------------------
 // Parse retry cooldown from error messages
@@ -140,6 +145,246 @@ function extractTbcDbCommand(command) {
   return { kind: 'unknown', actor };
 }
 
+
+function hasUntrustedShellSyntax(command) {
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ';' || ch === '|' || ch === '&' || ch === '<' || ch === '>' || ch === '`' || ch === '\n' || ch === '\r') return true;
+    if (ch === '$' || ch === '(' || ch === ')') return true;
+  }
+  return !!quote;
+}
+
+function splitShellWords(command) {
+  const words = [];
+  let word = '';
+  let quote = null;
+  let escaped = false;
+  let sawChars = false;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (escaped) {
+      word += ch;
+      sawChars = true;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      sawChars = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      } else {
+        word += ch;
+      }
+      sawChars = true;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      sawChars = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (sawChars) {
+        words.push(word);
+        word = '';
+        sawChars = false;
+      }
+      continue;
+    }
+    word += ch;
+    sawChars = true;
+  }
+
+  if (escaped) word += '\\';
+  if (quote) return null;
+  if (sawChars) words.push(word);
+  return words;
+}
+
+function splitTopLevelAndAnd(command) {
+  const parts = [];
+  let quote = null;
+  let escaped = false;
+  let start = 0;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '&' && command[i + 1] === '&') {
+      parts.push(command.slice(start, i).trim());
+      i += 1;
+      start = i + 1;
+    }
+  }
+  if (quote) return null;
+  parts.push(command.slice(start).trim());
+  return parts;
+}
+
+function trustedTbcDbArgsFromPart(part) {
+  const tbcPart = String(part || '').trim();
+  if (!tbcPart || !/^tbc-db(?:\s|$)/.test(tbcPart)) return null;
+  if (hasUntrustedShellSyntax(tbcPart)) return null;
+  const words = splitShellWords(tbcPart);
+  if (!words || words[0] !== 'tbc-db') return null;
+  return words.slice(1);
+}
+
+function trustedTbcDbChainForCommand(command) {
+  const trimmed = String(command || '').trim();
+  if (!trimmed) return null;
+
+  // Permit common harmless `cd ... &&` preludes and chains of tbc-db calls.
+  // Anything else stays in normal Bash/sandbox handling.
+  const parts = splitTopLevelAndAnd(trimmed);
+  if (!parts) return null;
+  const chain = [];
+  for (const part of parts) {
+    if (!part) return null;
+    if (/^cd\s+(?:\.|\.\.|[A-Za-z0-9_./~+-]+)\s*$/.test(part.trim())) continue;
+    const args = trustedTbcDbArgsFromPart(part);
+    if (!args) return null;
+    chain.push(args);
+  }
+  return chain.length ? chain : null;
+}
+
+function trustedTbcDbArgsForCommand(command) {
+  const chain = trustedTbcDbChainForCommand(command);
+  return chain?.length === 1 ? chain[0] : null;
+}
+
+function executeTrustedTbcDb(args, cwd, timeout, bashEnv = null, runtime = null) {
+  return new Promise((resolve) => {
+    if (!bashEnv?.TBC_DB) {
+      resolve({ output: 'Error: TBC_DB environment variable not set', exitCode: 1, ok: false });
+      return;
+    }
+    if (runtime?.signal?.aborted) {
+      resolve({ output: 'Command cancelled: agent was terminated.', exitCode: null, ok: false });
+      return;
+    }
+
+    const env = { ...process.env, ...bashEnv };
+    const proc = spawn(process.execPath, [TBC_DB_CLI_PATH, ...args], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+      timeout,
+      env,
+    });
+    proc.unref();
+    runtime?.registerProcess?.(proc);
+
+    const stdout = createCappedOutputBuffer();
+    const stderr = createCappedOutputBuffer();
+    let settled = false;
+    proc.stdout.on('data', (d) => { stdout.append(d); });
+    proc.stderr.on('data', (d) => { stderr.append(d); });
+
+    const killProc = (signal) => {
+      try { process.kill(-proc.pid, signal); } catch {}
+    };
+    const onAbort = () => {
+      killProc('SIGTERM');
+      setTimeout(() => killProc('SIGKILL'), 5000);
+    };
+    runtime?.signal?.addEventListener('abort', onAbort, { once: true });
+
+    const timer = setTimeout(() => {
+      killProc('SIGTERM');
+      setTimeout(() => killProc('SIGKILL'), 5000);
+    }, timeout);
+
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      runtime?.signal?.removeEventListener('abort', onAbort);
+      runtime?.unregisterProcess?.(proc);
+      let result = '';
+      const stdoutText = stdout.toString();
+      const stderrText = stderr.toString();
+      if (stdoutText) result += stdoutText;
+      if (stderrText) result += (result ? '\n' : '') + stderrText;
+      if (code !== 0 && code !== null) result += `\nExit code: ${code}`;
+      resolve({ output: result || '(no output)', exitCode: code, ok: code === 0 });
+    });
+
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      runtime?.signal?.removeEventListener('abort', onAbort);
+      runtime?.unregisterProcess?.(proc);
+      resolve({ output: `Error executing tbc-db: ${err.message}`, exitCode: null, ok: false });
+    });
+
+    proc.on('exit', () => {
+      setTimeout(() => {
+        if (!settled) {
+          try { proc.stdout.destroy(); } catch {}
+          try { proc.stderr.destroy(); } catch {}
+        }
+      }, 500);
+    });
+  });
+}
+
+
+async function executeTrustedTbcDbChain(chain, cwd, timeout, bashEnv = null, runtime = null) {
+  const outputs = [];
+  let last = { output: '(no output)', exitCode: 0, ok: true };
+  for (const args of chain) {
+    last = await executeTrustedTbcDb(args, cwd, timeout, bashEnv, runtime);
+    if (last.output && last.output !== '(no output)') outputs.push(last.output);
+    if (!last.ok) break;
+  }
+  return {
+    output: outputs.length ? outputs.join('\n') : (last.output || '(no output)'),
+    exitCode: last.exitCode,
+    ok: last.ok,
+  };
+}
+
 function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (!issuePolicy) return null;
   const parsed = extractTbcDbCommand(command);
@@ -250,31 +495,59 @@ function checkPathAccessInCommand(command, cwd, allowedPaths = null) {
   return null;
 }
 
-function buildSandboxProfile(allowedPaths) {
+export function buildSandboxProfile(allowedPaths) {
+  const quotePath = (value) => normalizePath(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
   const lines = [
     '(version 1)',
-    '(allow default)',
+    '(deny default)',
+    '(allow process*)',
+    '(allow signal)',
+    '(allow sysctl-read)',
+    '(allow mach-lookup)',
+    '(allow network*)',
+    '(allow file-read-metadata)',
+    '(allow file-read* (literal "/"))',
+    '(allow file-read* (literal "/dev/null"))',
+    '(allow file-write* (literal "/dev/null"))',
   ];
-  for (const denyPath of (allowedPaths?.denied || [])) {
-    const p = normalizePath(denyPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    lines.push(`(deny file-read-data (subpath "${p}"))`);
-    lines.push(`(deny file-read-metadata (subpath "${p}"))`);
-    lines.push(`(deny file-write* (subpath "${p}"))`);
+
+  const systemReadPaths = [
+    '/bin',
+    '/sbin',
+    '/usr',
+    '/System',
+    '/Library',
+    '/opt/homebrew',
+    '/etc',
+    '/dev',
+  ];
+  for (const allowPath of systemReadPaths) {
+    if (!fs.existsSync(allowPath)) continue;
+    const p = quotePath(allowPath);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
   }
-  for (const allowPath of (allowedPaths?.read || [])) {
-    const p = normalizePath(allowPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    lines.push(`(allow file-read-data (subpath "${p}"))`);
-    lines.push(`(allow file-read-metadata (subpath "${p}"))`);
+  const hostTempDir = os.tmpdir();
+  if (hostTempDir && fs.existsSync(hostTempDir)) {
+    const p = quotePath(hostTempDir);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
+    lines.push(`(allow file-write* (subpath "${p}"))`);
   }
-  for (const allowPath of (allowedPaths?.write || [])) {
-    const p = normalizePath(allowPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+
+  const readPaths = new Set(allowedPaths?.read || []);
+  const writePaths = new Set(allowedPaths?.write || []);
+  for (const allowPath of readPaths) {
+    const p = quotePath(allowPath);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
+  }
+  for (const allowPath of writePaths) {
+    const p = quotePath(allowPath);
+    lines.push(`(allow file-read* (subpath "${p}"))`);
     lines.push(`(allow file-write* (subpath "${p}"))`);
   }
   if (allowedPaths?.dbPath) {
-    const p = normalizePath(allowedPaths.dbPath).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    lines.push(`(allow file-read-data (literal "${p}"))`);
-    lines.push(`(allow file-read-metadata (literal "${p}"))`);
-    lines.push(`(allow file-write* (literal "${p}"))`);
+    const p = quotePath(allowedPaths.dbPath);
+    lines.push(`(deny file-read* (literal "${p}"))`);
+    lines.push(`(deny file-write* (literal "${p}"))`);
   }
   return lines.join('\n');
 }
@@ -504,6 +777,13 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       resolve({ output: issueBlock, exitCode: 1, ok: false });
       return;
     }
+
+    const trustedTbcDbChain = trustedTbcDbChainForCommand(command);
+    if (trustedTbcDbChain) {
+      executeTrustedTbcDbChain(trustedTbcDbChain, cwd, timeout, bashEnv, runtime).then(resolve);
+      return;
+    }
+
     const pathBlock = checkPathAccessInCommand(command, cwd, allowedPaths);
     if (pathBlock) {
       resolve({ output: pathBlock, exitCode: 1, ok: false });
@@ -513,9 +793,29 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     let spawnCmd = 'bash';
     let spawnArgs = ['-c', command];
     let sandboxProfilePath = null;
+    let sandboxTempDir = null;
+    let env = bashEnv ? { ...process.env, ...bashEnv } : { ...process.env };
     if (allowedPaths && os.platform() === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) {
+      const sandboxTempParent = fs.existsSync(cwd) ? cwd : os.tmpdir();
+      sandboxTempDir = fs.mkdtempSync(path.join(sandboxTempParent, '.tbc-agent-tmp-'));
+      const sandboxAllowedPaths = {
+        ...allowedPaths,
+        read: [...(allowedPaths.read || []), sandboxTempDir],
+        write: [...(allowedPaths.write || []), sandboxTempDir],
+      };
       sandboxProfilePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-sb-')), 'profile.sb');
-      fs.writeFileSync(sandboxProfilePath, buildSandboxProfile(allowedPaths));
+      fs.writeFileSync(sandboxProfilePath, buildSandboxProfile(sandboxAllowedPaths));
+      const sandboxTempEnv = sandboxTempDir.endsWith(path.sep) ? sandboxTempDir : `${sandboxTempDir}${path.sep}`;
+      env = {
+        ...env,
+        TMPDIR: sandboxTempEnv,
+        TMP: sandboxTempEnv,
+        TEMP: sandboxTempEnv,
+        DARWIN_USER_TEMP_DIR: sandboxTempEnv,
+        XDG_CACHE_HOME: sandboxTempEnv,
+        XDG_CONFIG_HOME: sandboxTempEnv,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+      };
       spawnCmd = '/usr/bin/sandbox-exec';
       spawnArgs = ['-f', sandboxProfilePath, 'bash', '-c', command];
     }
@@ -525,7 +825,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,  // new process group so grandchildren can be killed too
       timeout,
-      env: bashEnv ? { ...process.env, ...bashEnv } : process.env,
+      env,
     });
     proc.unref();  // don't keep the event loop alive
     runtime?.registerProcess?.(proc);
@@ -568,6 +868,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
+      if (sandboxTempDir) {
+        try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
+      }
       resolve({ output: result || '(no output)', exitCode: code, ok: code === 0 });
     });
 
@@ -579,6 +882,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       runtime?.unregisterProcess?.(proc);
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
+      }
+      if (sandboxTempDir) {
+        try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
       }
       resolve({ output: `Error executing command: ${err.message}`, exitCode: null, ok: false });
     });

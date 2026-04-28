@@ -3,7 +3,13 @@ import path from 'path';
 
 export function getAgentFilesystemPolicy(runner, agent, visibility = null) {
     if (agent.name === 'doctor') {
-      return null;
+      return {
+        read: [runner.projectDir],
+        write: [runner.projectDir],
+        denied: [],
+        dbPath: null,
+        projectDir: runner.projectDir,
+      };
     }
     const visMode = visibility?.mode || 'full';
     const repoDir = runner.path;
@@ -14,6 +20,7 @@ export function getAgentFilesystemPolicy(runner, agent, visibility = null) {
     if (visMode !== 'blind') {
       read.push(knowledgeDir);
       read.push(ownWorkspaceDir);
+      write.push(knowledgeDir);
       write.push(ownWorkspaceDir);
     }
     if (agent.isManager && visMode !== 'blind') {
@@ -29,7 +36,7 @@ export function getAgentFilesystemPolicy(runner, agent, visibility = null) {
       runner.orchestratorLogPath,
       runner.projectDbPath,
     ];
-    return { read, write, denied, dbPath: runner.projectDbPath };
+    return { read, write, denied, dbPath: runner.projectDbPath, projectDir: runner.projectDir };
   }
 
 export function buildAgentPrompt(runner, agent, task, visibility, { root }) {

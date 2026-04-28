@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { executeRead, executeWrite, executeEdit, executeTool } from '../src/agent-runner.js';
+import { buildSandboxProfile, executeRead, executeWrite, executeEdit, executeTool } from '../src/agent-runner.js';
+import { getAgentFilesystemPolicy } from '../src/orchestrator/agent-prompt.js';
 
 function mkProject() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-policy-'));
@@ -33,8 +34,8 @@ function mkProject() {
     knowledge,
     skills,
     allowedWorker: {
-      read: [repo, own],
-      write: [repo, own],
+      read: [repo, knowledge, own],
+      write: [repo, knowledge, own],
       denied: [
         path.join(projectRoot, 'agents'),
         path.join(projectRoot, 'responses'),
@@ -47,8 +48,8 @@ function mkProject() {
       dbPath: path.join(projectRoot, 'project.db'),
     },
     allowedFocused: {
-      read: [repo, own, knowledge],
-      write: [repo, own],
+      read: [repo, knowledge, own],
+      write: [repo, knowledge, own],
       denied: [
         path.join(projectRoot, 'agents'),
         path.join(projectRoot, 'responses'),
@@ -75,8 +76,8 @@ function mkProject() {
       dbPath: path.join(projectRoot, 'project.db'),
     },
     allowedManager: {
-      read: [repo, own, skills],
-      write: [repo, own, skills],
+      read: [repo, knowledge, own, skills],
+      write: [repo, knowledge, own, skills],
       denied: [
         path.join(projectRoot, 'agents'),
         path.join(projectRoot, 'responses'),
@@ -106,6 +107,21 @@ describe('agent filesystem allowlist', () => {
 
     const bashResult = await executeTool('Bash', { command: `cat ${JSON.stringify(path.join(p.other, 'secret.txt'))}` }, p.repo, 0, {}, null, null, p.allowedWorker);
     assert.match(bashResult, /Operation not permitted|Blocked|access denied|Exit code: 1/i);
+  });
+
+
+  it('allows full and focused agents to write shared knowledge but blocks blind agents', () => {
+    const p = mkProject();
+    const workerWrite = executeWrite({ file_path: path.join(p.knowledge, 'analysis.md'), content: 'durable finding' }, p.repo, p.allowedWorker);
+    assert.match(workerWrite, /Successfully wrote/i);
+
+    const focusedEdit = executeEdit({ file_path: path.join(p.knowledge, 'spec.md'), old_string: 'shared', new_string: 'updated shared' }, p.repo, p.allowedFocused);
+    assert.match(focusedEdit, /Successfully edited/i);
+
+    const blindRead = executeRead({ file_path: path.join(p.knowledge, 'spec.md') }, p.repo, p.allowedBlind);
+    const blindWrite = executeWrite({ file_path: path.join(p.knowledge, 'blind.md'), content: 'nope' }, p.repo, p.allowedBlind);
+    assert.match(blindRead, /access denied/i);
+    assert.match(blindWrite, /access denied/i);
   });
 
   it('blocks path traversal into another agent notes directory', async () => {
@@ -177,4 +193,175 @@ describe('agent filesystem allowlist', () => {
       assert.match(g2, /access denied/i);
     });
   });
+
+  it('uses a deny-default macOS sandbox profile with explicit file allows', () => {
+    const p = mkProject();
+    const profile = buildSandboxProfile(p.allowedWorker);
+    assert.match(profile, /\(deny default\)/);
+    assert.doesNotMatch(profile, /\(allow default\)/);
+    const repoReal = fs.realpathSync(p.repo);
+    const knowledgeReal = fs.realpathSync(p.knowledge);
+    assert.ok(profile.includes(`(allow file-read* (subpath "${repoReal}"`));
+    assert.ok(profile.includes(`(allow file-write* (subpath "${knowledgeReal}"`));
+  });
+
+  it('blocks dynamic outside-project paths in Bash when sandbox-exec is available', async (t) => {
+    if (process.platform !== 'darwin' || !fs.existsSync('/usr/bin/sandbox-exec')) {
+      t.skip('macOS sandbox-exec is required for dynamic Bash path enforcement');
+      return;
+    }
+    const p = mkProject();
+    const outside = path.join(os.homedir(), `.tbc-outside-${Date.now()}.txt`);
+    fs.writeFileSync(outside, 'outside secret');
+
+    const envRead = await executeTool('Bash', { command: 'cat "$OUTSIDE" && echo READ_OK' }, p.repo, 0, { OUTSIDE: outside }, null, null, p.allowedWorker);
+    assert.doesNotMatch(envRead, /outside secret/);
+    assert.doesNotMatch(envRead, /READ_OK/);
+
+    try {
+      const pythonRead = await executeTool('Bash', { command: `python3 - <<'PY'
+import os
+try:
+    print(open(os.environ["OUTSIDE"]).read())
+    print("READ_OK")
+except Exception as e:
+    print(type(e).__name__)
+PY`, timeout: 30000 }, p.repo, 0, { OUTSIDE: outside }, null, null, p.allowedWorker);
+      assert.doesNotMatch(pythonRead, /outside secret/);
+      assert.doesNotMatch(pythonRead, /READ_OK/);
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  });
+
+
+  it('runs tbc-db through the trusted runner path while keeping raw database reads blocked', async () => {
+    const p = mkProject();
+    fs.rmSync(p.allowedWorker.dbPath, { force: true });
+    const out = await executeTool(
+      'Bash',
+      { command: 'tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(out, /\(no issues\)/);
+
+    const raw = await executeTool('Bash', { command: `cat ${JSON.stringify(p.allowedWorker.dbPath)}` }, p.repo, 0, { TBC_DB: p.allowedWorker.dbPath }, null, null, p.allowedWorker);
+    assert.match(raw, /project database access is not allowed/i);
+  });
+
+  it('allows a cd prelude for trusted tbc-db commands', async () => {
+    const p = mkProject();
+    fs.rmSync(p.allowedWorker.dbPath, { force: true });
+    const out = await executeTool(
+      'Bash',
+      { command: 'cd .. && tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(out, /\(no issues\)/);
+
+    const created = await executeTool(
+      'Bash',
+      { command: 'cd .. && tbc-db issue-create --title "A && B" --actor leo' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(created, /Created issue #1/);
+
+    const chained = await executeTool(
+      'Bash',
+      { command: 'tbc-db query "SELECT id,title FROM issues ORDER BY id" && tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(chained, /A && B/);
+    assert.doesNotMatch(chained, /EPERM|operation not permitted/i);
+  });
+
+  it('applies issue visibility and actor policy before trusted tbc-db execution', async () => {
+    const p = mkProject();
+    const blindList = await executeTool(
+      'Bash',
+      { command: 'tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'blind', actor: 'leo', issues: [] },
+    );
+    assert.match(blindList, /blind mode cannot view/i);
+
+    const spoof = await executeTool(
+      'Bash',
+      { command: 'tbc-db issue-create --title test --actor athena' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(spoof, /cannot act as athena/i);
+  });
+
+  it('builds the intended policy matrix for normal agents, managers, and doctor', () => {
+    const p = mkProject();
+    const runner = {
+      path: p.repo,
+      projectDir: p.projectRoot,
+      knowledgeDir: p.knowledge,
+      agentsDir: path.join(p.projectRoot, 'agents'),
+      skillsDir: path.join(p.projectRoot, 'skills'),
+      workerSkillsDir: p.skills,
+      responsesDir: path.join(p.projectRoot, 'responses'),
+      uploadsDir: path.join(p.projectRoot, 'uploads'),
+      statePath: path.join(p.projectRoot, 'state.json'),
+      orchestratorLogPath: path.join(p.projectRoot, 'orchestrator.log'),
+      projectDbPath: path.join(p.projectRoot, 'project.db'),
+    };
+
+    const workerFull = getAgentFilesystemPolicy(runner, { name: 'leo', isManager: false }, { mode: 'full' });
+    assert.ok(workerFull.read.includes(p.knowledge));
+    assert.ok(workerFull.write.includes(p.knowledge));
+    assert.ok(workerFull.write.includes(path.join(p.projectRoot, 'agents', 'leo')));
+    assert.ok(!workerFull.write.includes(p.skills));
+
+    const workerBlind = getAgentFilesystemPolicy(runner, { name: 'leo', isManager: false }, { mode: 'blind' });
+    assert.deepEqual(workerBlind.read, [p.repo]);
+    assert.deepEqual(workerBlind.write, [p.repo]);
+
+    const managerFull = getAgentFilesystemPolicy(runner, { name: 'athena', isManager: true }, { mode: 'full' });
+    assert.ok(managerFull.write.includes(p.knowledge));
+    assert.ok(managerFull.write.includes(path.join(p.projectRoot, 'agents', 'athena')));
+    assert.ok(managerFull.write.includes(p.skills));
+
+    const doctor = getAgentFilesystemPolicy(runner, { name: 'doctor', isManager: true }, { mode: 'full' });
+    assert.deepEqual(doctor.read, [p.projectRoot]);
+    assert.deepEqual(doctor.write, [p.projectRoot]);
+  });
+
 });
