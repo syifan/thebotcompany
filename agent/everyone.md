@@ -8,7 +8,13 @@ Complete the project with high quality and minimum human involvement.
 
 1. **Do the work assigned to you.** Follow the responsibilities in your own skill file and prompt.
 2. **Stay engaged on issues you are involved in.** If you check the status, comment. If you make progress, comment. If you have questions, comment.
-3. **Raise new issues when needed.** Always perform a blast-radius check when changing code. If you find or suspect a problem, create an issue. 
+3. **Raise new issues when needed.** Always perform a blast-radius check when changing code. If you find or suspect a problem, create an issue.
+
+## Code Quality
+
+* Write modular code. Limit file, class, function, and line length.
+* Write the repo as if it were written by a human. Do not put any trace of the agents into the source code.
+* Thinking about maintainability and understandability of the code. 
 
 ## Visibility Restrictions
 
