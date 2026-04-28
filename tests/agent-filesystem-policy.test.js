@@ -234,6 +234,100 @@ PY`, timeout: 30000 }, p.repo, 0, { OUTSIDE: outside }, null, null, p.allowedWor
     }
   });
 
+
+  it('runs tbc-db through the trusted runner path while keeping raw database reads blocked', async () => {
+    const p = mkProject();
+    fs.rmSync(p.allowedWorker.dbPath, { force: true });
+    const out = await executeTool(
+      'Bash',
+      { command: 'tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(out, /\(no issues\)/);
+
+    const raw = await executeTool('Bash', { command: `cat ${JSON.stringify(p.allowedWorker.dbPath)}` }, p.repo, 0, { TBC_DB: p.allowedWorker.dbPath }, null, null, p.allowedWorker);
+    assert.match(raw, /project database access is not allowed/i);
+  });
+
+  it('allows a cd prelude for trusted tbc-db commands', async () => {
+    const p = mkProject();
+    fs.rmSync(p.allowedWorker.dbPath, { force: true });
+    const out = await executeTool(
+      'Bash',
+      { command: 'cd .. && tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(out, /\(no issues\)/);
+
+    const created = await executeTool(
+      'Bash',
+      { command: 'cd .. && tbc-db issue-create --title "A && B" --actor leo' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(created, /Created issue #1/);
+
+    const chained = await executeTool(
+      'Bash',
+      { command: 'tbc-db query "SELECT id,title FROM issues ORDER BY id" && tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(chained, /A && B/);
+    assert.doesNotMatch(chained, /EPERM|operation not permitted/i);
+  });
+
+  it('applies issue visibility and actor policy before trusted tbc-db execution', async () => {
+    const p = mkProject();
+    const blindList = await executeTool(
+      'Bash',
+      { command: 'tbc-db issue-list' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'blind', actor: 'leo', issues: [] },
+    );
+    assert.match(blindList, /blind mode cannot view/i);
+
+    const spoof = await executeTool(
+      'Bash',
+      { command: 'tbc-db issue-create --title test --actor athena' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.match(spoof, /cannot act as athena/i);
+  });
+
   it('builds the intended policy matrix for normal agents, managers, and doctor', () => {
     const p = mkProject();
     const runner = {
