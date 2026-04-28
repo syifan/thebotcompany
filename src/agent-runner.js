@@ -385,6 +385,105 @@ async function executeTrustedTbcDbChain(chain, cwd, timeout, bashEnv = null, run
   };
 }
 
+function isSafeGitBranchName(name) {
+  return /^[A-Za-z0-9._/-]+$/.test(String(name || ''))
+    && !String(name || '').startsWith('-')
+    && !String(name || '').includes('..')
+    && !String(name || '').includes('//');
+}
+
+function trustedGitArgsForCommand(command) {
+  const trimmed = String(command || '').trim();
+  if (!trimmed || !/^git(?:\s|$)/.test(trimmed)) return null;
+  if (hasUntrustedShellSyntax(trimmed)) return null;
+  const words = splitShellWords(trimmed);
+  if (!words || words[0] !== 'git') return null;
+  const args = words.slice(1);
+
+  if (args[0] === 'fetch' && args[1] === 'origin') {
+    if (args.length === 2) return args;
+    if (args.length === 3 && isSafeGitBranchName(args[2])) return args;
+  }
+
+  if (args[0] === 'push') {
+    const nonFlagArgs = args.slice(1).filter(arg => arg !== '-u' && arg !== '--set-upstream');
+    if (nonFlagArgs.length === 2 && nonFlagArgs[0] === 'origin' && isSafeGitBranchName(nonFlagArgs[1])) {
+      return args;
+    }
+  }
+
+  if (args[0] === 'pull' && args[1] === '--ff-only' && args[2] === 'origin') {
+    if (args.length === 3) return args;
+    if (args.length === 4 && isSafeGitBranchName(args[3])) return args;
+  }
+
+  return null;
+}
+
+function executeTrustedGit(args, cwd, timeout, bashEnv = null, runtime = null) {
+  return new Promise((resolve) => {
+    if (runtime?.signal?.aborted) {
+      resolve({ output: 'Command cancelled: agent was terminated.', exitCode: null, ok: false });
+      return;
+    }
+
+    const env = { ...process.env, ...bashEnv };
+    const proc = spawn('git', args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+      timeout,
+      env,
+    });
+    proc.unref();
+    runtime?.registerProcess?.(proc);
+
+    const stdout = createCappedOutputBuffer();
+    const stderr = createCappedOutputBuffer();
+    let settled = false;
+    proc.stdout.on('data', (d) => { stdout.append(d); });
+    proc.stderr.on('data', (d) => { stderr.append(d); });
+
+    const killProc = (signal) => {
+      try { process.kill(-proc.pid, signal); } catch {}
+    };
+    const onAbort = () => {
+      killProc('SIGTERM');
+      setTimeout(() => killProc('SIGKILL'), 5000);
+    };
+    runtime?.signal?.addEventListener('abort', onAbort, { once: true });
+
+    const timer = setTimeout(() => {
+      killProc('SIGTERM');
+      setTimeout(() => killProc('SIGKILL'), 5000);
+    }, timeout);
+
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      runtime?.signal?.removeEventListener('abort', onAbort);
+      runtime?.unregisterProcess?.(proc);
+      let result = '';
+      const stdoutText = stdout.toString();
+      const stderrText = stderr.toString();
+      if (stdoutText) result += stdoutText;
+      if (stderrText) result += (result ? '\n' : '') + stderrText;
+      if (code !== 0 && code !== null) result += `\nExit code: ${code}`;
+      resolve({ output: result || '(no output)', exitCode: code, ok: code === 0 });
+    });
+
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      runtime?.signal?.removeEventListener('abort', onAbort);
+      runtime?.unregisterProcess?.(proc);
+      resolve({ output: `Error executing git: ${err.message}`, exitCode: null, ok: false });
+    });
+  });
+}
+
 function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (!issuePolicy) return null;
   const parsed = extractTbcDbCommand(command);
@@ -781,6 +880,12 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     const trustedTbcDbChain = trustedTbcDbChainForCommand(command);
     if (trustedTbcDbChain) {
       executeTrustedTbcDbChain(trustedTbcDbChain, cwd, timeout, bashEnv, runtime).then(resolve);
+      return;
+    }
+
+    const trustedGitArgs = trustedGitArgsForCommand(command);
+    if (trustedGitArgs) {
+      executeTrustedGit(trustedGitArgs, cwd, timeout, bashEnv, runtime).then(resolve);
       return;
     }
 
