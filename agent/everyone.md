@@ -24,7 +24,7 @@ Chat and doctor do not follow these rules.
 
 - Agents cannot access another agent's private notes. Use `knowledge/` for long-term cross-agent knowledge and TBC issues for temporary communication.
 - Agents cannot close chat or human-opened issues.
-- Agents cannot use `gh` or other GitHub commands to access another repository.
+- Agents must rely on the configured GitHub token permissions for repository access. Do not try to bypass project/repository scope.
 - Agents cannot access anything outside the project root. See `folder_structure.md`.
 
 ### What focused agents cannot do

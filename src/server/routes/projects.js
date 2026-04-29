@@ -3,6 +3,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import yaml from 'js-yaml';
 import { readJson, sendJson } from '../http.js';
+import { createGithubAuthEnv } from '../../github-token.js';
 
 export async function handleProjectRegistryRoutes(req, res, url, pathParts, ctx) {
   const { requireWrite, parseGithubUrl, orchestrator, syncProjects, log } = ctx;
@@ -29,26 +30,32 @@ export async function handleProjectRegistryRoutes(req, res, url, pathParts, ctx)
 
       fs.mkdirSync(parsed.projectDir, { recursive: true });
 
-      if (fs.existsSync(path.join(parsed.repoDir, '.git'))) {
-        try {
-          execSync('git pull', { cwd: parsed.repoDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe' });
-          log(`Pulled latest for ${parsed.id}`);
-        } catch (error) {
-          log(`Git pull failed for ${parsed.id}: ${error.message}`);
+      const gitAuth = createGithubAuthEnv(process.env);
+      try {
+        if (fs.existsSync(path.join(parsed.repoDir, '.git'))) {
+          try {
+            execSync('git pull', { cwd: parsed.repoDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe', env: gitAuth.env });
+            log(`Pulled latest for ${parsed.id}`);
+          } catch (error) {
+            log(`Git pull failed for ${parsed.id}: ${error.message}`);
+          }
+        } else {
+          try {
+            execSync(`git clone ${parsed.cloneUrl} repo`, {
+              cwd: parsed.projectDir,
+              encoding: 'utf-8',
+              timeout: 120000,
+              stdio: 'pipe',
+              env: gitAuth.env,
+            });
+            log(`Cloned ${parsed.id}`);
+          } catch (error) {
+            sendJson(res, 500, { error: `Failed to clone repository: ${error.message}` });
+            return true;
+          }
         }
-      } else {
-        try {
-          execSync(`git clone ${parsed.cloneUrl} repo`, {
-            cwd: parsed.projectDir,
-            encoding: 'utf-8',
-            timeout: 120000,
-            stdio: 'pipe',
-          });
-          log(`Cloned ${parsed.id}`);
-        } catch (error) {
-          sendJson(res, 500, { error: `Failed to clone repository: ${error.message}` });
-          return true;
-        }
+      } finally {
+        gitAuth.cleanup();
       }
 
       const knowledgeSpecPath = path.join(parsed.projectDir, 'knowledge', 'spec.md');

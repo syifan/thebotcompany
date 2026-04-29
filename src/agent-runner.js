@@ -10,7 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getGithubToken } from './github-token.js';
+import { createGithubAuthEnv } from './github-token.js';
 import {
   resolveModel,
   formatTools,
@@ -697,29 +697,6 @@ function getToolDefinitions() {
   ];
 }
 
-function applyGithubAuthEnv(env, tempParent) {
-  const githubToken = getGithubToken();
-  if (!githubToken) return { env, cleanup: () => {} };
-
-  const authEnv = {
-    ...env,
-    GH_TOKEN: githubToken,
-    GITHUB_TOKEN: githubToken,
-    TBC_GIT_TOKEN: githubToken,
-    GIT_TERMINAL_PROMPT: '0',
-  };
-
-  const askpassDir = fs.mkdtempSync(path.join(tempParent || os.tmpdir(), '.tbc-git-askpass-'));
-  const askpassPath = path.join(askpassDir, 'askpass.sh');
-  fs.writeFileSync(askpassPath, '#!/bin/sh\ncase "$1" in\n  *Username*) printf "%s\\n" "x-access-token" ;;\n  *) printf "%s\\n" "$TBC_GIT_TOKEN" ;;\nesac\n', { mode: 0o700 });
-  authEnv.GIT_ASKPASS = askpassPath;
-
-  return {
-    env: authEnv,
-    cleanup: () => { try { fs.rmSync(askpassDir, { recursive: true, force: true }); } catch {} },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
@@ -794,7 +771,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       spawnArgs = ['-f', sandboxProfilePath, 'bash', '-c', command];
     }
 
-    const githubAuth = applyGithubAuthEnv(env, sandboxTempDir || (fs.existsSync(cwd) ? cwd : os.tmpdir()));
+    const githubAuth = createGithubAuthEnv(env, { tempParent: sandboxTempDir || (fs.existsSync(cwd) ? cwd : os.tmpdir()) });
     env = githubAuth.env;
     githubAuthCleanup = githubAuth.cleanup;
 

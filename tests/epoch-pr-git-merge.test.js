@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -43,6 +43,18 @@ function createRepo() {
 }
 
 describe('TBC PR git integration merge', () => {
+  let oldGithubToken;
+
+  beforeEach(() => {
+    oldGithubToken = process.env.TBC_GITHUB_TOKEN;
+    process.env.TBC_GITHUB_TOKEN = 'github_pat_test_scope_token';
+  });
+
+  afterEach(() => {
+    if (oldGithubToken === undefined) delete process.env.TBC_GITHUB_TOKEN;
+    else process.env.TBC_GITHUB_TOKEN = oldGithubToken;
+  });
+
   it('fast-forwards the target branch, pushes it, and returns merge evidence', () => {
     const { repo } = createRepo();
     git(repo, ['checkout', '-b', 'feature']);

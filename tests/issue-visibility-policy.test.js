@@ -127,6 +127,6 @@ describe('issue visibility policy', () => {
     const p = mkProject();
     const result = await executeTool('Bash', { command: 'printf before; gh pr create --help >/dev/null 2>&1 || true; printf after' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, 'syifan/thebotcompany', p.allowedPaths, p.issuePolicies.full);
     assert.match(result, /beforeafter/);
-    assert.doesNotMatch(result, /gh pr create is not allowed|tbc-db pr-create/i);
+    assert.doesNotMatch(result, /blocked/i);
   });
 });

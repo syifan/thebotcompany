@@ -1060,7 +1060,7 @@ export default function SettingsPanel({
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">Required</span>
                 </div>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                  Used only by trusted TBC GitHub operations. Agents never receive this token in their shell.
+                  Provided to agent shells as GitHub auth. Safety relies on this token's fine-grained repository permissions.
                 </p>
               </div>
               {githubTokenStatus.hasToken && <code className="text-xs text-neutral-500 dark:text-neutral-400 shrink-0">{githubTokenStatus.preview}</code>}

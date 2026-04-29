@@ -1,44 +1,27 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { execSync } from 'child_process';
 import { readJson, sendJson } from '../http.js';
-import { getGithubToken } from '../../github-token.js';
+import { createGithubAuthEnv } from '../../github-token.js';
 
-function githubEnv() {
-  const token = getGithubToken();
-  if (!token) return null;
-  return { ...process.env, GH_TOKEN: token, GITHUB_TOKEN: token, GIT_TERMINAL_PROMPT: '0' };
-}
-
-function withGitAskpass(env) {
-  const token = getGithubToken();
-  if (!token) return { env, cleanup: () => {} };
-  const askpassDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-git-askpass-'));
-  const askpassPath = path.join(askpassDir, 'askpass.sh');
-  fs.writeFileSync(askpassPath, '#!/bin/sh\ncase "$1" in\n  *Username*) printf "%s\\n" "x-access-token" ;;\n  *) printf "%s\\n" "$TBC_GIT_TOKEN" ;;\nesac\n', { mode: 0o700 });
-  return {
-    env: { ...env, GIT_ASKPASS: askpassPath, TBC_GIT_TOKEN: token, GIT_TERMINAL_PROMPT: '0' },
-    cleanup: () => { try { fs.rmSync(askpassDir, { recursive: true, force: true }); } catch {} },
-  };
-}
-
-function requireGithubToken(res) {
-  const env = githubEnv();
-  if (!env) {
+function requireGithubToken(res, baseEnv = process.env) {
+  const auth = createGithubAuthEnv(baseEnv);
+  if (!auth.hasToken) {
     sendJson(res, 400, { error: 'GitHub personal access token is not configured. Add a fine-grained token in Settings > Credentials.' });
     return null;
   }
-  return env;
+  return auth;
 }
 
 export async function handleGithubRoutes(req, res, url, ctx) {
   const { requireWrite, tbcHome } = ctx;
 
   if (req.method === 'GET' && url.pathname === '/api/github/orgs') {
+    let auth = null;
     try {
-      const env = requireGithubToken(res);
-      if (!env) return true;
+      auth = requireGithubToken(res);
+      if (!auth) return true;
+      const { env } = auth;
       const user = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000, env }).trim();
       let orgs = [];
       try {
@@ -48,10 +31,11 @@ export async function handleGithubRoutes(req, res, url, ctx) {
       sendJson(res, 200, { user, orgs: [user, ...orgs] });
     } catch (error) {
       sendJson(res, 500, { error: error.message });
+    } finally {
+      auth?.cleanup?.();
     }
     return true;
   }
-
 
   if (req.method === 'GET' && url.pathname === '/api/github/repos') {
     const owner = url.searchParams.get('owner');
@@ -59,9 +43,11 @@ export async function handleGithubRoutes(req, res, url, ctx) {
       sendJson(res, 400, { error: 'Missing owner parameter' });
       return true;
     }
+    let auth = null;
     try {
-      const env = requireGithubToken(res);
-      if (!env) return true;
+      auth = requireGithubToken(res);
+      if (!auth) return true;
+      const { env } = auth;
       const output = execSync(
         `gh repo list ${owner} --json nameWithOwner,name,description --limit 100`,
         { encoding: 'utf-8', timeout: 30000, env }
@@ -69,12 +55,15 @@ export async function handleGithubRoutes(req, res, url, ctx) {
       sendJson(res, 200, { repos: JSON.parse(output) });
     } catch (error) {
       sendJson(res, 500, { error: error.message });
+    } finally {
+      auth?.cleanup?.();
     }
     return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/github/create-repo') {
     if (!requireWrite(req, res)) return true;
+    let auth = null;
     try {
       const { name, owner, isPrivate, description } = await readJson(req);
       if (!name) {
@@ -82,8 +71,9 @@ export async function handleGithubRoutes(req, res, url, ctx) {
         return true;
       }
 
-      const env = requireGithubToken(res);
-      if (!env) return true;
+      auth = requireGithubToken(res);
+      if (!auth) return true;
+      const { env } = auth;
       const currentUser = execSync('gh api user --jq .login', { encoding: 'utf-8', timeout: 15000, env }).trim();
       const resolvedOwner = owner || currentUser;
       const isOrg = owner && owner !== currentUser;
@@ -100,16 +90,13 @@ export async function handleGithubRoutes(req, res, url, ctx) {
 
       execSync(cmd, { encoding: 'utf-8', timeout: 30000, stdio: 'pipe', env });
       const cloneUrl = `https://github.com/${resolvedOwner}/${name}.git`;
-      const gitAuth = withGitAskpass(env);
-      try {
-        execSync(`git clone ${cloneUrl} repo`, { cwd: projectDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe', env: gitAuth.env });
-      } finally {
-        gitAuth.cleanup();
-      }
+      execSync(`git clone ${cloneUrl} repo`, { cwd: projectDir, encoding: 'utf-8', timeout: 60000, stdio: 'pipe', env });
 
       sendJson(res, 200, { success: true, id: repoId, path: repoDir });
     } catch (error) {
       sendJson(res, 500, { error: error.message });
+    } finally {
+      auth?.cleanup?.();
     }
     return true;
   }

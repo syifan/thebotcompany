@@ -1,10 +1,12 @@
 import { spawnSync } from 'child_process';
+import { createGithubAuthEnv } from '../github-token.js';
 
-function runGit(repoDir, args, { allowFailure = false } = {}) {
+function runGit(repoDir, args, { allowFailure = false, env = process.env } = {}) {
   const result = spawnSync('git', args, {
     cwd: repoDir,
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
+    env,
   });
   const output = `${result.stdout || ''}${result.stderr || ''}`.trim();
   if (!allowFailure && result.status !== 0) {
@@ -32,50 +34,59 @@ export function mergeEpochPrBranch(runner, pr, { actor = 'apollo' } = {}) {
   const baseBranch = assertSafeBranchName(pr.base_branch || 'main', 'base');
   const headBranch = assertSafeBranchName(pr.head_branch || pr.branch_name, 'head');
 
-  const dirty = runGit(repoDir, ['status', '--porcelain'], { allowFailure: false }).stdout.trim();
-  if (dirty) {
-    throw new Error(`Cannot merge TBC PR${prId}: repository has uncommitted changes. Commit or clean them before merging.`);
-  }
-
-  const fetchBase = runGit(repoDir, ['fetch', 'origin', `+refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`], { allowFailure: true });
-  if (fetchBase.status !== 0) {
-    throw new Error(`Cannot merge TBC PR${prId}: failed to fetch origin/${baseBranch}: ${fetchBase.output}`);
-  }
-
-  const fetchHead = runGit(repoDir, ['fetch', 'origin', `+refs/heads/${headBranch}:refs/remotes/origin/${headBranch}`], { allowFailure: true });
-  if (fetchHead.status !== 0) {
-    throw new Error(`Cannot merge TBC PR${prId}: head branch ${headBranch} is not available on origin. Push the branch first, then retry. ${fetchHead.output}`.trim());
-  }
-
-  const baseRef = `origin/${baseBranch}`;
-  const headRef = `origin/${headBranch}`;
-  const baseSha = runGit(repoDir, ['rev-parse', baseRef]).stdout.trim();
-  const headSha = runGit(repoDir, ['rev-parse', headRef]).stdout.trim();
-
-  const ffCheck = runGit(repoDir, ['merge-base', '--is-ancestor', baseRef, headRef], { allowFailure: true });
-  if (ffCheck.status !== 0) {
-    throw new Error(`Cannot merge TBC PR${prId}: ${headBranch} is not a fast-forward from ${baseBranch}. Rebase ${headBranch} onto origin/${baseBranch} first, push it, then retry.`);
+  const gitAuth = createGithubAuthEnv(process.env);
+  if (!gitAuth.hasToken) {
+    throw new Error('Cannot merge TBC PR: GitHub personal access token is not configured. Add a fine-grained token in Settings > Credentials.');
   }
 
   try {
-    runGit(repoDir, ['checkout', baseBranch]);
-    runGit(repoDir, ['reset', '--hard', baseRef]);
-    runGit(repoDir, ['merge', '--ff-only', headRef]);
-    runGit(repoDir, ['push', 'origin', `${baseBranch}:${baseBranch}`]);
-    runGit(repoDir, ['fetch', 'origin', `+refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`]);
-    const verify = runGit(repoDir, ['merge-base', '--is-ancestor', headSha, baseRef], { allowFailure: true });
-    if (verify.status !== 0) {
-      throw new Error(`origin/${baseBranch} does not contain ${headSha} after push.`);
+    const dirty = runGit(repoDir, ['status', '--porcelain'], { allowFailure: false, env: gitAuth.env }).stdout.trim();
+    if (dirty) {
+      throw new Error(`Cannot merge TBC PR${prId}: repository has uncommitted changes. Commit or clean them before merging.`);
     }
-  } catch (err) {
-    throw new Error(`Cannot merge TBC PR${prId}: git integration failed. ${err.message}`);
-  }
 
-  return {
-    actor,
-    baseBranch,
-    headBranch,
-    baseShaBefore: baseSha,
-    headSha,
-  };
+    const fetchBase = runGit(repoDir, ['fetch', 'origin', `+refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`], { allowFailure: true, env: gitAuth.env });
+    if (fetchBase.status !== 0) {
+      throw new Error(`Cannot merge TBC PR${prId}: failed to fetch origin/${baseBranch}: ${fetchBase.output}`);
+    }
+
+    const fetchHead = runGit(repoDir, ['fetch', 'origin', `+refs/heads/${headBranch}:refs/remotes/origin/${headBranch}`], { allowFailure: true, env: gitAuth.env });
+    if (fetchHead.status !== 0) {
+      throw new Error(`Cannot merge TBC PR${prId}: head branch ${headBranch} is not available on origin. Push the branch first, then retry. ${fetchHead.output}`.trim());
+    }
+
+    const baseRef = `origin/${baseBranch}`;
+    const headRef = `origin/${headBranch}`;
+    const baseSha = runGit(repoDir, ['rev-parse', baseRef], { env: gitAuth.env }).stdout.trim();
+    const headSha = runGit(repoDir, ['rev-parse', headRef], { env: gitAuth.env }).stdout.trim();
+
+    const ffCheck = runGit(repoDir, ['merge-base', '--is-ancestor', baseRef, headRef], { allowFailure: true, env: gitAuth.env });
+    if (ffCheck.status !== 0) {
+      throw new Error(`Cannot merge TBC PR${prId}: ${headBranch} is not a fast-forward from ${baseBranch}. Rebase ${headBranch} onto origin/${baseBranch} first, push it, then retry.`);
+    }
+
+    try {
+      runGit(repoDir, ['checkout', baseBranch], { env: gitAuth.env });
+      runGit(repoDir, ['reset', '--hard', baseRef], { env: gitAuth.env });
+      runGit(repoDir, ['merge', '--ff-only', headRef], { env: gitAuth.env });
+      runGit(repoDir, ['push', 'origin', `${baseBranch}:${baseBranch}`], { env: gitAuth.env });
+      runGit(repoDir, ['fetch', 'origin', `+refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`], { env: gitAuth.env });
+      const verify = runGit(repoDir, ['merge-base', '--is-ancestor', headSha, baseRef], { allowFailure: true, env: gitAuth.env });
+      if (verify.status !== 0) {
+        throw new Error(`origin/${baseBranch} does not contain ${headSha} after push.`);
+      }
+    } catch (err) {
+      throw new Error(`Cannot merge TBC PR${prId}: git integration failed. ${err.message}`);
+    }
+
+    return {
+      actor,
+      baseBranch,
+      headBranch,
+      baseShaBefore: baseSha,
+      headSha,
+    };
+  } finally {
+    gitAuth.cleanup();
+  }
 }

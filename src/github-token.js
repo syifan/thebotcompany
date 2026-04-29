@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 export const GITHUB_TOKEN_ENV = 'TBC_GITHUB_TOKEN';
@@ -29,4 +30,26 @@ export function setGithubTokenInEnvFile(tbcHome, token) {
 
   fs.mkdirSync(tbcHome, { recursive: true });
   fs.writeFileSync(envPath, envContent);
+}
+
+export function createGithubAuthEnv(baseEnv = process.env, { tempParent = os.tmpdir() } = {}) {
+  const token = getGithubToken();
+  if (!token) return { env: { ...baseEnv }, cleanup: () => {}, hasToken: false };
+
+  const askpassDir = fs.mkdtempSync(path.join(tempParent || os.tmpdir(), '.tbc-git-askpass-'));
+  const askpassPath = path.join(askpassDir, 'askpass.sh');
+  fs.writeFileSync(askpassPath, '#!/bin/sh\ncase "$1" in\n  *Username*) printf "%s\\n" "x-access-token" ;;\n  *) printf "%s\\n" "$TBC_GIT_TOKEN" ;;\nesac\n', { mode: 0o700 });
+
+  return {
+    env: {
+      ...baseEnv,
+      GH_TOKEN: token,
+      GITHUB_TOKEN: token,
+      TBC_GIT_TOKEN: token,
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_ASKPASS: askpassPath,
+    },
+    cleanup: () => { try { fs.rmSync(askpassDir, { recursive: true, force: true }); } catch {} },
+    hasToken: true,
+  };
 }
