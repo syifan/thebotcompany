@@ -123,9 +123,10 @@ describe('issue visibility policy', () => {
     assert.match(blindQuery, /access denied|query|blind mode|issue tracker/i);
   });
 
-  it('blocks gh pr create in favor of TBC PRs', async () => {
+  it('does not policy-screen gh commands; GitHub token scopes govern them', async () => {
     const p = mkProject();
-    const result = await executeTool('Bash', { command: 'gh pr create --title "x" --body "y"' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, 'syifan/thebotcompany', p.allowedPaths, p.issuePolicies.full);
-    assert.match(result, /gh pr create is not allowed|tbc-db pr-create/i);
+    const result = await executeTool('Bash', { command: 'printf before; gh pr create --help >/dev/null 2>&1 || true; printf after' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, 'syifan/thebotcompany', p.allowedPaths, p.issuePolicies.full);
+    assert.match(result, /beforeafter/);
+    assert.doesNotMatch(result, /gh pr create is not allowed|tbc-db pr-create/i);
   });
 });

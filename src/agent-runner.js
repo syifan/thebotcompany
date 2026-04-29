@@ -53,56 +53,8 @@ function parseRetryCooldown(message) {
 }
 
 // ---------------------------------------------------------------------------
-// Git/gh sandbox: block unauthorized repo operations
+// GitHub auth is delegated to scoped PAT permissions, not Bash command screening.
 // ---------------------------------------------------------------------------
-function checkGitCommand(command, allowedRepo) {
-  // --- git checks ---
-  const hasGit = /(?:^|[;&|`\s])git\s/.test(command) || command.trimStart().startsWith('git ');
-  if (hasGit) {
-    // Block: git clone
-    if (/(?:^|[;&|`\s])git\s+clone\b/.test(command)) {
-      return 'Blocked: git clone is not allowed. Agents may only operate within the current project repo.';
-    }
-
-    // Block: git remote add / set-url
-    if (/(?:^|[;&|`\s])git\s+remote\s+(add|set-url)\b/.test(command)) {
-      return 'Blocked: modifying git remotes is not allowed.';
-    }
-
-    // Block: git push to a remote other than origin
-    const pushMatch = command.match(/(?:^|[;&|`\s])git\s+push\s+(.*)/);
-    if (pushMatch) {
-      const args = pushMatch[1].trim().split(/\s+/).filter(a => !a.startsWith('-'));
-      if (args.length > 0 && args[0] !== 'origin') {
-        return `Blocked: git push to remote "${args[0]}" is not allowed. Only "origin" is permitted.`;
-      }
-    }
-  }
-
-  // --- gh CLI checks ---
-  const hasGh = /(?:^|[;&|`\s])gh\s/.test(command) || command.trimStart().startsWith('gh ');
-  if (hasGh) {
-    if (/(?:^|[;&|`\s])gh\s+pr\s+create\b/.test(command)) {
-      return 'Blocked: gh pr create is not allowed. Create a local TBC PR instead with tbc-db pr-create.';
-    }
-
-    // Block: gh operations targeting a different repo
-    const ghRepoMatch = command.match(/(?:^|[;&|`\s])gh\s+.*--repo\s+([^\s]+)/);
-    if (ghRepoMatch) {
-      const targetRepo = ghRepoMatch[1].replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
-      if (allowedRepo && targetRepo !== allowedRepo) {
-        return `Blocked: gh operation targeting "${targetRepo}" is not allowed. Only "${allowedRepo}" is permitted.`;
-      }
-    }
-
-    // Block: gh repo clone / gh repo create / gh repo fork
-    if (/(?:^|[;&|`\s])gh\s+repo\s+(clone|create|fork)\b/.test(command)) {
-      return 'Blocked: gh repo clone/create/fork is not allowed.';
-    }
-  }
-
-  return null; // allowed
-}
 
 function checkSensitiveDbAccess(command) {
   if (!command) return null;
@@ -386,179 +338,6 @@ async function executeTrustedTbcDbChain(chain, cwd, timeout, bashEnv = null, run
   };
 }
 
-function isSafeGitBranchName(name) {
-  return /^[A-Za-z0-9._/-]+$/.test(String(name || ''))
-    && !String(name || '').startsWith('-')
-    && !String(name || '').includes('..')
-    && !String(name || '').includes('//');
-}
-
-function extractSimpleEmbeddedCommand(command, bin) {
-  const text = String(command || '')
-    .replace(/\bGIT_TERMINAL_PROMPT=0\s+/g, '')
-    .replace(/\bGH_PROMPT_DISABLED=1\s+/g, '');
-  const match = text.match(new RegExp(`(?:^|[\\s({;])(${bin}\\s+[^;&|\\n)]*)`));
-  if (!match) return null;
-  return match[1]
-    .replace(/\s+2>&1\s*$/g, '')
-    .replace(/\s+1>&2\s*$/g, '')
-    .trim();
-}
-
-function trustedGitArgsForCommand(command) {
-  const trimmed = String(command || '').trim();
-  if (!trimmed || !/^git(?:\s|$)/.test(trimmed)) return null;
-  if (hasUntrustedShellSyntax(trimmed)) return null;
-  const words = splitShellWords(trimmed);
-  if (!words || words[0] !== 'git') return null;
-  const args = words.slice(1);
-
-  if (args[0] === 'fetch') {
-    const nonFlagArgs = args.slice(1).filter(arg => !arg.startsWith('-'));
-    if (nonFlagArgs[0] === 'origin' && nonFlagArgs.slice(1).every(isSafeGitBranchName)) return args;
-    if (nonFlagArgs.length === 0) return args;
-  }
-
-  if (args[0] === 'ls-remote' && args[1] === '--heads' && args[2] === 'origin') {
-    if (args.length >= 3 && args.slice(3).every(isSafeGitBranchName)) return args;
-  }
-
-  if (args[0] === 'push') {
-    const nonFlagArgs = args.slice(1).filter(arg => !arg.startsWith('-'));
-    if (nonFlagArgs[0] === 'origin' && nonFlagArgs.slice(1).length >= 1 && nonFlagArgs.slice(1).every(arg => isSafeGitBranchName(arg.replace(/^HEAD:/, '').replace(/^refs\/heads\//, '')))) {
-      return args;
-    }
-  }
-
-  if (args[0] === 'pull' && args[1] === '--ff-only' && args[2] === 'origin') {
-    if (args.length === 3) return args;
-    if (args.length === 4 && isSafeGitBranchName(args[3])) return args;
-  }
-
-  return null;
-}
-
-function trustedGhArgsForCommand(command, allowedRepo = null) {
-  const trimmed = String(command || '').trim();
-  if (!trimmed || !/^gh(?:\s|$)/.test(trimmed)) return null;
-  if (hasUntrustedShellSyntax(trimmed)) return null;
-  const words = splitShellWords(trimmed);
-  if (!words || words[0] !== 'gh') return null;
-  const args = words.slice(1);
-
-  if (args[0] === 'auth' && args[1] === 'status') return args;
-
-  const repoFlagIndex = args.indexOf('--repo');
-  const requestedRepo = repoFlagIndex >= 0 ? args[repoFlagIndex + 1] : allowedRepo;
-  if (allowedRepo && requestedRepo && requestedRepo !== allowedRepo) return null;
-
-  if (args[0] === 'run' && ['view', 'list'].includes(args[1])) return args;
-  if (args[0] === 'api' && allowedRepo && args[1]?.startsWith(`repos/${allowedRepo}/actions/`)) return args;
-  if (args[0] === 'api' && allowedRepo && args[1]?.startsWith(`repos/${allowedRepo}/commits/`)) return args;
-
-  return null;
-}
-
-function executeTrustedGit(args, cwd, timeout, bashEnv = null, runtime = null) {
-  return executeTrustedHostCommand('git', args, cwd, timeout, bashEnv, runtime);
-}
-
-function executeTrustedGh(args, cwd, timeout, bashEnv = null, runtime = null) {
-  return executeTrustedHostCommand('gh', args, cwd, timeout, bashEnv, runtime);
-}
-
-function executeTrustedHostCommand(bin, args, cwd, timeout, bashEnv = null, runtime = null) {
-  return new Promise((resolve) => {
-    if (runtime?.signal?.aborted) {
-      resolve({ output: 'Command cancelled: agent was terminated.', exitCode: null, ok: false });
-      return;
-    }
-
-    const githubToken = getGithubToken();
-    if ((bin === 'git' || bin === 'gh') && !githubToken) {
-      resolve({
-        output: 'Blocked: GitHub personal access token is not configured. Add a fine-grained token in Settings > Credentials before using trusted GitHub operations.',
-        exitCode: 1,
-        ok: false,
-      });
-      return;
-    }
-
-    const env = { ...process.env, ...bashEnv };
-    let cleanupAskpass = null;
-    if (githubToken) {
-      env.GH_TOKEN = githubToken;
-      env.GITHUB_TOKEN = githubToken;
-      env.GIT_TERMINAL_PROMPT = '0';
-    }
-    if (bin === 'git' && githubToken) {
-      const askpassDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-git-askpass-'));
-      const askpassPath = path.join(askpassDir, 'askpass.sh');
-      fs.writeFileSync(askpassPath, '#!/bin/sh\ncase "$1" in\n  *Username*) printf "%s\\n" "x-access-token" ;;\n  *) printf "%s\\n" "$TBC_GIT_TOKEN" ;;\nesac\n', { mode: 0o700 });
-      env.GIT_ASKPASS = askpassPath;
-      env.TBC_GIT_TOKEN = githubToken;
-      cleanupAskpass = () => {
-        try { fs.rmSync(askpassDir, { recursive: true, force: true }); } catch {}
-      };
-    }
-
-    const proc = spawn(bin, args, {
-      cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
-      timeout,
-      env,
-    });
-    proc.unref();
-    runtime?.registerProcess?.(proc);
-
-    const stdout = createCappedOutputBuffer();
-    const stderr = createCappedOutputBuffer();
-    let settled = false;
-    proc.stdout.on('data', (d) => { stdout.append(d); });
-    proc.stderr.on('data', (d) => { stderr.append(d); });
-
-    const killProc = (signal) => {
-      try { process.kill(-proc.pid, signal); } catch {}
-    };
-    const onAbort = () => {
-      killProc('SIGTERM');
-      setTimeout(() => killProc('SIGKILL'), 5000);
-    };
-    runtime?.signal?.addEventListener('abort', onAbort, { once: true });
-
-    const timer = setTimeout(() => {
-      killProc('SIGTERM');
-      setTimeout(() => killProc('SIGKILL'), 5000);
-    }, timeout);
-
-    proc.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      runtime?.signal?.removeEventListener('abort', onAbort);
-      runtime?.unregisterProcess?.(proc);
-      cleanupAskpass?.();
-      let result = '';
-      const stdoutText = stdout.toString();
-      const stderrText = stderr.toString();
-      if (stdoutText) result += stdoutText;
-      if (stderrText) result += (result ? '\n' : '') + stderrText;
-      if (code !== 0 && code !== null) result += `\nExit code: ${code}`;
-      resolve({ output: result || '(no output)', exitCode: code, ok: code === 0 });
-    });
-
-    proc.on('error', (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      runtime?.signal?.removeEventListener('abort', onAbort);
-      runtime?.unregisterProcess?.(proc);
-      cleanupAskpass?.();
-      resolve({ output: `Error executing ${bin}: ${err.message}`, exitCode: null, ok: false });
-    });
-  });
-}
 
 function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (!issuePolicy) return null;
@@ -918,6 +697,29 @@ function getToolDefinitions() {
   ];
 }
 
+function applyGithubAuthEnv(env, tempParent) {
+  const githubToken = getGithubToken();
+  if (!githubToken) return { env, cleanup: () => {} };
+
+  const authEnv = {
+    ...env,
+    GH_TOKEN: githubToken,
+    GITHUB_TOKEN: githubToken,
+    TBC_GIT_TOKEN: githubToken,
+    GIT_TERMINAL_PROMPT: '0',
+  };
+
+  const askpassDir = fs.mkdtempSync(path.join(tempParent || os.tmpdir(), '.tbc-git-askpass-'));
+  const askpassPath = path.join(askpassDir, 'askpass.sh');
+  fs.writeFileSync(askpassPath, '#!/bin/sh\ncase "$1" in\n  *Username*) printf "%s\\n" "x-access-token" ;;\n  *) printf "%s\\n" "$TBC_GIT_TOKEN" ;;\nesac\n', { mode: 0o700 });
+  authEnv.GIT_ASKPASS = askpassPath;
+
+  return {
+    env: authEnv,
+    cleanup: () => { try { fs.rmSync(askpassDir, { recursive: true, force: true }); } catch {} },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tool Execution
 // ---------------------------------------------------------------------------
@@ -937,11 +739,6 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       return;
     }
 
-    const gitBlock = checkGitCommand(command, allowedRepo);
-    if (gitBlock) {
-      resolve({ output: gitBlock, exitCode: 1, ok: false });
-      return;
-    }
     const dbBlock = checkSensitiveDbAccess(originalCommand);
     if (dbBlock) {
       resolve({ output: dbBlock, exitCode: 1, ok: false });
@@ -959,17 +756,6 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       return;
     }
 
-    const trustedGitArgs = trustedGitArgsForCommand(command) || trustedGitArgsForCommand(extractSimpleEmbeddedCommand(command, 'git'));
-    if (trustedGitArgs) {
-      executeTrustedGit(trustedGitArgs, cwd, timeout, bashEnv, runtime).then(resolve);
-      return;
-    }
-
-    const trustedGhArgs = trustedGhArgsForCommand(command, allowedRepo) || trustedGhArgsForCommand(extractSimpleEmbeddedCommand(command, 'gh'), allowedRepo);
-    if (trustedGhArgs) {
-      executeTrustedGh(trustedGhArgs, cwd, timeout, bashEnv, runtime).then(resolve);
-      return;
-    }
 
     const pathBlock = checkPathAccessInCommand(command, cwd, allowedPaths);
     if (pathBlock) {
@@ -981,6 +767,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     let spawnArgs = ['-c', command];
     let sandboxProfilePath = null;
     let sandboxTempDir = null;
+    let githubAuthCleanup = () => {};
     let env = bashEnv ? { ...process.env, ...bashEnv } : { ...process.env };
     if (allowedPaths && os.platform() === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) {
       const sandboxTempParent = fs.existsSync(cwd) ? cwd : os.tmpdir();
@@ -1006,6 +793,10 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       spawnCmd = '/usr/bin/sandbox-exec';
       spawnArgs = ['-f', sandboxProfilePath, 'bash', '-c', command];
     }
+
+    const githubAuth = applyGithubAuthEnv(env, sandboxTempDir || (fs.existsSync(cwd) ? cwd : os.tmpdir()));
+    env = githubAuth.env;
+    githubAuthCleanup = githubAuth.cleanup;
 
     const proc = spawn(spawnCmd, spawnArgs, {
       cwd,
@@ -1055,6 +846,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
+      githubAuthCleanup();
       if (sandboxTempDir) {
         try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
       }
@@ -1070,6 +862,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
+      githubAuthCleanup();
       if (sandboxTempDir) {
         try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
       }
