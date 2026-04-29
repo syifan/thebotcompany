@@ -104,12 +104,6 @@ export async function runRunnerLoop(runner, deps = {}) {
                   deps.log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, runner.id);
                 } else if (milestone.reset_to && resetTarget) {
                   deps.log(`Athena reset planning anchor to ${resetTarget.label}`, runner.id);
-                  if (runner.currentMilestoneBranch) {
-                    runner.closeOpenEpochPRForBranch(runner.currentMilestoneBranch, {
-                      actor: 'athena',
-                      reason: `Athena reset subtree to ${resetTarget.label} while replanning.`,
-                    });
-                  }
                 }
                 runner.setState({
                   milestoneTitle,
@@ -245,7 +239,7 @@ export async function runRunnerLoop(runner, deps = {}) {
             epochStateChanged = true;
           }
           if (epochStateChanged) runner.saveState();
-          const openEpochPr = await runner.ensureEpochPRForCurrentMilestone();
+          const openEpochPr = await runner.getOpenEpochPRForCurrentMilestone();
           // Build context for Ares (remaining includes this cycle)
           const cyclesRemaining = Math.max(0, runner.milestoneCyclesBudget - runner.milestoneCyclesUsed);
           let aresContext = `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}
@@ -254,7 +248,7 @@ export async function runRunnerLoop(runner, deps = {}) {
 > **Cycles remaining:** ${cyclesRemaining} of ${runner.milestoneCyclesBudget}
 > **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}
 > **Epoch PR:** ${openEpochPr?.id ? `#${openEpochPr.id}` : 'not set'}
-> **Epoch PR rule:** The orchestrator assigned exactly one TBC PR to this milestone branch. Use it instead of creating competing PRs.
+> **Epoch PR guidance:** Prefer one TBC PR for this milestone branch when code changes need review, but this is a soft workflow convention. Managers may create/update/close/merge TBC PRs as needed.
 
 `;
           if (aresGraceMode) {
@@ -293,23 +287,15 @@ export async function runRunnerLoop(runner, deps = {}) {
             // Check if Ares claims milestone complete
             if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
               claimedComplete = true;
-              const openEpochPr = await runner.ensureEpochPRForCurrentMilestone();
-              if (!openEpochPr) {
-                runner.verificationFeedback = `Ares claimed milestone completion without an orchestrator-managed epoch PR on branch ${runner.currentMilestoneBranch || 'unknown'}.`;
-                deps.log('⚠️ CLAIM_COMPLETE ignored because no orchestrator-managed epoch PR exists for the current milestone branch', runner.id);
-                runner.saveState();
-                claimedComplete = false;
-              } else {
-                deps.log(`🎯 Ares claims milestone complete for epoch PR #${openEpochPr.id} — switching to verification`, runner.id);
-                runner.setState({ phase: 'verification', currentEpochPrId: openEpochPr.id });
-                broadcastEvent({ type: 'phase', project: runner.id, phase: 'verification', title: runner.milestoneTitle });
-              }
+              const openEpochPr = await runner.getOpenEpochPRForCurrentMilestone();
+              deps.log(`🎯 Ares claims milestone complete${openEpochPr?.id ? ` for TBC PR #${openEpochPr.id}` : ''} — switching to verification`, runner.id);
+              runner.setState({ phase: 'verification', currentEpochPrId: openEpochPr?.id || runner.currentEpochPrId || null });
+              broadcastEvent({ type: 'phase', project: runner.id, phase: 'verification', title: runner.milestoneTitle });
             }
           }
 
           if (aresGraceMode && !claimedComplete) {
             const failureReason = `Implementation deadline missed after ${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles for ${runner.currentMilestoneId || 'unknown milestone'} (Ares grace review did not claim completion).`;
-            await runner.decideEpochPR('closed', { actor: 'apollo', reason: failureReason });
             await runner.markCurrentMilestoneFailed(failureReason);
             deps.log(`⏰ ${failureReason}`, runner.id);
             runner.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena', verificationFeedback: failureReason });
@@ -402,29 +388,6 @@ export async function runRunnerLoop(runner, deps = {}) {
 
           // Process decision
           if (decision === 'pass') {
-            let mergedPr = null;
-            if (!isRollupVerification) {
-              try {
-                mergedPr = await runner.decideEpochPR('merged', {
-                  actor: 'apollo',
-                  reason: `Apollo passed milestone ${runner.currentMilestoneId || ''} ${runner.milestoneTitle || runner.milestoneDescription || ''}`.trim(),
-                });
-              } catch (err) {
-                const message = err?.message || 'Unknown git merge failure';
-                runner.verificationFeedback = `${message} Rebase the milestone branch onto the target branch, push it, then retry verification.`;
-                deps.log(`❌ TBC PR merge blocked — ${runner.verificationFeedback}`, runner.id);
-                runner.saveState();
-                broadcastEvent({ type: 'verify-blocked', project: runner.id, title: runner.milestoneTitle });
-                continue;
-              }
-              if (!mergedPr) {
-                runner.verificationFeedback = 'TBC PR merge did not complete; rebase/push the milestone branch and retry verification.';
-                deps.log(`❌ TBC PR merge blocked — ${runner.verificationFeedback}`, runner.id);
-                runner.saveState();
-                broadcastEvent({ type: 'verify-blocked', project: runner.id, title: runner.milestoneTitle });
-                continue;
-              }
-            }
             const completedMilestoneId = runner.currentMilestoneId;
             const completedMilestoneTitle = runner.milestoneTitle;
             const parentMilestoneId = runner.getParentMilestoneId(completedMilestoneId);
@@ -458,7 +421,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 currentEpochPrId: null,
                 currentMilestoneBranch: parentMilestone?.branch_name || null,
                 aresGraceCycleUsed: false,
-                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
+                lastMergedMilestoneBranch: runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
                 phase: 'verification',
@@ -479,7 +442,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 currentEpochPrId: null,
                 currentMilestoneBranch: null,
                 aresGraceCycleUsed: false,
-                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
+                lastMergedMilestoneBranch: runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
                 phase: 'athena',
@@ -501,10 +464,6 @@ export async function runRunnerLoop(runner, deps = {}) {
                 phase: 'athena',
               });
             } else {
-              await runner.decideEpochPR('closed', {
-                actor: 'apollo',
-                reason: failureReason,
-              });
               await runner.markCurrentMilestoneFailed(failureReason);
               deps.log('❌ Verification failed — returning to Athena for split/replan', runner.id);
               broadcastEvent({ type: 'verify-fail', project: runner.id, title: runner.milestoneTitle });

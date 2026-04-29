@@ -180,26 +180,28 @@ function jsonOut(data) {
   console.log(JSON.stringify(data, null, 2));
 }
 
-function assertPrCreateActor(actor) {
-  if (actor !== 'ares') {
-    throw new Error(`Only ares may create epoch PRs. Got: ${actor || '(missing actor)'}`);
+const MANAGER_ACTORS = new Set(['athena', 'ares', 'apollo', 'themis']);
+
+function assertManagerPrActor(actor) {
+  if (!MANAGER_ACTORS.has(actor)) {
+    throw new Error(`Only manager agents (${[...MANAGER_ACTORS].join(', ')}) may mutate TBC PRs. Got: ${actor || '(missing actor)'}`);
   }
+}
+
+function assertPrCreateActor(actor) {
+  assertManagerPrActor(actor);
 }
 
 function assertPrDecisionActor(actor, status) {
   if (!status || status === 'open') return;
-  if (actor !== 'apollo') {
-    throw new Error(`Only apollo may mark an epoch PR as ${status}. Got: ${actor || '(missing actor)'}`);
-  }
+  assertManagerPrActor(actor);
 }
 
 function assertPrEditActor(actor, current, nextStatus) {
   if (!actor) throw new Error('Missing --actor for PR mutation');
   const targetStatus = nextStatus || current.status;
   assertPrDecisionActor(actor, targetStatus);
-  if (targetStatus === 'open' && !new Set(['ares', 'apollo', current.actor]).has(actor)) {
-    throw new Error(`Only ${current.actor || 'ares'}, ares, or apollo may edit epoch PR #${current.id}. Got: ${actor}`);
-  }
+  if (targetStatus === 'open') assertManagerPrActor(actor);
 }
 
 function textOut(rows, columns) {
@@ -634,6 +636,50 @@ const commands = {
     console.log(`Updated TBC PR #${id}${mergeResult ? ` and merged ${mergeResult.headBranch} into ${mergeResult.baseBranch}` : ''}`);
   },
 
+  'pr-merge'() {
+    const id = args[0];
+    if (!id) { console.error('Usage: tbc-db pr-merge <id> --actor manager [--reason "..."]'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: { actor: { type: 'string' }, reason: { type: 'string' } },
+      strict: false,
+    });
+    try { assertManagerPrActor(values.actor); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }
+    const pr = db.prepare('SELECT * FROM tbc_prs WHERE id = ?').get(id);
+    if (!pr) { console.error(`TBC PR #${id} not found`); process.exit(1); }
+    let mergeResult;
+    try {
+      mergeResult = mergeEpochPrBranch(
+        { path: path.join(path.dirname(dbPath), 'repo') },
+        pr,
+        { actor: values.actor },
+      );
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+    const decisionReason = values.reason || `Merged ${mergeResult.headBranch} into ${mergeResult.baseBranch} at ${mergeResult.headSha}.`;
+    db.prepare(`UPDATE tbc_prs SET status = 'merged', decision = 'merge', decision_reason = ?, updated_by = ?, updated_at = ? WHERE id = ?`)
+      .run(decisionReason, values.actor, new Date().toISOString(), id);
+    console.log(`Merged TBC PR #${id}: ${mergeResult.headBranch} -> ${mergeResult.baseBranch} at ${mergeResult.headSha}`);
+  },
+
+  'pr-close'() {
+    const id = args[0];
+    if (!id) { console.error('Usage: tbc-db pr-close <id> --actor manager [--reason "..."]'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: { actor: { type: 'string' }, reason: { type: 'string' } },
+      strict: false,
+    });
+    try { assertManagerPrActor(values.actor); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }
+    const pr = db.prepare('SELECT * FROM tbc_prs WHERE id = ?').get(id);
+    if (!pr) { console.error(`TBC PR #${id} not found`); process.exit(1); }
+    db.prepare(`UPDATE tbc_prs SET status = 'closed', decision = 'close', decision_reason = ?, updated_by = ?, updated_at = ? WHERE id = ?`)
+      .run(values.reason || '', values.actor, new Date().toISOString(), id);
+    console.log(`Closed TBC PR #${id}`);
+  },
+
   // ===== QUERY =====
   'query'() {
     const sql = args.join(' ');
@@ -667,10 +713,12 @@ Comments:
   comments      <issue_id>
 
 TBC PRs:
-  pr-create     --title "..." --head branch --actor ares [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]
+  pr-create     --title "..." --head branch --actor manager [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]
   pr-list       [--status open|merged|closed|all] [--json]
   pr-view       <id>
-  pr-edit       <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]
+  pr-edit       <id> --actor manager [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]
+  pr-merge      <id> --actor manager [--reason "..."]
+  pr-close      <id> --actor manager [--reason "..."]
 
 Advanced:
   query         "SQL statement"
