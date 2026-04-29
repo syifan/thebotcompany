@@ -392,6 +392,18 @@ function isSafeGitBranchName(name) {
     && !String(name || '').includes('//');
 }
 
+function extractSimpleEmbeddedCommand(command, bin) {
+  const text = String(command || '')
+    .replace(/\bGIT_TERMINAL_PROMPT=0\s+/g, '')
+    .replace(/\bGH_PROMPT_DISABLED=1\s+/g, '');
+  const match = text.match(new RegExp(`(?:^|[\\s({;])(${bin}\\s+[^;&|\\n)]*)`));
+  if (!match) return null;
+  return match[1]
+    .replace(/\s+2>&1\s*$/g, '')
+    .replace(/\s+1>&2\s*$/g, '')
+    .trim();
+}
+
 function trustedGitArgsForCommand(command) {
   const trimmed = String(command || '').trim();
   if (!trimmed || !/^git(?:\s|$)/.test(trimmed)) return null;
@@ -400,14 +412,10 @@ function trustedGitArgsForCommand(command) {
   if (!words || words[0] !== 'git') return null;
   const args = words.slice(1);
 
-  if (args[0] === 'fetch' && args[1] === 'origin') {
-    if (args.length === 2) return args;
-    if (args.length === 3 && isSafeGitBranchName(args[2])) return args;
-  }
-
-  if (args[0] === 'fetch' && args[1] === '--dry-run' && args[2] === 'origin') {
-    if (args.length === 3) return args;
-    if (args.length === 4 && isSafeGitBranchName(args[3])) return args;
+  if (args[0] === 'fetch') {
+    const nonFlagArgs = args.slice(1).filter(arg => !arg.startsWith('-'));
+    if (nonFlagArgs[0] === 'origin' && nonFlagArgs.slice(1).every(isSafeGitBranchName)) return args;
+    if (nonFlagArgs.length === 0) return args;
   }
 
   if (args[0] === 'ls-remote' && args[1] === '--heads' && args[2] === 'origin') {
@@ -415,8 +423,8 @@ function trustedGitArgsForCommand(command) {
   }
 
   if (args[0] === 'push') {
-    const nonFlagArgs = args.slice(1).filter(arg => arg !== '-u' && arg !== '--set-upstream');
-    if (nonFlagArgs.length === 2 && nonFlagArgs[0] === 'origin' && isSafeGitBranchName(nonFlagArgs[1])) {
+    const nonFlagArgs = args.slice(1).filter(arg => !arg.startsWith('-'));
+    if (nonFlagArgs[0] === 'origin' && nonFlagArgs.slice(1).length >= 1 && nonFlagArgs.slice(1).every(arg => isSafeGitBranchName(arg.replace(/^HEAD:/, '').replace(/^refs\/heads\//, '')))) {
       return args;
     }
   }
@@ -921,13 +929,13 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       return;
     }
 
-    const trustedGitArgs = trustedGitArgsForCommand(command);
+    const trustedGitArgs = trustedGitArgsForCommand(command) || trustedGitArgsForCommand(extractSimpleEmbeddedCommand(command, 'git'));
     if (trustedGitArgs) {
       executeTrustedGit(trustedGitArgs, cwd, timeout, bashEnv, runtime).then(resolve);
       return;
     }
 
-    const trustedGhArgs = trustedGhArgsForCommand(command, allowedRepo);
+    const trustedGhArgs = trustedGhArgsForCommand(command, allowedRepo) || trustedGhArgsForCommand(extractSimpleEmbeddedCommand(command, 'gh'), allowedRepo);
     if (trustedGhArgs) {
       executeTrustedGh(trustedGhArgs, cwd, timeout, bashEnv, runtime).then(resolve);
       return;
