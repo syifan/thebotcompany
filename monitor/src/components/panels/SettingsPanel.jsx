@@ -815,6 +815,15 @@ export default function SettingsPanel({
   const [editingCustomKey, setEditingCustomKey] = useState(null)
   const [editingLabel, setEditingLabel] = useState(null)
   const [editLabelValue, setEditLabelValue] = useState('')
+  const [githubTokenStatus, setGithubTokenStatus] = useState({ hasToken: false, preview: null })
+  const [githubTokenInput, setGithubTokenInput] = useState('')
+  const [savingGithubToken, setSavingGithubToken] = useState(false)
+
+  const fetchSettings = () => {
+    fetch('/api/settings').then(r => r.json()).then(d => {
+      if (d.github) setGithubTokenStatus(d.github)
+    }).catch(() => {})
+  }
 
   const fetchKeys = () => {
     fetch('/api/keys').then(r => r.json()).then(d => {
@@ -823,7 +832,7 @@ export default function SettingsPanel({
     }).catch(() => {})
   }
 
-  useEffect(() => { fetchKeys() }, [])
+  useEffect(() => { fetchKeys(); fetchSettings() }, [])
 
   useEffect(() => {
     const hasCooldown = keys.some(key => (key.cooldownMs || 0) > 0)
@@ -908,6 +917,26 @@ export default function SettingsPanel({
       }
     } catch {}
     setEditingLabel(null)
+  }
+
+  const handleSaveGithubToken = async () => {
+    setSavingGithubToken(true)
+    try {
+      const res = await authFetch('/api/settings/github-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: githubTokenInput.trim() })
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.error || 'Failed to save GitHub token')
+      setGithubTokenStatus(d.github || { hasToken: !!githubTokenInput.trim(), preview: null })
+      setGithubTokenInput('')
+      showToast(githubTokenInput.trim() ? 'GitHub token saved' : 'GitHub token removed')
+    } catch (e) {
+      showToast(e.message || 'Failed to save GitHub token')
+    } finally {
+      setSavingGithubToken(false)
+    }
   }
 
   const notifSupported = typeof window !== 'undefined' && 'Notification' in window
@@ -1021,6 +1050,47 @@ export default function SettingsPanel({
           <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-3">
             Keys are tried in order during agent runs. Supports API keys and OAuth sign-in.
           </p>
+
+          <div className={`mb-4 rounded-xl border p-3 ${githubTokenStatus.hasToken ? 'border-green-200 dark:border-green-900 bg-green-50/60 dark:bg-green-950/20' : 'border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/20'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${githubTokenStatus.hasToken ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
+                  <h4 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">GitHub Personal Access Token</h4>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">Required</span>
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Used only by trusted TBC GitHub operations. Agents never receive this token in their shell.
+                </p>
+              </div>
+              {githubTokenStatus.hasToken && <code className="text-xs text-neutral-500 dark:text-neutral-400 shrink-0">{githubTokenStatus.preview}</code>}
+            </div>
+            <div className="mt-3 text-xs text-neutral-600 dark:text-neutral-300 space-y-1">
+              <p>Create a <strong>fine-grained</strong> GitHub PAT for selected repositories only.</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li><strong>Contents:</strong> Read and write — required for fetch/push.</li>
+                <li><strong>Actions:</strong> Read-only — required for CI status/log inspection.</li>
+                <li><strong>Pull requests:</strong> Read and write — only needed when TBC publishes GitHub PRs.</li>
+                <li><strong>Workflows:</strong> No access unless workflow dispatch/editing is explicitly needed.</li>
+              </ul>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                type="password"
+                value={githubTokenInput}
+                onChange={e => setGithubTokenInput(e.target.value)}
+                placeholder={githubTokenStatus.hasToken ? 'Paste replacement token, or leave blank to remove' : 'github_pat_...'}
+                className="flex-1 px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+              />
+              <button
+                onClick={handleSaveGithubToken}
+                disabled={savingGithubToken}
+                className="px-3 py-2 text-sm font-medium rounded-lg bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 disabled:opacity-50"
+              >
+                {savingGithubToken ? 'Saving…' : githubTokenInput.trim() ? 'Save' : githubTokenStatus.hasToken ? 'Remove' : 'Save'}
+              </button>
+            </div>
+          </div>
 
           {/* Add credential button / wizard */}
           {showWizard ? (

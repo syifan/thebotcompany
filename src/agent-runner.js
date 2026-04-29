@@ -10,6 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getGithubToken } from './github-token.js';
 import {
   resolveModel,
   formatTools,
@@ -473,7 +474,34 @@ function executeTrustedHostCommand(bin, args, cwd, timeout, bashEnv = null, runt
       return;
     }
 
+    const githubToken = getGithubToken();
+    if ((bin === 'git' || bin === 'gh') && !githubToken) {
+      resolve({
+        output: 'Blocked: GitHub personal access token is not configured. Add a fine-grained token in Settings > Credentials before using trusted GitHub operations.',
+        exitCode: 1,
+        ok: false,
+      });
+      return;
+    }
+
     const env = { ...process.env, ...bashEnv };
+    let cleanupAskpass = null;
+    if (githubToken) {
+      env.GH_TOKEN = githubToken;
+      env.GITHUB_TOKEN = githubToken;
+      env.GIT_TERMINAL_PROMPT = '0';
+    }
+    if (bin === 'git' && githubToken) {
+      const askpassDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-git-askpass-'));
+      const askpassPath = path.join(askpassDir, 'askpass.sh');
+      fs.writeFileSync(askpassPath, '#!/bin/sh\ncase "$1" in\n  *Username*) printf "%s\\n" "x-access-token" ;;\n  *) printf "%s\\n" "$TBC_GIT_TOKEN" ;;\nesac\n', { mode: 0o700 });
+      env.GIT_ASKPASS = askpassPath;
+      env.TBC_GIT_TOKEN = githubToken;
+      cleanupAskpass = () => {
+        try { fs.rmSync(askpassDir, { recursive: true, force: true }); } catch {}
+      };
+    }
+
     const proc = spawn(bin, args, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -510,6 +538,7 @@ function executeTrustedHostCommand(bin, args, cwd, timeout, bashEnv = null, runt
       clearTimeout(timer);
       runtime?.signal?.removeEventListener('abort', onAbort);
       runtime?.unregisterProcess?.(proc);
+      cleanupAskpass?.();
       let result = '';
       const stdoutText = stdout.toString();
       const stderrText = stderr.toString();
@@ -525,6 +554,7 @@ function executeTrustedHostCommand(bin, args, cwd, timeout, bashEnv = null, runt
       clearTimeout(timer);
       runtime?.signal?.removeEventListener('abort', onAbort);
       runtime?.unregisterProcess?.(proc);
+      cleanupAskpass?.();
       resolve({ output: `Error executing ${bin}: ${err.message}`, exitCode: null, ok: false });
     });
   });
