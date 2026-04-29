@@ -1,5 +1,58 @@
 import fs from 'fs';
 
+function scheduleBlockPresent(text = '') {
+  return /<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/.test(String(text || ''));
+}
+
+function availableWorkersForManager(runner, managerName) {
+  const owner = String(managerName || '').toLowerCase();
+  return runner.loadAgents().workers.filter(worker => String(worker.reportsTo || '').toLowerCase() === owner);
+}
+
+function validateManagerDirective(runner, deps, resultText, managerName) {
+  const text = String(resultText || '');
+  if (!scheduleBlockPresent(text)) return null;
+
+  const schedule = runner.parseSchedule(text);
+  if (!schedule) {
+    return {
+      message: 'Malformed SCHEDULE directive. Use the canonical JSON array format exactly: <!-- SCHEDULE --> [ {"agent":"name","task":"..."} ] <!-- /SCHEDULE -->.',
+    };
+  }
+
+  const allowed = new Set(availableWorkersForManager(runner, managerName).map(worker => worker.name.toLowerCase()));
+  const invalid = [];
+  for (const step of schedule._steps || []) {
+    if (!step || step.delay !== undefined) continue;
+    const name = Object.keys(step).find(key => key !== 'delay');
+    if (name && !allowed.has(name.toLowerCase())) invalid.push(name);
+  }
+  if (invalid.length) {
+    const available = [...allowed].sort().join(', ') || '(none)';
+    return {
+      message: `SCHEDULE references unavailable worker(s): ${[...new Set(invalid)].join(', ')}. Available workers for ${managerName}: ${available}.`,
+    };
+  }
+  return null;
+}
+
+async function runManagerWithDirectiveRetry(runner, deps, manager, config, task, { visibility = null, maxRetries = 1 } = {}) {
+  let result = await runner.runAgent(manager, config, null, task, visibility);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (!result?.success || !result?.resultText) break;
+    const problem = validateManagerDirective(runner, deps, result.resultText, manager.name);
+    if (!problem) break;
+    deps.log(`Rejecting ${manager.name} response: ${problem.message}`, runner.id);
+    const correction = `> **Orchestrator rejected your previous response before acting on it.**
+> Problem: ${problem.message}
+> Generate a corrected response now. Keep any useful reasoning/evidence, but fix the directive block. Do not reuse unavailable worker names.
+
+${task || ''}`;
+    result = await runner.runAgent(manager, config, null, correction, visibility);
+  }
+  return result;
+}
+
 export async function runRunnerLoop(runner, deps = {}) {
     const broadcastEvent = deps.broadcastEvent || (() => {});
     while (runner.running) {
@@ -25,8 +78,8 @@ export async function runRunnerLoop(runner, deps = {}) {
       const preConfig = runner.loadConfig();
       const poolCheck = deps.getKeyPoolSafe();
       if (poolCheck.keys.filter(k => k.enabled).length === 0 && !preConfig.setupToken) {
-        deps.log(`No API keys configured. Pausing project. Add a key in Settings > Credentials.`, runner.id);
-        runner.setState({ isPaused: true, pauseReason: 'No API keys configured. Add one in Settings > Credentials.' });
+        deps.log(`No AI model credentials configured. Pausing project. Add one in Settings > AI Model Credentials.`, runner.id);
+        runner.setState({ isPaused: true, pauseReason: 'No AI model credentials configured. Add one in Settings > AI Model Credentials.' });
         await runner._autoPauseWait(30_000, () => deps.getKeyPoolSafe().keys.some(k => k.enabled));
         if (!runner.running) break;
         continue;
@@ -77,7 +130,7 @@ export async function runRunnerLoop(runner, deps = {}) {
           }
           situation += `\n`;
 
-          const result = await runner.runAgent(athena, config, null, situation);
+          const result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
@@ -265,7 +318,7 @@ export async function runRunnerLoop(runner, deps = {}) {
 `;
           }
 
-          const result = await runner.runAgent(ares, config, null, aresContext);
+          const result = await runManagerWithDirectiveRetry(runner, deps, ares, config, aresContext);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
           if (aresGraceMode) runner.aresGraceCycleUsed = true;
@@ -344,7 +397,7 @@ export async function runRunnerLoop(runner, deps = {}) {
             ? `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Rollup verification target:** ${runner.currentMilestoneId || 'unknown'}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
             : `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
 
-          const result = await runner.runAgent(apollo, config, null, apolloContext);
+          const result = await runManagerWithDirectiveRetry(runner, deps, apollo, config, apolloContext);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
@@ -500,7 +553,7 @@ export async function runRunnerLoop(runner, deps = {}) {
         const themis = managers.find(m => m.name === 'themis');
         if (themis) {
           const themisContext = `> **Final completion claim:** ${runner.pendingCompletionMessage || 'Project claimed complete'}\n> **Evaluate the entire project, not just the human\'s explicit goal.** Audit correctness, completeness, maintainability, artifacts, tests, docs, and obvious risks.\n\n`;
-          const result = await runner.runAgent(themis, config, null, themisContext, { mode: 'full', issues: [] });
+          const result = await runManagerWithDirectiveRetry(runner, deps, themis, config, themisContext, { visibility: { mode: 'full', issues: [] } });
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 

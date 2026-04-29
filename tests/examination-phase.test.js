@@ -47,9 +47,9 @@ describe('Themis examination phase', () => {
       'Expected a dedicated examination phase block in runLoop');
     assert.match(src, /const themis = managers\.find\(m => m\.name === 'themis'\)/,
       'Expected examination phase to run Themis');
-    assert.match(src, /(?:this|runner)\.runAgent\(themis, config, null, themisContext, \{ mode: 'full', issues: \[\] \}\)/,
+    assert.match(src, /runManagerWithDirectiveRetry\(runner, deps, themis, config, themisContext, \{ visibility: \{ mode: 'full', issues: \[\] \} \}\)/,
       'Expected Themis to run in full view');
-    assert.doesNotMatch(src, /(?:this|runner)\.runAgent\(themis, config, null, themisContext, \{ mode: 'blind', issues: \[\] \}\)/,
+    assert.doesNotMatch(src, /themis, config, null, themisContext, \{ mode: 'blind', issues: \[\] \}/,
       'Themis should no longer run blind');
   });
 

@@ -319,6 +319,20 @@ PY`, timeout: 30000 }, p.repo, 0, { OUTSIDE: outside }, null, null, p.allowedWor
     );
     assert.match(chained, /A && B/);
     assert.doesNotMatch(chained, /EPERM|operation not permitted/i);
+
+    const mixed = await executeTool(
+      'Bash',
+      { command: 'tbc-db pr-list && git status --short --branch' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.doesNotMatch(mixed, /EPERM|operation not permitted/i);
+    assert.match(mixed, /\(no TBC PRs\)|##/);
   });
 
   it('applies issue visibility and actor policy before trusted tbc-db execution', async () => {

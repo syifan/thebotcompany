@@ -36,7 +36,7 @@ export function mergeEpochPrBranch(runner, pr, { actor = 'apollo' } = {}) {
 
   const gitAuth = createGithubAuthEnv(process.env);
   if (!gitAuth.hasToken) {
-    throw new Error('Cannot merge TBC PR: GitHub personal access token is not configured. Add a fine-grained token in Settings > Credentials.');
+    throw new Error('Cannot merge TBC PR: GitHub personal access token is not configured. Add a fine-grained token in Settings > GitHub Access.');
   }
 
   try {

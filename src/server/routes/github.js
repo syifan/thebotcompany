@@ -7,7 +7,7 @@ import { createGithubAuthEnv } from '../../github-token.js';
 function requireGithubToken(res, baseEnv = process.env) {
   const auth = createGithubAuthEnv(baseEnv);
   if (!auth.hasToken) {
-    sendJson(res, 400, { error: 'GitHub personal access token is not configured. Add a fine-grained token in Settings > Credentials.' });
+    sendJson(res, 400, { error: 'GitHub personal access token is not configured. Add a fine-grained token in Settings > GitHub Access.' });
     return null;
   }
   return auth;
@@ -94,7 +94,11 @@ export async function handleGithubRoutes(req, res, url, ctx) {
 
       sendJson(res, 200, { success: true, id: repoId, path: repoDir });
     } catch (error) {
-      sendJson(res, 500, { error: error.message });
+      let message = error.message;
+      if (/not found|resource not accessible|403|404|permission|access/i.test(message)) {
+        message += ' If this token is a fine-grained PAT limited to selected repositories, GitHub will not automatically add newly created repos to it. Use repository access: All repositories, or edit the PAT in GitHub and add the new repo manually.';
+      }
+      sendJson(res, 500, { error: message });
     } finally {
       auth?.cleanup?.();
     }

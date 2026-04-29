@@ -109,8 +109,11 @@ export async function executeSchedule(runner, deps = {}, schedule, config, manag
       const value = step[name];
       const worker = freshWorkers.find(w => w.name.toLowerCase() === name.toLowerCase());
       if (!worker) {
-        deps.log(`Worker "${name}" not found, skipping`, runner.id);
-        continue;
+        const available = freshWorkers.map(w => w.name).sort().join(', ') || '(none)';
+        const message = `Invalid schedule: worker "${name}" does not exist or does not report to ${managerName || 'this manager'}. Available workers: ${available}`;
+        deps.log(message, runner.id);
+        runner.setState({ isPaused: true, pauseReason: message, currentSchedule: null, completedAgents: [] });
+        return { total: 1, failures: 1, invalidSchedule: true, message };
       }
       
       while (runner.isPaused && runner.running && !runner.abortCurrentCycle) { await deps.sleep(1000); }

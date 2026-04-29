@@ -63,6 +63,14 @@ db.exec(`
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
 
+  CREATE TABLE IF NOT EXISTS tbc_pr_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pr_id INTEGER NOT NULL REFERENCES tbc_prs(id),
+    author TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  );
+
   CREATE TABLE IF NOT EXISTS milestones (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT,
@@ -150,7 +158,7 @@ const visibility = process.env.TBC_VISIBILITY || 'full';
 const focusedIssues = (process.env.TBC_FOCUSED_ISSUES || '').split(',').map(s => s.trim()).filter(Boolean);
 
 if (visibility === 'blind' || visibility === 'focused') {
-  const allowedCommands = new Set(['issue-create', 'pr-create']);
+  const allowedCommands = new Set(['issue-create', 'pr-create', 'comment', 'pr-comment']);
   if (command && !allowedCommands.has(command)) {
     const scope = visibility === 'blind' ? 'blind' : 'focused';
     console.error(`Access denied: you are in ${scope} mode and cannot view the issue tracker or PR board.`);
@@ -382,6 +390,7 @@ const commands = {
       args,
       options: {
         issue: { type: 'string', short: 'i' },
+        pr: { type: 'string' },
         actor: { type: 'string' },
         author: { type: 'string', short: 'a' },
         body: { type: 'string', short: 'b' },
@@ -389,17 +398,48 @@ const commands = {
       strict: false,
     });
     const actor = values.actor || values.author;
-    if (!values.issue || !actor || !values.body) {
-      console.error('Usage: tbc-db comment --issue <id> --actor name --body "..."');
+    if ((!values.issue && !values.pr) || (values.issue && values.pr) || !actor || !values.body) {
+      console.error('Usage: tbc-db comment --issue <id> --actor name --body "..." OR tbc-db comment --pr <id> --actor name --body "..."');
       process.exit(1);
     }
-    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(values.issue))) {
-      console.error(`Access denied: issue #${values.issue} is not in your focused set.`);
-      process.exit(1);
+    const now = new Date().toISOString();
+    if (values.pr) {
+      const pr = db.prepare('SELECT id FROM tbc_prs WHERE id = ?').get(values.pr);
+      if (!pr) { console.error(`TBC PR #${values.pr} not found`); process.exit(1); }
+      const result = db.prepare('INSERT INTO tbc_pr_comments (pr_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.pr, actor, values.body, now);
+      db.prepare('UPDATE tbc_prs SET updated_at = ?, updated_by = ? WHERE id = ?').run(now, actor, values.pr);
+      console.log(`Added comment #${result.lastInsertRowid} to TBC PR #${values.pr}`);
+      return;
     }
-    const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.issue, actor, values.body, new Date().toISOString());
-    db.prepare("UPDATE issues SET updated_at = ?, updated_by = ? WHERE id = ?").run(new Date().toISOString(), actor, values.issue);
+    const issue = db.prepare('SELECT id FROM issues WHERE id = ?').get(values.issue);
+    if (!issue) { console.error(`Issue #${values.issue} not found`); process.exit(1); }
+    const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.issue, actor, values.body, now);
+    db.prepare("UPDATE issues SET updated_at = ?, updated_by = ? WHERE id = ?").run(now, actor, values.issue);
     console.log(`Added comment #${result.lastInsertRowid} to issue #${values.issue}`);
+  },
+
+  'pr-comment'() {
+    const { values } = parseArgs({
+      args,
+      options: {
+        pr: { type: 'string', short: 'p' },
+        actor: { type: 'string' },
+        author: { type: 'string', short: 'a' },
+        body: { type: 'string', short: 'b' },
+      },
+      strict: false,
+    });
+    const actor = values.actor || values.author;
+    if (!values.pr || !actor || !values.body) {
+      console.error('Usage: tbc-db pr-comment --pr <id> --actor name --body "..."');
+      process.exit(1);
+    }
+    const pr = db.prepare('SELECT id FROM tbc_prs WHERE id = ?').get(values.pr);
+    if (!pr) { console.error(`TBC PR #${values.pr} not found`); process.exit(1); }
+    const now = new Date().toISOString();
+    const result = db.prepare('INSERT INTO tbc_pr_comments (pr_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.pr, actor, values.body, now);
+    db.prepare('UPDATE tbc_prs SET updated_at = ?, updated_by = ? WHERE id = ?').run(now, actor, values.pr);
+    console.log(`Added comment #${result.lastInsertRowid} to TBC PR #${values.pr}`);
   },
 
   'comments'() {
@@ -545,6 +585,27 @@ const commands = {
       console.log(`GitHub mirror: #${pr.github_pr_number || '?'} ${pr.github_pr_url || ''}`.trim());
     }
     if (pr.summary) console.log(`\n${pr.summary}`);
+    const comments = db.prepare('SELECT * FROM tbc_pr_comments WHERE pr_id = ? ORDER BY created_at').all(id);
+    if (comments.length > 0) {
+      console.log(`\n--- Comments (${comments.length}) ---`);
+      for (const c of comments) {
+        console.log(`[${c.author}] (${c.created_at}):`);
+        console.log(c.body);
+        console.log('');
+      }
+    }
+  },
+
+  'pr-comments'() {
+    const id = args[0];
+    if (!id) { console.error('Usage: tbc-db pr-comments <pr_id>'); process.exit(1); }
+    const comments = db.prepare('SELECT * FROM tbc_pr_comments WHERE pr_id = ? ORDER BY created_at').all(id);
+    for (const c of comments) {
+      console.log(`[${c.author}] (${c.created_at}):`);
+      console.log(c.body);
+      console.log('');
+    }
+    if (comments.length === 0) console.log('(no comments)');
   },
 
   'pr-edit'() {
@@ -709,8 +770,11 @@ Issues:
   issue-close   <id> --closer name
 
 Comments:
-  comment       --issue <id> --author name --body "..."
+  comment       --issue <id> --actor name --body "..."
+  comment       --pr <id> --actor name --body "..."
   comments      <issue_id>
+  pr-comment    --pr <id> --actor name --body "..."
+  pr-comments   <pr_id>
 
 TBC PRs:
   pr-create     --title "..." --head branch --actor manager [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]

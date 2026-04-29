@@ -47,6 +47,7 @@ export function openProjectDb(runner, { root }) {
     CREATE TABLE IF NOT EXISTS agents (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, role TEXT, reports_to TEXT, model TEXT, disabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
     CREATE TABLE IF NOT EXISTS issues (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT DEFAULT '', status TEXT DEFAULT 'open', creator TEXT NOT NULL, assignee TEXT, labels TEXT DEFAULT '', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_by TEXT, closed_at TEXT, closed_by TEXT);
     CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, issue_id INTEGER NOT NULL REFERENCES issues(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
+    CREATE TABLE IF NOT EXISTS tbc_pr_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, pr_id INTEGER NOT NULL REFERENCES tbc_prs(id), author TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
     CREATE TABLE IF NOT EXISTS milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, milestone_id TEXT UNIQUE, title TEXT, description TEXT NOT NULL, cycles_budget INTEGER DEFAULT 20, cycles_used INTEGER DEFAULT 0, branch_name TEXT, parent_milestone_id TEXT, linked_pr_id INTEGER, failure_reason TEXT, phase TEXT DEFAULT 'implementation', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), completed_at TEXT);
     CREATE TABLE IF NOT EXISTS tbc_prs (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, summary TEXT DEFAULT '', milestone_id TEXT, parent_pr_id INTEGER, epoch_index TEXT, branch_name TEXT, base_branch TEXT NOT NULL, head_branch TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'merged', 'closed')), decision TEXT, decision_reason TEXT DEFAULT '', issue_ids TEXT DEFAULT '[]', test_status TEXT DEFAULT 'unknown', github_pr_number INTEGER, github_pr_url TEXT, actor TEXT, updated_by TEXT, created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')), updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')));
   `);
@@ -265,6 +266,9 @@ export function getProjectPr(runner, prId) {
       FROM tbc_prs
       WHERE id = ?
     `).get(prId);
+    if (pr) {
+      pr.comments = db.prepare('SELECT * FROM tbc_pr_comments WHERE pr_id = ? ORDER BY created_at ASC').all(prId);
+    }
     db.close();
     return normalizePrRow(pr);
   } catch {
