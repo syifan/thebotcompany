@@ -1,3 +1,5 @@
+import { registerObjectRef } from './object-refs.js';
+
 export function resolveAllowedIssueClosers(runner, deps = {}, issueCreator) {
     if (issueCreator === 'human' || issueCreator === 'chat') {
       return { allowed: new Set(['human', 'chat']), special: 'chat-human' };
@@ -27,8 +29,9 @@ export async function createIssue(runner, deps = {}, title, body = '', creator =
       const result = db.prepare(
         `INSERT INTO issues (title, body, creator, assignee, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
       ).run(title.trim(), body.trim(), creator, assignee || null, now, now);
+      const ref = registerObjectRef(db, 'issue', result.lastInsertRowid, now);
       db.close();
-      return { success: true, issueId: result.lastInsertRowid };
+      return { success: true, issueId: result.lastInsertRowid, objectId: ref?.id || result.lastInsertRowid };
     } catch (e) {
       throw new Error(`Failed to create issue: ${e.message}`);
     }

@@ -368,7 +368,10 @@ function checkIssueAccessInCommand(command, issuePolicy = null) {
 
   if (mode === 'focused') {
     if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create' || parsed.kind === 'comment' || parsed.kind === 'pr-comment') return null;
-    return 'Blocked: focused mode cannot view the issue tracker or PR board. Work from the task, repository, shared knowledge, and your own notes; you may still create a new issue or PR record, or add comments to issues/PRs, if needed.';
+    const focused = new Set((issuePolicy.issues || []).map(String));
+    if ((parsed.kind === 'issue-view' || parsed.kind === 'comments') && parsed.issueId && focused.has(String(parsed.issueId))) return null;
+    if ((parsed.kind === 'pr-view' || parsed.kind === 'pr-comments') && parsed.prId && focused.has(String(parsed.prId))) return null;
+    return 'Blocked: focused mode cannot browse/list the issue tracker or PR board. Work from injected #id JSON, task, repository, shared knowledge, and your own notes; exact referenced object views are allowed only for ids in your focused set.';
   }
 
   return null;

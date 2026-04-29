@@ -64,22 +64,23 @@ describe('issue visibility policy', () => {
     assert.doesNotMatch(prCommentResult, /access denied|blind mode|issue tracker|pr board/i);
   });
 
-  it('focused blocks issue and pr reads', async () => {
+  it('focused blocks browsing but allows exact referenced object views', async () => {
     const p = mkProject();
+    const focused = { mode: 'focused', issues: ['12', '34'] };
 
-    const deniedView = await executeTool('Bash', { command: 'tbc-db issue-view 12' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
+    const allowedView = await executeTool('Bash', { command: 'tbc-db issue-view 12' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, focused);
+    assert.doesNotMatch(allowedView, /access denied|focused mode|issue tracker|pr board/i);
+
+    const allowedComments = await executeTool('Bash', { command: 'tbc-db comments 34' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, focused);
+    assert.doesNotMatch(allowedComments, /access denied|focused mode|issue tracker|pr board/i);
+
+    const deniedView = await executeTool('Bash', { command: 'tbc-db issue-view 99' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, focused);
     assert.match(deniedView, /access denied|focused mode|issue tracker|pr board/i);
 
-    const deniedComments = await executeTool('Bash', { command: 'tbc-db comments 34' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
-    assert.match(deniedComments, /access denied|focused mode|issue tracker|pr board/i);
-
-    const deniedPrComments = await executeTool('Bash', { command: 'tbc-db pr-comments 34' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
-    assert.match(deniedPrComments, /access denied|focused mode|issue tracker|pr board/i);
-
-    const deniedList = await executeTool('Bash', { command: 'tbc-db issue-list' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
+    const deniedList = await executeTool('Bash', { command: 'tbc-db issue-list' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, focused);
     assert.match(deniedList, /access denied|focused mode|issue tracker|pr board/i);
 
-    const deniedPrList = await executeTool('Bash', { command: 'tbc-db pr-list' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
+    const deniedPrList = await executeTool('Bash', { command: 'tbc-db pr-list' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, focused);
     assert.match(deniedPrList, /access denied|focused mode|issue tracker|pr board/i);
   });
 

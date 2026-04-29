@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
+import { ensureObjectRefs } from './object-refs.js';
 
 function syncAgentRegistry(db, runner, { root }) {
   const upsert = db.prepare(`
@@ -90,6 +91,7 @@ export function openProjectDb(runner, { root }) {
       SELECT RAISE(ABORT, 'invalid tbc_prs.status');
     END;
   `);
+  ensureObjectRefs(db);
   syncAgentRegistry(db, runner, { root });
   return db;
 }

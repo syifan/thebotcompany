@@ -37,7 +37,7 @@ function validateManagerDirective(runner, deps, resultText, managerName) {
     const value = name ? step[name] : null;
     const visibility = typeof value === 'object' ? String(value.visibility || 'full').toLowerCase() : 'full';
     const task = typeof value === 'string' ? value : value?.task;
-    if ((visibility === 'blind' || visibility === 'focused') && nonFullVisibilityIssueReference(task)) {
+    if (visibility === 'blind' && nonFullVisibilityIssueReference(task)) {
       issueScoped.push(`${name || '(unknown)'}:${visibility}`);
     }
   }
@@ -49,7 +49,7 @@ function validateManagerDirective(runner, deps, resultText, managerName) {
   }
   if (issueScoped.length) {
     return {
-      message: `SCHEDULE assigns issue/PR references to non-full-visibility worker(s): ${[...new Set(issueScoped)].join(', ')}. Blind/focused workers cannot read the issue or PR board; make their task self-contained by pasting the relevant facts/evidence, or use visibility:"full" for issue/PR-board work.`,
+      message: `SCHEDULE assigns issue/PR references to blind worker(s): ${[...new Set(issueScoped)].join(', ')}. Blind workers cannot receive issue/PR-board context; make their task self-contained by pasting neutral facts/evidence without #id references, or use visibility:"focused"/"full" for issue/PR-board work.`,
     };
   }
   return null;

@@ -77,16 +77,16 @@ describe('Themis examination phase', () => {
       'Expected executeSchedule to limit workers to the current manager team');
   });
 
-  it('rejects issue-board assignments to blind or focused workers', () => {
+  it('rejects issue-board assignments to blind workers', () => {
     const src = readOrchestratorSource();
     assert.match(src, /function nonFullVisibilityIssueReference\(task\)/,
-      'Expected manager directive validation to detect issue\/PR references in non-full tasks');
-    assert.match(src, /visibility === 'blind' \|\| visibility === 'focused'/,
-      'Expected both blind and focused scheduled tasks to be checked');
-    assert.match(src, /SCHEDULE assigns issue\/PR references to non-full-visibility worker/,
-      'Expected schedules assigning issues to blind\/focused workers to be rejected and retried');
-    assert.match(src, /use visibility:\"full\" for issue\/PR-board work/,
-      'Expected correction prompt to tell managers to use full visibility for issue\/PR-board work');
+      'Expected manager directive validation to detect issue\/PR references');
+    assert.match(src, /visibility === 'blind'/,
+      'Expected blind scheduled tasks to be checked');
+    assert.match(src, /SCHEDULE assigns issue\/PR references to blind worker/,
+      'Expected schedules assigning issues to blind workers to be rejected and retried');
+    assert.match(src, /use visibility:\"focused\"\/\"full\" for issue\/PR-board work/,
+      'Expected correction prompt to tell managers to use focused\/full visibility for issue\/PR-board work');
   });
 
   it('finalizes completion only on EXAM_PASS', () => {
