@@ -124,9 +124,9 @@ You MUST include this exact format in your response when scheduling workers:
 <!-- SCHEDULE -->
 [
   {"delay": 20},
-  {"agent": "leo", "task": "Fix the memory leak described in issue #32", "visibility": "focused"},
+  {"agent": "leo", "task": "Fix this self-contained memory leak task: allocator X retains buffer Y after shutdown; reproduce with command Z and patch the cleanup path. Relevant acceptance criteria: ...", "visibility": "focused"},
   {"delay": 30},
-  {"agent": "maya", "task": "Independently verify the auth module", "visibility": "blind"}
+  {"agent": "maya", "task": "Independently verify the auth module against this self-contained claim: ...", "visibility": "blind"}
 ]
 <!-- /SCHEDULE -->
 
@@ -143,6 +143,10 @@ The schedule is an **ordered array of steps**. Each step is either:
 - Each agent step MUST include both `agent` and `task`. Missing `task` causes the entire schedule to be rejected.
 - Delay steps must have ONLY the `delay` key — extra keys cause rejection.
 - Agents run sequentially in the order you list them, not in parallel.
+- Do NOT assign issue/PR-board work to `blind` or `focused` workers by saying things like "review issue #32" or "verify PR #7". Those workers cannot read the issue/PR board. Either:
+  - paste the relevant facts, evidence, file paths, branch/commit, commands, and acceptance criteria directly into the task text so it is self-contained; or
+  - use `visibility: "full"` when the worker must inspect issue/PR records.
+- The orchestrator rejects schedules that mention issue/PR references in `blind` or `focused` tasks.
 
 ### Delays
 

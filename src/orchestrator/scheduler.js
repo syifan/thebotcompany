@@ -40,8 +40,7 @@ export function parseVisibility(runner, deps = {}, value, task) {
     if (!visMode || visMode === 'full') return null;
     if (visMode === 'blind') return { mode: 'blind', issues: [] };
     if (visMode === 'focused') {
-      const issueIds = (task || '').match(/#(\d+)/g)?.map(m => m.slice(1)) || [];
-      return { mode: 'focused', issues: issueIds };
+      return { mode: 'focused', issues: [] };
     }
     return null;
   }

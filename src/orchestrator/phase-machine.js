@@ -9,6 +9,13 @@ function availableWorkersForManager(runner, managerName) {
   return runner.loadAgents().workers.filter(worker => String(worker.reportsTo || '').toLowerCase() === owner);
 }
 
+function nonFullVisibilityIssueReference(task) {
+  const text = String(task || '');
+  return /\b(?:issue|issues|pr|prs|pull request|pull requests)\s*#?\d+\b/i.test(text)
+    || /#\d+\b/.test(text)
+    || /\btbc-db\s+(?:issue-view|issue-list|comments|pr-view|pr-list|pr-comments|query)\b/i.test(text);
+}
+
 function validateManagerDirective(runner, deps, resultText, managerName) {
   const text = String(resultText || '');
   if (!scheduleBlockPresent(text)) return null;
@@ -22,15 +29,27 @@ function validateManagerDirective(runner, deps, resultText, managerName) {
 
   const allowed = new Set(availableWorkersForManager(runner, managerName).map(worker => worker.name.toLowerCase()));
   const invalid = [];
+  const issueScoped = [];
   for (const step of schedule._steps || []) {
     if (!step || step.delay !== undefined) continue;
     const name = Object.keys(step).find(key => key !== 'delay');
     if (name && !allowed.has(name.toLowerCase())) invalid.push(name);
+    const value = name ? step[name] : null;
+    const visibility = typeof value === 'object' ? String(value.visibility || 'full').toLowerCase() : 'full';
+    const task = typeof value === 'string' ? value : value?.task;
+    if ((visibility === 'blind' || visibility === 'focused') && nonFullVisibilityIssueReference(task)) {
+      issueScoped.push(`${name || '(unknown)'}:${visibility}`);
+    }
   }
   if (invalid.length) {
     const available = [...allowed].sort().join(', ') || '(none)';
     return {
       message: `SCHEDULE references unavailable worker(s): ${[...new Set(invalid)].join(', ')}. Available workers for ${managerName}: ${available}.`,
+    };
+  }
+  if (issueScoped.length) {
+    return {
+      message: `SCHEDULE assigns issue/PR references to non-full-visibility worker(s): ${[...new Set(issueScoped)].join(', ')}. Blind/focused workers cannot read the issue or PR board; make their task self-contained by pasting the relevant facts/evidence, or use visibility:"full" for issue/PR-board work.`,
     };
   }
   return null;
