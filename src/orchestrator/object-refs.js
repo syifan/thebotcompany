@@ -39,12 +39,7 @@ export function extractObjectRefIds(text) {
 }
 
 export function extractFocusedRefIds(text) {
-  const ids = new Set(extractObjectRefIds(text).map(String));
-  for (const match of String(text || '').matchAll(/\b(?:issue|issues)\s*#?(\d+)\b/gi)) ids.add(`issue:${match[1]}`);
-  for (const match of String(text || '').matchAll(/\b(?:tbc\s+pr|pr|prs|pull request|pull requests)\s*#?(\d+)\b/gi)) ids.add(`tbc_pr:${match[1]}`);
-  for (const match of String(text || '').matchAll(/\b(?:issue\s+comment|comment|comments)\s*#?(\d+)\b/gi)) ids.add(`comment:${match[1]}`);
-  for (const match of String(text || '').matchAll(/\b(?:pr\s+comment|pr\s+comments|tbc\s+pr\s+comment|tbc\s+pr\s+comments)\s*#?(\d+)\b/gi)) ids.add(`tbc_pr_comment:${match[1]}`);
-  return [...ids];
+  return extractObjectRefIds(text).map(String);
 }
 
 function issueJson(db, ref) {
@@ -84,29 +79,25 @@ export function resolveObjectRefJson(db, id) {
   return null;
 }
 
-function resolveTypedObjectRefJson(db, type, localId) {
+function resolveByLocalIdPriority(db, id) {
   ensureObjectRefs(db);
-  const ref = db.prepare('SELECT id, type, local_id FROM object_refs WHERE type = ? AND local_id = ?').get(type, localId);
-  if (!ref) return null;
-  if (type === 'issue') return issueJson(db, ref);
-  if (type === 'tbc_pr') return prJson(db, ref);
-  if (type === 'comment') return commentJson(db, ref);
-  if (type === 'tbc_pr_comment') return prCommentJson(db, ref);
-  return null;
+  const priority = ['issue', 'tbc_pr', 'comment', 'tbc_pr_comment'];
+  for (const type of priority) {
+    const ref = db.prepare('SELECT id, type, local_id FROM object_refs WHERE type = ? AND local_id = ?').get(type, id);
+    if (!ref) continue;
+    if (type === 'issue') return issueJson(db, ref);
+    if (type === 'tbc_pr') return prJson(db, ref);
+    if (type === 'comment') return commentJson(db, ref);
+    if (type === 'tbc_pr_comment') return prCommentJson(db, ref);
+  }
+  return resolveObjectRefJson(db, id);
 }
 
 export function resolveReferencedObjectJson(db, text) {
   const resolved = new Map();
-  const add = (obj) => { if (obj) resolved.set(`${obj.type}:${obj.local_id}`, obj); };
-  const value = String(text || '');
-
-  // Backward compatibility for existing DB text: typed mentions use local table ids.
-  for (const match of value.matchAll(/\b(?:issue|issues)\s*#?(\d+)\b/gi)) add(resolveTypedObjectRefJson(db, 'issue', Number(match[1])));
-  for (const match of value.matchAll(/\b(?:tbc\s+pr|pr|prs|pull request|pull requests)\s*#?(\d+)\b/gi)) add(resolveTypedObjectRefJson(db, 'tbc_pr', Number(match[1])));
-  for (const match of value.matchAll(/\b(?:issue\s+comment|comment|comments)\s*#?(\d+)\b/gi)) add(resolveTypedObjectRefJson(db, 'comment', Number(match[1])));
-  for (const match of value.matchAll(/\b(?:pr\s+comment|pr\s+comments|tbc\s+pr\s+comment|tbc\s+pr\s+comments)\s*#?(\d+)\b/gi)) add(resolveTypedObjectRefJson(db, 'tbc_pr_comment', Number(match[1])));
-
-  // Bare #id uses the new global object id namespace.
-  for (const id of extractObjectRefIds(value)) add(resolveObjectRefJson(db, id));
+  for (const id of extractObjectRefIds(text)) {
+    const obj = resolveByLocalIdPriority(db, id);
+    if (obj) resolved.set(`${obj.type}:${obj.local_id}`, obj);
+  }
   return [...resolved.values()];
 }
