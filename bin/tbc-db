@@ -1,0 +1,2 @@
+#!/usr/bin/env node
+import './tbc-db.js';
