@@ -263,7 +263,7 @@ export async function handleProjectChatRoutes(req, res, url, ctx) {
           : config;
         const keyResult = await resolveKeyForProject(keyConfig, null, oauthTokenGetter);
         if (!keyResult?.token) {
-          respondChatError(400, { error: explicitKeyId ? 'Selected API key is unavailable.' : 'No API key configured. Add one in Settings > Credentials.', source: explicitKeyId ? 'local_selection' : 'configuration' });
+          respondChatError(400, { error: explicitKeyId ? 'Selected API key is unavailable.' : 'No AI model credential configured. Add one in Settings > AI Model Credentials.', source: explicitKeyId ? 'local_selection' : 'configuration' });
           return;
         }
         if (explicitKeyId && keyResult.keyId !== explicitKeyId) {

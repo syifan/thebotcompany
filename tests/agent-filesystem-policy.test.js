@@ -235,6 +235,28 @@ PY`, timeout: 30000 }, p.repo, 0, { OUTSIDE: outside }, null, null, p.allowedWor
   });
 
 
+  it('injects configured GitHub token into normal Bash for git and gh authentication', async () => {
+    const p = mkProject();
+    const oldToken = process.env.TBC_GITHUB_TOKEN;
+    process.env.TBC_GITHUB_TOKEN = 'github_pat_test_scope_token';
+    try {
+      const out = await executeTool(
+        'Bash',
+        { command: 'printf "%s|%s|" "$GH_TOKEN" "$GITHUB_TOKEN"; test -x "$GIT_ASKPASS" && printf askpass-ok' },
+        p.repo,
+        0,
+        { TBC_DB: p.allowedWorker.dbPath },
+        null,
+        null,
+        p.allowedWorker,
+      );
+      assert.match(out, /github_pat_test_scope_token\|github_pat_test_scope_token\|askpass-ok/);
+    } finally {
+      if (oldToken === undefined) delete process.env.TBC_GITHUB_TOKEN;
+      else process.env.TBC_GITHUB_TOKEN = oldToken;
+    }
+  });
+
   it('runs tbc-db through the trusted runner path while keeping raw database reads blocked', async () => {
     const p = mkProject();
     fs.rmSync(p.allowedWorker.dbPath, { force: true });
@@ -297,6 +319,20 @@ PY`, timeout: 30000 }, p.repo, 0, { OUTSIDE: outside }, null, null, p.allowedWor
     );
     assert.match(chained, /A && B/);
     assert.doesNotMatch(chained, /EPERM|operation not permitted/i);
+
+    const mixed = await executeTool(
+      'Bash',
+      { command: 'tbc-db pr-list && git status --short --branch' },
+      p.repo,
+      0,
+      { TBC_DB: p.allowedWorker.dbPath },
+      null,
+      null,
+      p.allowedWorker,
+      { mode: 'full', actor: 'leo', issues: [] },
+    );
+    assert.doesNotMatch(mixed, /EPERM|operation not permitted/i);
+    assert.match(mixed, /\(no TBC PRs\)|##/);
   });
 
   it('applies issue visibility and actor policy before trusted tbc-db execution', async () => {

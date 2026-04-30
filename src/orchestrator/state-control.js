@@ -185,12 +185,6 @@ export function killRunnerEpoch(runner, deps = {}) {
     if (runner.currentAgentProcess) {
       runner.currentAgentProcess.kill('SIGTERM');
     }
-    if (runner.currentMilestoneBranch) {
-      runner.closeOpenEpochPRForBranch(runner.currentMilestoneBranch, {
-        actor: 'ares',
-        reason: `Epoch killed manually while replanning milestone ${runner.currentMilestoneId || 'unknown'}.`,
-      });
-    }
     runner.currentSchedule = null;
     runner.completedAgents = [];
     runner.setState({

@@ -277,7 +277,10 @@ class ProjectRunner {
   }
 
   async decideEpochPR(status, { actor = 'apollo', reason = '' } = {}) {
-    const pr = await this.getOpenEpochPRForCurrentMilestone();
+    const pr = this.currentEpochPrId
+      ? await this.getPR(this.currentEpochPrId)
+      : await this.getOpenEpochPRForCurrentMilestone();
+    if (pr?.status === status) return pr;
     return decideProjectEpochPr(this, pr, status, { actor, reason });
   }
 

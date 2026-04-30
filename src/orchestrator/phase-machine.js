@@ -1,5 +1,77 @@
 import fs from 'fs';
 
+function scheduleBlockPresent(text = '') {
+  return /<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/.test(String(text || ''));
+}
+
+function availableWorkersForManager(runner, managerName) {
+  const owner = String(managerName || '').toLowerCase();
+  return runner.loadAgents().workers.filter(worker => String(worker.reportsTo || '').toLowerCase() === owner);
+}
+
+function nonFullVisibilityIssueReference(task) {
+  const text = String(task || '');
+  return /\b(?:issue|issues|pr|prs|pull request|pull requests)\s*#?\d+\b/i.test(text)
+    || /#\d+\b/.test(text)
+    || /\btbc-db\s+(?:issue-view|issue-list|comments|pr-view|pr-list|pr-comments|query)\b/i.test(text);
+}
+
+function validateManagerDirective(runner, deps, resultText, managerName) {
+  const text = String(resultText || '');
+  if (!scheduleBlockPresent(text)) return null;
+
+  const schedule = runner.parseSchedule(text);
+  if (!schedule) {
+    return {
+      message: 'Malformed SCHEDULE directive. Use the canonical JSON array format exactly: <!-- SCHEDULE --> [ {"agent":"name","task":"..."} ] <!-- /SCHEDULE -->.',
+    };
+  }
+
+  const allowed = new Set(availableWorkersForManager(runner, managerName).map(worker => worker.name.toLowerCase()));
+  const invalid = [];
+  const issueScoped = [];
+  for (const step of schedule._steps || []) {
+    if (!step || step.delay !== undefined) continue;
+    const name = Object.keys(step).find(key => key !== 'delay');
+    if (name && !allowed.has(name.toLowerCase())) invalid.push(name);
+    const value = name ? step[name] : null;
+    const visibility = typeof value === 'object' ? String(value.visibility || 'full').toLowerCase() : 'full';
+    const task = typeof value === 'string' ? value : value?.task;
+    if (visibility === 'blind' && nonFullVisibilityIssueReference(task)) {
+      issueScoped.push(`${name || '(unknown)'}:${visibility}`);
+    }
+  }
+  if (invalid.length) {
+    const available = [...allowed].sort().join(', ') || '(none)';
+    return {
+      message: `SCHEDULE references unavailable worker(s): ${[...new Set(invalid)].join(', ')}. Available workers for ${managerName}: ${available}.`,
+    };
+  }
+  if (issueScoped.length) {
+    return {
+      message: `SCHEDULE assigns issue/PR references to blind worker(s): ${[...new Set(issueScoped)].join(', ')}. Blind workers cannot receive issue/PR-board context; make their task self-contained by pasting neutral facts/evidence without #id references, or use visibility:"focused"/"full" for issue/PR-board work.`,
+    };
+  }
+  return null;
+}
+
+async function runManagerWithDirectiveRetry(runner, deps, manager, config, task, { visibility = null, maxRetries = 1 } = {}) {
+  let result = await runner.runAgent(manager, config, null, task, visibility);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (!result?.success || !result?.resultText) break;
+    const problem = validateManagerDirective(runner, deps, result.resultText, manager.name);
+    if (!problem) break;
+    deps.log(`Rejecting ${manager.name} response: ${problem.message}`, runner.id);
+    const correction = `> **Orchestrator rejected your previous response before acting on it.**
+> Problem: ${problem.message}
+> Generate a corrected response now. Keep any useful reasoning/evidence, but fix the directive block. Do not reuse unavailable worker names.
+
+${task || ''}`;
+    result = await runner.runAgent(manager, config, null, correction, visibility);
+  }
+  return result;
+}
+
 export async function runRunnerLoop(runner, deps = {}) {
     const broadcastEvent = deps.broadcastEvent || (() => {});
     while (runner.running) {
@@ -25,8 +97,8 @@ export async function runRunnerLoop(runner, deps = {}) {
       const preConfig = runner.loadConfig();
       const poolCheck = deps.getKeyPoolSafe();
       if (poolCheck.keys.filter(k => k.enabled).length === 0 && !preConfig.setupToken) {
-        deps.log(`No API keys configured. Pausing project. Add a key in Settings > Credentials.`, runner.id);
-        runner.setState({ isPaused: true, pauseReason: 'No API keys configured. Add one in Settings > Credentials.' });
+        deps.log(`No AI model credentials configured. Pausing project. Add one in Settings > AI Model Credentials.`, runner.id);
+        runner.setState({ isPaused: true, pauseReason: 'No AI model credentials configured. Add one in Settings > AI Model Credentials.' });
         await runner._autoPauseWait(30_000, () => deps.getKeyPoolSafe().keys.some(k => k.enabled));
         if (!runner.running) break;
         continue;
@@ -77,7 +149,7 @@ export async function runRunnerLoop(runner, deps = {}) {
           }
           situation += `\n`;
 
-          const result = await runner.runAgent(athena, config, null, situation);
+          const result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
@@ -104,12 +176,6 @@ export async function runRunnerLoop(runner, deps = {}) {
                   deps.log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, runner.id);
                 } else if (milestone.reset_to && resetTarget) {
                   deps.log(`Athena reset planning anchor to ${resetTarget.label}`, runner.id);
-                  if (runner.currentMilestoneBranch) {
-                    runner.closeOpenEpochPRForBranch(runner.currentMilestoneBranch, {
-                      actor: 'athena',
-                      reason: `Athena reset subtree to ${resetTarget.label} while replanning.`,
-                    });
-                  }
                 }
                 runner.setState({
                   milestoneTitle,
@@ -245,7 +311,7 @@ export async function runRunnerLoop(runner, deps = {}) {
             epochStateChanged = true;
           }
           if (epochStateChanged) runner.saveState();
-          const openEpochPr = await runner.ensureEpochPRForCurrentMilestone();
+          const openEpochPr = await runner.getOpenEpochPRForCurrentMilestone();
           // Build context for Ares (remaining includes this cycle)
           const cyclesRemaining = Math.max(0, runner.milestoneCyclesBudget - runner.milestoneCyclesUsed);
           let aresContext = `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}
@@ -254,7 +320,7 @@ export async function runRunnerLoop(runner, deps = {}) {
 > **Cycles remaining:** ${cyclesRemaining} of ${runner.milestoneCyclesBudget}
 > **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}
 > **Epoch PR:** ${openEpochPr?.id ? `#${openEpochPr.id}` : 'not set'}
-> **Epoch PR rule:** The orchestrator assigned exactly one TBC PR to this milestone branch. Use it instead of creating competing PRs.
+> **Epoch PR guidance:** Prefer one TBC PR for this milestone branch when code changes need review, but this is a soft workflow convention. Managers may create/update/close/merge TBC PRs as needed.
 
 `;
           if (aresGraceMode) {
@@ -271,7 +337,7 @@ export async function runRunnerLoop(runner, deps = {}) {
 `;
           }
 
-          const result = await runner.runAgent(ares, config, null, aresContext);
+          const result = await runManagerWithDirectiveRetry(runner, deps, ares, config, aresContext);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
           if (aresGraceMode) runner.aresGraceCycleUsed = true;
@@ -293,23 +359,15 @@ export async function runRunnerLoop(runner, deps = {}) {
             // Check if Ares claims milestone complete
             if (result.resultText.includes('<!-- CLAIM_COMPLETE -->')) {
               claimedComplete = true;
-              const openEpochPr = await runner.ensureEpochPRForCurrentMilestone();
-              if (!openEpochPr) {
-                runner.verificationFeedback = `Ares claimed milestone completion without an orchestrator-managed epoch PR on branch ${runner.currentMilestoneBranch || 'unknown'}.`;
-                deps.log('⚠️ CLAIM_COMPLETE ignored because no orchestrator-managed epoch PR exists for the current milestone branch', runner.id);
-                runner.saveState();
-                claimedComplete = false;
-              } else {
-                deps.log(`🎯 Ares claims milestone complete for epoch PR #${openEpochPr.id} — switching to verification`, runner.id);
-                runner.setState({ phase: 'verification', currentEpochPrId: openEpochPr.id });
-                broadcastEvent({ type: 'phase', project: runner.id, phase: 'verification', title: runner.milestoneTitle });
-              }
+              const openEpochPr = await runner.getOpenEpochPRForCurrentMilestone();
+              deps.log(`🎯 Ares claims milestone complete${openEpochPr?.id ? ` for TBC PR #${openEpochPr.id}` : ''} — switching to verification`, runner.id);
+              runner.setState({ phase: 'verification', currentEpochPrId: openEpochPr?.id || runner.currentEpochPrId || null });
+              broadcastEvent({ type: 'phase', project: runner.id, phase: 'verification', title: runner.milestoneTitle });
             }
           }
 
           if (aresGraceMode && !claimedComplete) {
             const failureReason = `Implementation deadline missed after ${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles for ${runner.currentMilestoneId || 'unknown milestone'} (Ares grace review did not claim completion).`;
-            await runner.decideEpochPR('closed', { actor: 'apollo', reason: failureReason });
             await runner.markCurrentMilestoneFailed(failureReason);
             deps.log(`⏰ ${failureReason}`, runner.id);
             runner.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena', verificationFeedback: failureReason });
@@ -358,7 +416,7 @@ export async function runRunnerLoop(runner, deps = {}) {
             ? `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Rollup verification target:** ${runner.currentMilestoneId || 'unknown'}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
             : `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
 
-          const result = await runner.runAgent(apollo, config, null, apolloContext);
+          const result = await runManagerWithDirectiveRetry(runner, deps, apollo, config, apolloContext);
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
@@ -402,10 +460,6 @@ export async function runRunnerLoop(runner, deps = {}) {
 
           // Process decision
           if (decision === 'pass') {
-            const mergedPr = isRollupVerification ? null : await runner.decideEpochPR('merged', {
-              actor: 'apollo',
-              reason: `Apollo passed milestone ${runner.currentMilestoneId || ''} ${runner.milestoneTitle || runner.milestoneDescription || ''}`.trim(),
-            });
             const completedMilestoneId = runner.currentMilestoneId;
             const completedMilestoneTitle = runner.milestoneTitle;
             const parentMilestoneId = runner.getParentMilestoneId(completedMilestoneId);
@@ -439,7 +493,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 currentEpochPrId: null,
                 currentMilestoneBranch: parentMilestone?.branch_name || null,
                 aresGraceCycleUsed: false,
-                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
+                lastMergedMilestoneBranch: runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
                 phase: 'verification',
@@ -460,7 +514,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 currentEpochPrId: null,
                 currentMilestoneBranch: null,
                 aresGraceCycleUsed: false,
-                lastMergedMilestoneBranch: mergedPr?.branch_name || mergedPr?.head_branch || runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
+                lastMergedMilestoneBranch: runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
                 phase: 'athena',
@@ -482,10 +536,6 @@ export async function runRunnerLoop(runner, deps = {}) {
                 phase: 'athena',
               });
             } else {
-              await runner.decideEpochPR('closed', {
-                actor: 'apollo',
-                reason: failureReason,
-              });
               await runner.markCurrentMilestoneFailed(failureReason);
               deps.log('❌ Verification failed — returning to Athena for split/replan', runner.id);
               broadcastEvent({ type: 'verify-fail', project: runner.id, title: runner.milestoneTitle });
@@ -522,7 +572,7 @@ export async function runRunnerLoop(runner, deps = {}) {
         const themis = managers.find(m => m.name === 'themis');
         if (themis) {
           const themisContext = `> **Final completion claim:** ${runner.pendingCompletionMessage || 'Project claimed complete'}\n> **Evaluate the entire project, not just the human\'s explicit goal.** Audit correctness, completeness, maintainability, artifacts, tests, docs, and obvious risks.\n\n`;
-          const result = await runner.runAgent(themis, config, null, themisContext, { mode: 'full', issues: [] });
+          const result = await runManagerWithDirectiveRetry(runner, deps, themis, config, themisContext, { visibility: { mode: 'full', issues: [] } });
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 

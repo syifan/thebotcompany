@@ -47,9 +47,9 @@ describe('Themis examination phase', () => {
       'Expected a dedicated examination phase block in runLoop');
     assert.match(src, /const themis = managers\.find\(m => m\.name === 'themis'\)/,
       'Expected examination phase to run Themis');
-    assert.match(src, /(?:this|runner)\.runAgent\(themis, config, null, themisContext, \{ mode: 'full', issues: \[\] \}\)/,
+    assert.match(src, /runManagerWithDirectiveRetry\(runner, deps, themis, config, themisContext, \{ visibility: \{ mode: 'full', issues: \[\] \} \}\)/,
       'Expected Themis to run in full view');
-    assert.doesNotMatch(src, /(?:this|runner)\.runAgent\(themis, config, null, themisContext, \{ mode: 'blind', issues: \[\] \}\)/,
+    assert.doesNotMatch(src, /themis, config, null, themisContext, \{ mode: 'blind', issues: \[\] \}/,
       'Themis should no longer run blind');
   });
 
@@ -75,6 +75,18 @@ describe('Themis examination phase', () => {
       'Expected executeSchedule to accept a manager owner');
     assert.match(src, /return \(worker\.reportsTo \|\| ''\)\.toLowerCase\(\) === ownerName/,
       'Expected executeSchedule to limit workers to the current manager team');
+  });
+
+  it('rejects issue-board assignments to blind workers', () => {
+    const src = readOrchestratorSource();
+    assert.match(src, /function nonFullVisibilityIssueReference\(task\)/,
+      'Expected manager directive validation to detect issue\/PR references');
+    assert.match(src, /visibility === 'blind'/,
+      'Expected blind scheduled tasks to be checked');
+    assert.match(src, /SCHEDULE assigns issue\/PR references to blind worker/,
+      'Expected schedules assigning issues to blind workers to be rejected and retried');
+    assert.match(src, /use visibility:\"focused\"\/\"full\" for issue\/PR-board work/,
+      'Expected correction prompt to tell managers to use focused\/full visibility for issue\/PR-board work');
   });
 
   it('finalizes completion only on EXAM_PASS', () => {

@@ -1,4 +1,5 @@
 import { readJson, sendJson } from '../../http.js';
+import { registerObjectRef } from '../../../orchestrator/object-refs.js';
 
 export async function handleProjectIssueRoutes(req, res, url, ctx) {
   const { runner, subPath, requireWrite } = ctx;
@@ -32,9 +33,10 @@ export async function handleProjectIssueRoutes(req, res, url, ctx) {
       const db = runner.getDb();
       const now = new Date().toISOString();
       const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, author || 'human', commentBody.trim(), now);
+      const ref = registerObjectRef(db, 'comment', result.lastInsertRowid, now);
       db.prepare('UPDATE issues SET updated_at = ? WHERE id = ?').run(now, issueId);
       db.close();
-      sendJson(res, 200, { id: result.lastInsertRowid });
+      sendJson(res, 200, { id: ref?.id || result.lastInsertRowid, localId: result.lastInsertRowid });
     } catch (error) {
       sendJson(res, 500, { error: error.message });
     }

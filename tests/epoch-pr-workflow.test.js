@@ -10,9 +10,10 @@ const phaseMachine = fs.readFileSync(path.resolve('src/orchestrator/phase-machin
 const orchestratorSource = `${server}\n${milestones}\n${stateControl}\n${phaseMachine}`;
 
 describe('epoch-as-PR orchestrator flow', () => {
-  it('requires an orchestrator-managed epoch PR before Ares can claim completion', () => {
-    assert.match(orchestratorSource, /CLAIM_COMPLETE ignored because no orchestrator-managed epoch PR exists/i);
-    assert.match(orchestratorSource, /ensureEpochPRForCurrentMilestone/);
+  it('treats epoch PRs as a soft manager-owned workflow convention', () => {
+    assert.match(orchestratorSource, /Epoch PR guidance:/);
+    assert.match(orchestratorSource, /Prefer one TBC PR/);
+    assert.doesNotMatch(orchestratorSource, /CLAIM_COMPLETE ignored because no orchestrator-managed epoch PR exists/i);
   });
 
   it('assigns milestone ids before Athena starts and derives epoch ids separately', () => {
@@ -37,7 +38,7 @@ describe('epoch-as-PR orchestrator flow', () => {
     const killEpochBlock = stateControl.match(/killRunnerEpoch\([^)]*\)/);
     assert.ok(killEpochBlock);
     const block = stateControl;
-    assert.match(block, /closeOpenEpochPRForBranch\((?:this|runner)\.currentMilestoneBranch/);
+    assert.doesNotMatch(block, /closeOpenEpochPRForBranch\((?:this|runner)\.currentMilestoneBranch/);
     assert.match(block, /pendingMilestoneId: null/);
     assert.match(block, /currentEpochId: null/);
     assert.match(block, /currentEpochPrId: null/);

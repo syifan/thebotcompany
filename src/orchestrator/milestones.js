@@ -1,3 +1,5 @@
+import { registerObjectRef } from './object-refs.js';
+
 export function normalizeResetTargetMilestone(resetTo) {
     const value = typeof resetTo === 'string' ? resetTo.trim() : '';
     if (!value) return null;
@@ -131,6 +133,7 @@ export async function ensureEpochPRForCurrentMilestone() {
         now,
       );
       const prId = result.lastInsertRowid;
+      registerObjectRef(db, 'tbc_pr', prId, now);
       db.close();
       await this.upsertMilestoneRecord({
         milestoneId: this.currentMilestoneId,

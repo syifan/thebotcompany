@@ -184,7 +184,7 @@ export async function runAgentForRunner(runner, deps = {}, agent, config, mode =
       runner.currentAgentLog = [];
       runner.currentAgentModel = null; runner.currentAgentCost = 0; runner.currentAgentUsage = null; runner.currentAgentKeyId = null; runner.currentAgentVisibility = null;
       deps.broadcastStatusUpdate(runner.id);
-      return { error: 'no_token', message: 'No API key configured. Add one in Settings > Credentials.' };
+      return { error: 'no_token', message: 'No AI model credential configured. Add one in Settings > AI Model Credentials.' };
     }
 
     const agentEnv = {

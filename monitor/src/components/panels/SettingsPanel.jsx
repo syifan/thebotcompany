@@ -815,6 +815,15 @@ export default function SettingsPanel({
   const [editingCustomKey, setEditingCustomKey] = useState(null)
   const [editingLabel, setEditingLabel] = useState(null)
   const [editLabelValue, setEditLabelValue] = useState('')
+  const [githubTokenStatus, setGithubTokenStatus] = useState({ hasToken: false, preview: null })
+  const [githubTokenInput, setGithubTokenInput] = useState('')
+  const [savingGithubToken, setSavingGithubToken] = useState(false)
+
+  const fetchSettings = () => {
+    fetch('/api/settings').then(r => r.json()).then(d => {
+      if (d.github) setGithubTokenStatus(d.github)
+    }).catch(() => {})
+  }
 
   const fetchKeys = () => {
     fetch('/api/keys').then(r => r.json()).then(d => {
@@ -823,7 +832,7 @@ export default function SettingsPanel({
     }).catch(() => {})
   }
 
-  useEffect(() => { fetchKeys() }, [])
+  useEffect(() => { fetchKeys(); fetchSettings() }, [])
 
   useEffect(() => {
     const hasCooldown = keys.some(key => (key.cooldownMs || 0) > 0)
@@ -908,6 +917,26 @@ export default function SettingsPanel({
       }
     } catch {}
     setEditingLabel(null)
+  }
+
+  const handleSaveGithubToken = async () => {
+    setSavingGithubToken(true)
+    try {
+      const res = await authFetch('/api/settings/github-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: githubTokenInput.trim() })
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.error || 'Failed to save GitHub token')
+      setGithubTokenStatus(d.github || { hasToken: !!githubTokenInput.trim(), preview: null })
+      setGithubTokenInput('')
+      showToast(githubTokenInput.trim() ? 'GitHub token saved' : 'GitHub token removed')
+    } catch (e) {
+      showToast(e.message || 'Failed to save GitHub token')
+    } finally {
+      setSavingGithubToken(false)
+    }
   }
 
   const notifSupported = typeof window !== 'undefined' && 'Notification' in window
@@ -1006,20 +1035,79 @@ export default function SettingsPanel({
             </button>
           </div>
         </div>
-        {/* Credentials Section */}
+        {/* GitHub Access Section */}
+        <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5 pb-5">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">GitHub Access</h3>
+            <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
+              Used for repository discovery, issue/PR work, pushing branches, opening PRs, and reading CI results. This is separate from AI model credentials.
+            </p>
+          </div>
+
+          <div className={`rounded-xl border p-3 ${githubTokenStatus.hasToken ? 'border-green-200 dark:border-green-900 bg-green-50/60 dark:bg-green-950/20' : 'border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/20'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${githubTokenStatus.hasToken ? 'bg-green-400' : 'bg-amber-400 animate-pulse'}`} />
+                  <h4 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">GitHub Personal Access Token</h4>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">Required</span>
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Use a fine-grained PAT scoped to the repositories TBC should touch. Do not paste model provider API keys here.
+                </p>
+              </div>
+              {githubTokenStatus.hasToken && <code className="text-xs text-neutral-500 dark:text-neutral-400 shrink-0">{githubTokenStatus.preview}</code>}
+            </div>
+            <div className="mt-3 text-xs text-neutral-600 dark:text-neutral-300 space-y-1">
+              <p>
+                Create one at{' '}
+                <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                  GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+                </a>
+                . For existing repos, choose <strong>Only selected repositories</strong>. If TBC should create repos, choose <strong>All repositories</strong>; GitHub does not let TBC automatically add a newly created repo to a fine-grained PAT that was limited to selected repositories.
+              </p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li><strong>Contents: Read and write</strong> — lets agents clone/fetch and push branches with code changes.</li>
+                <li><strong>Pull requests: Read and write</strong> — lets TBC create and update PRs for completed work.</li>
+                <li><strong>Issues: Read and write</strong> — lets TBC read assigned work and update issue state when needed.</li>
+                <li><strong>Actions: Read-only</strong> — lets TBC inspect GitHub Actions runs, CI status, and logs. Read-only is enough because TBC should not change workflow runs.</li>
+                <li><strong>Administration: Read and write</strong> — only if TBC should create repos or manage repo settings. This is powerful; avoid it for existing-repo-only work.</li>
+                <li><strong>Workflows: No access</strong> — workflows are the YAML definitions in <code>.github/workflows</code>; keep this off unless you explicitly want TBC to edit CI workflow files.</li>
+              </ul>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                type="password"
+                value={githubTokenInput}
+                onChange={e => setGithubTokenInput(e.target.value)}
+                placeholder={githubTokenStatus.hasToken ? 'Paste replacement token, or leave blank to remove' : 'github_pat_...'}
+                className="flex-1 px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
+              />
+              <button
+                onClick={handleSaveGithubToken}
+                disabled={savingGithubToken}
+                className="px-3 py-2 text-sm font-medium rounded-lg bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 disabled:opacity-50"
+              >
+                {savingGithubToken ? 'Saving…' : githubTokenInput.trim() ? 'Save' : githubTokenStatus.hasToken ? 'Remove' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Model Credentials Section */}
         <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5">
           <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Credentials</h3>
+            <h3 className="text-sm font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">AI Model Credentials</h3>
             <button
               onClick={() => setShowApiKeyHelp(true)}
               className="text-neutral-400 hover:text-blue-500 dark:text-neutral-500 dark:hover:text-blue-400 transition-colors"
-              title="How to get API keys"
+              title="How to get AI model API keys"
             >
               <Info className="w-4 h-4" />
             </button>
           </div>
           <p className="text-xs text-neutral-400 dark:text-neutral-500 mb-3">
-            Keys are tried in order during agent runs. Supports API keys and OAuth sign-in.
+            Model credentials are tried in order during agent runs. Supports provider API keys and OAuth sign-in.
           </p>
 
           {/* Add credential button / wizard */}

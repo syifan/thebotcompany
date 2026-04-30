@@ -21,28 +21,31 @@ function run(args, dbPath) {
 }
 
 describe('tbc-db epoch PR actor policy', () => {
-  it('allows only ares to create epoch PRs', () => {
+  it('allows all managers to create epoch PRs and blocks non-managers', () => {
     const dbPath = makeDbPath();
 
-    const denied = run(['pr-create', '--title', 'Bad PR', '--head', 'ares/m1', '--actor', 'athena'], dbPath);
+    const denied = run(['pr-create', '--title', 'Bad PR', '--head', 'worker/m1', '--actor', 'leo'], dbPath);
     assert.notEqual(denied.status, 0);
-    assert.match(`${denied.stderr}${denied.stdout}`, /Only ares may create epoch PRs/i);
+    assert.match(`${denied.stderr}${denied.stdout}`, /Only manager agents/i);
 
-    const allowed = run(['pr-create', '--title', 'Good PR', '--head', 'ares/m1', '--actor', 'ares'], dbPath);
-    assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
-    assert.match(allowed.stdout, /Created TBC PR #1/);
+    for (const manager of ['athena', 'ares', 'apollo', 'themis']) {
+      const allowed = run(['pr-create', '--title', `${manager} PR`, '--head', `${manager}/m1`, '--actor', manager], dbPath);
+      assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
+      assert.match(allowed.stdout, /Created TBC PR #/);
+    }
   });
 
-  it('allows only apollo to merge or close an epoch PR', () => {
+  it('allows managers to close epoch PRs and blocks non-managers', () => {
     const dbPath = makeDbPath();
     const created = run(['pr-create', '--title', 'Epoch PR', '--head', 'ares/m2', '--actor', 'ares'], dbPath);
     assert.equal(created.status, 0, created.stderr || created.stdout);
 
-    const denied = run(['pr-edit', '1', '--actor', 'ares', '--status', 'merged'], dbPath);
+    const denied = run(['pr-edit', '1', '--actor', 'leo', '--status', 'closed'], dbPath);
     assert.notEqual(denied.status, 0);
-    assert.match(`${denied.stderr}${denied.stdout}`, /Only apollo may mark an epoch PR as merged/i);
+    assert.match(`${denied.stderr}${denied.stdout}`, /Only manager agents/i);
 
-    const allowed = run(['pr-edit', '1', '--actor', 'apollo', '--status', 'merged', '--decision', 'merge'], dbPath);
+    const allowed = run(['pr-close', '1', '--actor', 'athena', '--reason', 'not needed'], dbPath);
     assert.equal(allowed.status, 0, allowed.stderr || allowed.stdout);
+    assert.match(allowed.stdout, /Closed TBC PR #1/);
   });
 });

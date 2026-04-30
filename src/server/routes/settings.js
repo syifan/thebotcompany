@@ -1,12 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { readJson, sendJson } from '../http.js';
+import { getGithubToken, setGithubTokenInEnvFile } from '../../github-token.js';
 
 function getProviderStatus({ maskToken, loadOAuthCredentials, getKeyPoolSafe }) {
   const anthropicToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || null;
   const openaiToken = process.env.OPENAI_API_KEY || null;
   const googleToken = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
   const codexCreds = loadOAuthCredentials('openai-codex');
+  const githubToken = getGithubToken();
   return {
     hasGlobalToken: !!anthropicToken,
     globalTokenPreview: anthropicToken ? maskToken(anthropicToken) : null,
@@ -16,6 +18,12 @@ function getProviderStatus({ maskToken, loadOAuthCredentials, getKeyPoolSafe }) 
       openai: { hasToken: !!openaiToken, preview: openaiToken ? maskToken(openaiToken) : null },
       google: { hasToken: !!googleToken, preview: googleToken ? maskToken(googleToken) : null },
       'openai-codex': { hasToken: !!codexCreds?.access, type: 'oauth' },
+    },
+    github: {
+      hasToken: !!githubToken,
+      preview: githubToken ? maskToken(githubToken) : null,
+      required: true,
+      envVar: 'TBC_GITHUB_TOKEN',
     },
     keyPool: getKeyPoolSafe(),
   };
@@ -36,6 +44,19 @@ export async function handleSettingsRoutes(req, res, url, ctx) {
 
   if (req.method === 'GET' && url.pathname === '/api/settings') {
     sendJson(res, 200, getProviderStatus({ maskToken, loadOAuthCredentials, getKeyPoolSafe }));
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/settings/github-token') {
+    if (!requireWrite(req, res)) return true;
+    try {
+      const { token } = await readJson(req);
+      setGithubTokenInEnvFile(tbcHome, token || '');
+      const status = getProviderStatus({ maskToken, loadOAuthCredentials, getKeyPoolSafe });
+      sendJson(res, 200, { success: true, github: status.github });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+    }
     return true;
   }
 

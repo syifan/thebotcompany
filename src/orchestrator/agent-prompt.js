@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { resolveReferencedObjectJson } from './object-refs.js';
 
 export function getAgentFilesystemPolicy(runner, agent, visibility = null) {
     if (agent.name === 'doctor') {
@@ -69,15 +70,33 @@ export function buildAgentPrompt(runner, agent, task, visibility, { root }) {
       }
       if (agent.name !== 'themis') {
         if (visMode === 'focused') {
-          sharedRules += '\n> **You are in focused mode.** You cannot read the issue tracker or PR board. Work only from the task, the repository, shared knowledge, and your own agent notes. If needed, you may create a new issue or PR record to report a blocker or finding.\n\n---\n\n';
+          sharedRules += '\n> **You are in focused mode.** You cannot browse/list the issue tracker or PR board. Any explicitly referenced `#id` objects are injected below as JSON; work only from those injected objects, the task, the repository, shared knowledge, and your own agent notes. If needed, you may create a new issue or PR record, or add comments to issues/PRs, to report a blocker or finding.\n\n---\n\n';
         } else if (visMode === 'blind') {
-          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker or PR board, and you cannot rely on shared knowledge or any agent notes, including your own prior notes. Work only from the task and the repository. If needed, you may create a new issue or PR record to report a blocker or finding.\n\n---\n\n';
+          sharedRules += '\n> **You are in blind mode.** You cannot read the issue tracker or PR board, and you cannot rely on shared knowledge or any agent notes, including your own prior notes. Work only from the task and the repository. If needed, you may create a new issue or PR record, or add comments to issues/PRs, to report a blocker or finding.\n\n---\n\n';
         }
       } else {
         sharedRules += '\n> **You are Themis, final examination manager.** You run in full view, not blind. Inspect the repository, issue tracker, PR board, shared knowledge, and agent notes directly. You may hire and schedule workers, but only workers who report to you. Your examination team is independent from the Athena, Ares, and Apollo teams, so make your own judgment from primary evidence.\n\n---\n\n';
       }
       const rolePath = path.join(root, 'agent', agent.isManager ? 'manager.md' : 'worker.md');
       sharedRules += fs.readFileSync(rolePath, 'utf-8') + '\n\n---\n\n';
+      if (agent.isManager) {
+        const managerName = String(agent.name || '').toLowerCase();
+        const workers = runner.loadAgents().workers
+          .filter(worker => String(worker.reportsTo || '').toLowerCase() === managerName)
+          .map(worker => `- ${worker.name}${worker.role ? ` — ${worker.role}` : ''}`)
+          .sort();
+        sharedRules += `# Available workers for ${agent.name}\n\nOnly schedule workers from this exact roster. Do not invent worker names.\n${workers.length ? workers.join('\n') : '- (none)'}\n\n---\n\n`;
+      }
+      if (task && visMode !== 'blind') {
+        try {
+          const db = runner.getDb();
+          const refs = resolveReferencedObjectJson(db, task);
+          db.close();
+          if (refs.length) {
+            sharedRules += `# Referenced TBC objects\n\nThe assignment mentioned these global object ids. Treat this JSON as the only issue/PR-board context available in focused mode.\n\n\`\`\`json\n${JSON.stringify(refs, null, 2)}\n\`\`\`\n\n---\n\n`;
+          }
+        } catch {}
+      }
     } catch {}
 
     let taskHeader = '';

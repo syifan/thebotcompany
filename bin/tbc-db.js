@@ -12,6 +12,8 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { mergeEpochPrBranch } from '../src/orchestrator/epoch-pr-merge.js';
+import { ensureObjectRefs, registerObjectRef } from '../src/orchestrator/object-refs.js';
 
 const dbPath = process.env.TBC_DB;
 if (!dbPath) {
@@ -29,6 +31,14 @@ db.pragma('foreign_keys = ON');
 
 // Ensure schema exists
 db.exec(`
+  CREATE TABLE IF NOT EXISTS object_refs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL CHECK(type IN ('issue', 'comment', 'tbc_pr', 'tbc_pr_comment')),
+    local_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE(type, local_id)
+  );
+
   CREATE TABLE IF NOT EXISTS agents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
@@ -57,6 +67,14 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     issue_id INTEGER NOT NULL REFERENCES issues(id),
+    author TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS tbc_pr_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pr_id INTEGER NOT NULL REFERENCES tbc_prs(id),
     author TEXT NOT NULL,
     body TEXT NOT NULL,
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
@@ -123,6 +141,7 @@ db.exec(`
     SELECT RAISE(ABORT, 'invalid tbc_prs.status');
   END;
 `);
+ensureObjectRefs(db);
 
 const command = process.argv[2];
 try { db.exec('ALTER TABLE issues ADD COLUMN updated_by TEXT'); } catch {}
@@ -149,7 +168,7 @@ const visibility = process.env.TBC_VISIBILITY || 'full';
 const focusedIssues = (process.env.TBC_FOCUSED_ISSUES || '').split(',').map(s => s.trim()).filter(Boolean);
 
 if (visibility === 'blind' || visibility === 'focused') {
-  const allowedCommands = new Set(['issue-create', 'pr-create']);
+  const allowedCommands = new Set(['issue-create', 'pr-create', 'comment', 'pr-comment']);
   if (command && !allowedCommands.has(command)) {
     const scope = visibility === 'blind' ? 'blind' : 'focused';
     console.error(`Access denied: you are in ${scope} mode and cannot view the issue tracker or PR board.`);
@@ -179,26 +198,28 @@ function jsonOut(data) {
   console.log(JSON.stringify(data, null, 2));
 }
 
-function assertPrCreateActor(actor) {
-  if (actor !== 'ares') {
-    throw new Error(`Only ares may create epoch PRs. Got: ${actor || '(missing actor)'}`);
+const MANAGER_ACTORS = new Set(['athena', 'ares', 'apollo', 'themis']);
+
+function assertManagerPrActor(actor) {
+  if (!MANAGER_ACTORS.has(actor)) {
+    throw new Error(`Only manager agents (${[...MANAGER_ACTORS].join(', ')}) may mutate TBC PRs. Got: ${actor || '(missing actor)'}`);
   }
+}
+
+function assertPrCreateActor(actor) {
+  assertManagerPrActor(actor);
 }
 
 function assertPrDecisionActor(actor, status) {
   if (!status || status === 'open') return;
-  if (actor !== 'apollo') {
-    throw new Error(`Only apollo may mark an epoch PR as ${status}. Got: ${actor || '(missing actor)'}`);
-  }
+  assertManagerPrActor(actor);
 }
 
 function assertPrEditActor(actor, current, nextStatus) {
   if (!actor) throw new Error('Missing --actor for PR mutation');
   const targetStatus = nextStatus || current.status;
   assertPrDecisionActor(actor, targetStatus);
-  if (targetStatus === 'open' && !new Set(['ares', 'apollo', current.actor]).has(actor)) {
-    throw new Error(`Only ${current.actor || 'ares'}, ares, or apollo may edit epoch PR #${current.id}. Got: ${actor}`);
-  }
+  if (targetStatus === 'open') assertManagerPrActor(actor);
 }
 
 function textOut(rows, columns) {
@@ -211,6 +232,14 @@ function textOut(rows, columns) {
     const parts = columns.map(c => `${c}: ${row[c] ?? ''}`);
     console.log(parts.join(' | '));
   }
+}
+
+function objectIdFor(type, localId) {
+  return db.prepare('SELECT id FROM object_refs WHERE type = ? AND local_id = ?').get(type, localId)?.id || localId;
+}
+
+function localIdFor(type, id) {
+  return db.prepare('SELECT local_id FROM object_refs WHERE type = ? AND id = ?').get(type, id)?.local_id || id;
 }
 
 const commands = {
@@ -237,7 +266,8 @@ const commands = {
     const now = new Date().toISOString();
     const stmt = db.prepare('INSERT INTO issues (title, body, creator, assignee, labels, created_at, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     const result = stmt.run(values.title, values.body || '', actor, values.assignee || null, values.labels || '', now, now, actor);
-    console.log(`Created issue #${result.lastInsertRowid}`);
+    const ref = registerObjectRef(db, 'issue', result.lastInsertRowid, now);
+    console.log(`Created issue #${ref?.id || result.lastInsertRowid}`);
   },
 
   'issue-list'() {
@@ -280,22 +310,23 @@ const commands = {
       for (const r of rows) {
         const assignee = r.assignee ? ` → ${r.assignee}` : '';
         const labels = r.labels ? ` [${r.labels}]` : '';
-        console.log(`#${r.id} [${r.status}] ${r.title}${assignee}${labels} (by ${r.creator})`);
+        console.log(`#${objectIdFor('issue', r.id)} [${r.status}] ${r.title}${assignee}${labels} (by ${r.creator})`);
       }
       if (rows.length === 0) console.log('(no issues)');
     }
   },
 
   'issue-view'() {
-    const id = args[0];
-    if (!id) { console.error('Usage: tbc-db issue-view <id>'); process.exit(1); }
-    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(id))) {
-      console.error(`Access denied: issue #${id} is not in your focused set.`);
+    const rawId = args[0];
+    if (!rawId) { console.error('Usage: tbc-db issue-view <id>'); process.exit(1); }
+    const id = localIdFor('issue', rawId);
+    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(rawId)) && !focusedIssues.includes(String(objectIdFor('issue', id)))) {
+      console.error(`Access denied: issue #${rawId} is not in your focused set.`);
       process.exit(1);
     }
     const issue = db.prepare('SELECT * FROM issues WHERE id = ?').get(id);
     if (!issue) { console.error(`Issue #${id} not found`); process.exit(1); }
-    console.log(`# Issue #${issue.id}: ${issue.title}`);
+    console.log(`# Issue #${objectIdFor('issue', issue.id)}: ${issue.title}`);
     console.log(`Status: ${issue.status} | Creator: ${issue.creator} | Assignee: ${issue.assignee || 'none'}`);
     if (issue.labels) console.log(`Labels: ${issue.labels}`);
     console.log(`Created: ${issue.created_at} | Updated: ${issue.updated_at}`);
@@ -305,14 +336,15 @@ const commands = {
     if (comments.length > 0) {
       console.log(`\n--- Comments (${comments.length}) ---`);
       for (const c of comments) {
-        console.log(`\n[${c.author}] (${c.created_at}):`);
+        console.log(`\n[#${objectIdFor('comment', c.id)} ${c.author}] (${c.created_at}):`);
         console.log(c.body);
       }
     }
   },
 
   'issue-close'() {
-    const id = args[0];
+    const rawId = args[0];
+    const id = rawId ? localIdFor('issue', rawId) : null;
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
@@ -342,8 +374,9 @@ const commands = {
   },
 
   'issue-edit'() {
-    const id = args[0];
-    if (!id) { console.error('Usage: tbc-db issue-edit <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]'); process.exit(1); }
+    const rawId = args[0];
+    if (!rawId) { console.error('Usage: tbc-db issue-edit <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]'); process.exit(1); }
+    const id = localIdFor('issue', rawId);
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
@@ -379,6 +412,7 @@ const commands = {
       args,
       options: {
         issue: { type: 'string', short: 'i' },
+        pr: { type: 'string' },
         actor: { type: 'string' },
         author: { type: 'string', short: 'a' },
         body: { type: 'string', short: 'b' },
@@ -386,29 +420,67 @@ const commands = {
       strict: false,
     });
     const actor = values.actor || values.author;
-    if (!values.issue || !actor || !values.body) {
-      console.error('Usage: tbc-db comment --issue <id> --actor name --body "..."');
+    if ((!values.issue && !values.pr) || (values.issue && values.pr) || !actor || !values.body) {
+      console.error('Usage: tbc-db comment --issue <id> --actor name --body "..." OR tbc-db comment --pr <id> --actor name --body "..."');
       process.exit(1);
     }
-    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(values.issue))) {
-      console.error(`Access denied: issue #${values.issue} is not in your focused set.`);
+    const now = new Date().toISOString();
+    if (values.pr) {
+      const prId = localIdFor('tbc_pr', values.pr);
+      const pr = db.prepare('SELECT id FROM tbc_prs WHERE id = ?').get(prId);
+      if (!pr) { console.error(`TBC PR #${values.pr} not found`); process.exit(1); }
+      const result = db.prepare('INSERT INTO tbc_pr_comments (pr_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(prId, actor, values.body, now);
+      const ref = registerObjectRef(db, 'tbc_pr_comment', result.lastInsertRowid, now);
+      db.prepare('UPDATE tbc_prs SET updated_at = ?, updated_by = ? WHERE id = ?').run(now, actor, prId);
+      console.log(`Added comment #${ref?.id || result.lastInsertRowid} to TBC PR #${values.pr}`);
+      return;
+    }
+    const issueId = localIdFor('issue', values.issue);
+    const issue = db.prepare('SELECT id FROM issues WHERE id = ?').get(issueId);
+    if (!issue) { console.error(`Issue #${values.issue} not found`); process.exit(1); }
+    const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(issueId, actor, values.body, now);
+    const ref = registerObjectRef(db, 'comment', result.lastInsertRowid, now);
+    db.prepare("UPDATE issues SET updated_at = ?, updated_by = ? WHERE id = ?").run(now, actor, issueId);
+    console.log(`Added comment #${ref?.id || result.lastInsertRowid} to issue #${values.issue}`);
+  },
+
+  'pr-comment'() {
+    const { values } = parseArgs({
+      args,
+      options: {
+        pr: { type: 'string', short: 'p' },
+        actor: { type: 'string' },
+        author: { type: 'string', short: 'a' },
+        body: { type: 'string', short: 'b' },
+      },
+      strict: false,
+    });
+    const actor = values.actor || values.author;
+    if (!values.pr || !actor || !values.body) {
+      console.error('Usage: tbc-db pr-comment --pr <id> --actor name --body "..."');
       process.exit(1);
     }
-    const result = db.prepare('INSERT INTO comments (issue_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(values.issue, actor, values.body, new Date().toISOString());
-    db.prepare("UPDATE issues SET updated_at = ?, updated_by = ? WHERE id = ?").run(new Date().toISOString(), actor, values.issue);
-    console.log(`Added comment #${result.lastInsertRowid} to issue #${values.issue}`);
+    const prId = localIdFor('tbc_pr', values.pr);
+    const pr = db.prepare('SELECT id FROM tbc_prs WHERE id = ?').get(prId);
+    if (!pr) { console.error(`TBC PR #${values.pr} not found`); process.exit(1); }
+    const now = new Date().toISOString();
+    const result = db.prepare('INSERT INTO tbc_pr_comments (pr_id, author, body, created_at) VALUES (?, ?, ?, ?)').run(prId, actor, values.body, now);
+    const ref = registerObjectRef(db, 'tbc_pr_comment', result.lastInsertRowid, now);
+    db.prepare('UPDATE tbc_prs SET updated_at = ?, updated_by = ? WHERE id = ?').run(now, actor, prId);
+    console.log(`Added comment #${ref?.id || result.lastInsertRowid} to TBC PR #${values.pr}`);
   },
 
   'comments'() {
-    const id = args[0];
-    if (!id) { console.error('Usage: tbc-db comments <issue_id>'); process.exit(1); }
-    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(id))) {
-      console.error(`Access denied: issue #${id} is not in your focused set.`);
+    const rawId = args[0];
+    if (!rawId) { console.error('Usage: tbc-db comments <issue_id>'); process.exit(1); }
+    const id = localIdFor('issue', rawId);
+    if (visibility === 'focused' && focusedIssues.length > 0 && !focusedIssues.includes(String(rawId)) && !focusedIssues.includes(String(objectIdFor('issue', id)))) {
+      console.error(`Access denied: issue #${rawId} is not in your focused set.`);
       process.exit(1);
     }
     const comments = db.prepare('SELECT * FROM comments WHERE issue_id = ? ORDER BY created_at').all(id);
     for (const c of comments) {
-      console.log(`[${c.author}] (${c.created_at}):`);
+      console.log(`[#${objectIdFor('comment', c.id)} ${c.author}] (${c.created_at}):`);
       console.log(c.body);
       console.log('');
     }
@@ -484,7 +556,8 @@ const commands = {
         now,
         now,
       );
-    console.log(`Created TBC PR #${result.lastInsertRowid}`);
+    const ref = registerObjectRef(db, 'tbc_pr', result.lastInsertRowid, now);
+    console.log(`Created TBC PR #${ref?.id || result.lastInsertRowid}`);
   },
 
   'pr-list'() {
@@ -516,18 +589,19 @@ const commands = {
         const milestone = row.milestone_id ? ` milestone=${row.milestone_id}` : '';
         const epoch = row.epoch_index ? ` epoch=${row.epoch_index}` : '';
         const actor = row.actor ? ` actor=${row.actor}` : '';
-        console.log(`#${row.id} [${row.status}] ${row.title} (${row.head_branch} -> ${row.base_branch}) test=${row.test_status}${issues}${milestone}${epoch}${actor}`);
+        console.log(`#${objectIdFor('tbc_pr', row.id)} [${row.status}] ${row.title} (${row.head_branch} -> ${row.base_branch}) test=${row.test_status}${issues}${milestone}${epoch}${actor}`);
       }
       if (rows.length === 0) console.log('(no TBC PRs)');
     }
   },
 
   'pr-view'() {
-    const id = args[0];
-    if (!id) { console.error('Usage: tbc-db pr-view <id>'); process.exit(1); }
+    const rawId = args[0];
+    if (!rawId) { console.error('Usage: tbc-db pr-view <id>'); process.exit(1); }
+    const id = localIdFor('tbc_pr', rawId);
     const pr = db.prepare('SELECT * FROM tbc_prs WHERE id = ?').get(id);
     if (!pr) { console.error(`TBC PR #${id} not found`); process.exit(1); }
-    console.log(`# TBC PR #${pr.id}: ${pr.title}`);
+    console.log(`# TBC PR #${objectIdFor('tbc_pr', pr.id)}: ${pr.title}`);
     console.log(`Status: ${pr.status} | Base: ${pr.base_branch} | Head: ${pr.head_branch} | Test: ${pr.test_status}`);
     console.log(`Created: ${pr.created_at} | Updated: ${pr.updated_at}`);
     if (pr.epoch_index != null) console.log(`Epoch: ${pr.epoch_index}`);
@@ -542,11 +616,34 @@ const commands = {
       console.log(`GitHub mirror: #${pr.github_pr_number || '?'} ${pr.github_pr_url || ''}`.trim());
     }
     if (pr.summary) console.log(`\n${pr.summary}`);
+    const comments = db.prepare('SELECT * FROM tbc_pr_comments WHERE pr_id = ? ORDER BY created_at').all(id);
+    if (comments.length > 0) {
+      console.log(`\n--- Comments (${comments.length}) ---`);
+      for (const c of comments) {
+        console.log(`[#${objectIdFor('tbc_pr_comment', c.id)} ${c.author}] (${c.created_at}):`);
+        console.log(c.body);
+        console.log('');
+      }
+    }
+  },
+
+  'pr-comments'() {
+    const rawId = args[0];
+    if (!rawId) { console.error('Usage: tbc-db pr-comments <pr_id>'); process.exit(1); }
+    const id = localIdFor('tbc_pr', rawId);
+    const comments = db.prepare('SELECT * FROM tbc_pr_comments WHERE pr_id = ? ORDER BY created_at').all(id);
+    for (const c of comments) {
+      console.log(`[#${objectIdFor('tbc_pr_comment', c.id)} ${c.author}] (${c.created_at}):`);
+      console.log(c.body);
+      console.log('');
+    }
+    if (comments.length === 0) console.log('(no comments)');
   },
 
   'pr-edit'() {
-    const id = args[0];
-    if (!id) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]'); process.exit(1); }
+    const rawId = args[0];
+    if (!rawId) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]'); process.exit(1); }
+    const id = localIdFor('tbc_pr', rawId);
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
@@ -570,7 +667,7 @@ const commands = {
       strict: false,
     });
     if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]'); process.exit(1); }
-    const current = db.prepare('SELECT id, base_branch, head_branch, actor, status FROM tbc_prs WHERE id = ?').get(id);
+    const current = db.prepare('SELECT id, base_branch, head_branch, branch_name, actor, status FROM tbc_prs WHERE id = ?').get(id);
     if (!current) { console.error(`TBC PR #${id} not found`); process.exit(1); }
     const nextStatus = values.status !== undefined ? normalizePrStatus(values.status) : null;
     try {
@@ -608,11 +705,73 @@ const commands = {
       console.error('Error: base and head branches must differ for a TBC PR record.');
       process.exit(1);
     }
+    let mergeResult = null;
+    if (nextStatus === 'merged') {
+      try {
+        mergeResult = mergeEpochPrBranch(
+          { path: path.join(path.dirname(dbPath), 'repo') },
+          { ...current, base_branch: finalBase, head_branch: finalHead },
+          { actor: values.actor },
+        );
+      } catch (err) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+      if (values.decision === undefined) { sets.push('decision = ?'); params.push('merge'); }
+      if (values['decision-reason'] === undefined) {
+        sets.push('decision_reason = ?');
+        params.push(`Merged ${mergeResult.headBranch} into ${mergeResult.baseBranch} at ${mergeResult.headSha}.`);
+      }
+    }
     sets.push('updated_at = ?'); params.push(new Date().toISOString());
     sets.push('updated_by = ?'); params.push(values.actor);
     params.push(id);
     db.prepare(`UPDATE tbc_prs SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-    console.log(`Updated TBC PR #${id}`);
+    console.log(`Updated TBC PR #${id}${mergeResult ? ` and merged ${mergeResult.headBranch} into ${mergeResult.baseBranch}` : ''}`);
+  },
+
+  'pr-merge'() {
+    const id = args[0];
+    if (!id) { console.error('Usage: tbc-db pr-merge <id> --actor manager [--reason "..."]'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: { actor: { type: 'string' }, reason: { type: 'string' } },
+      strict: false,
+    });
+    try { assertManagerPrActor(values.actor); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }
+    const pr = db.prepare('SELECT * FROM tbc_prs WHERE id = ?').get(id);
+    if (!pr) { console.error(`TBC PR #${id} not found`); process.exit(1); }
+    let mergeResult;
+    try {
+      mergeResult = mergeEpochPrBranch(
+        { path: path.join(path.dirname(dbPath), 'repo') },
+        pr,
+        { actor: values.actor },
+      );
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+    const decisionReason = values.reason || `Merged ${mergeResult.headBranch} into ${mergeResult.baseBranch} at ${mergeResult.headSha}.`;
+    db.prepare(`UPDATE tbc_prs SET status = 'merged', decision = 'merge', decision_reason = ?, updated_by = ?, updated_at = ? WHERE id = ?`)
+      .run(decisionReason, values.actor, new Date().toISOString(), id);
+    console.log(`Merged TBC PR #${id}: ${mergeResult.headBranch} -> ${mergeResult.baseBranch} at ${mergeResult.headSha}`);
+  },
+
+  'pr-close'() {
+    const id = args[0];
+    if (!id) { console.error('Usage: tbc-db pr-close <id> --actor manager [--reason "..."]'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: { actor: { type: 'string' }, reason: { type: 'string' } },
+      strict: false,
+    });
+    try { assertManagerPrActor(values.actor); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }
+    const pr = db.prepare('SELECT * FROM tbc_prs WHERE id = ?').get(id);
+    if (!pr) { console.error(`TBC PR #${id} not found`); process.exit(1); }
+    db.prepare(`UPDATE tbc_prs SET status = 'closed', decision = 'close', decision_reason = ?, updated_by = ?, updated_at = ? WHERE id = ?`)
+      .run(values.reason || '', values.actor, new Date().toISOString(), id);
+    console.log(`Closed TBC PR #${id}`);
   },
 
   // ===== QUERY =====
@@ -644,14 +803,19 @@ Issues:
   issue-close   <id> --closer name
 
 Comments:
-  comment       --issue <id> --author name --body "..."
+  comment       --issue <id> --actor name --body "..."
+  comment       --pr <id> --actor name --body "..."
   comments      <issue_id>
+  pr-comment    --pr <id> --actor name --body "..."
+  pr-comments   <pr_id>
 
 TBC PRs:
-  pr-create     --title "..." --head branch --actor ares [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]
+  pr-create     --title "..." --head branch --actor manager [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]
   pr-list       [--status open|merged|closed|all] [--json]
   pr-view       <id>
-  pr-edit       <id> --actor name [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]
+  pr-edit       <id> --actor manager [--title "..."] [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--head branch] [--status open|merged|closed] [--decision merge|close] [--decision-reason "..."] [--issues "1,2"] [--test pass]
+  pr-merge      <id> --actor manager [--reason "..."]
+  pr-close      <id> --actor manager [--reason "..."]
 
 Advanced:
   query         "SQL statement"

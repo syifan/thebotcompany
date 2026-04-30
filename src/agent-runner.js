@@ -10,6 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createGithubAuthEnv } from './github-token.js';
 import {
   resolveModel,
   formatTools,
@@ -22,7 +23,8 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const TBC_DB_CLI_PATH = path.resolve(__dirname, '..', 'bin', 'tbc-db.js');
+const TBC_APP_ROOT = path.resolve(__dirname, '..');
+const TBC_DB_CLI_PATH = path.resolve(TBC_APP_ROOT, 'bin', 'tbc-db.js');
 
 // ---------------------------------------------------------------------------
 // Parse retry cooldown from error messages
@@ -52,56 +54,8 @@ function parseRetryCooldown(message) {
 }
 
 // ---------------------------------------------------------------------------
-// Git/gh sandbox: block unauthorized repo operations
+// GitHub auth is delegated to scoped PAT permissions, not Bash command screening.
 // ---------------------------------------------------------------------------
-function checkGitCommand(command, allowedRepo) {
-  // --- git checks ---
-  const hasGit = /(?:^|[;&|`\s])git\s/.test(command) || command.trimStart().startsWith('git ');
-  if (hasGit) {
-    // Block: git clone
-    if (/(?:^|[;&|`\s])git\s+clone\b/.test(command)) {
-      return 'Blocked: git clone is not allowed. Agents may only operate within the current project repo.';
-    }
-
-    // Block: git remote add / set-url
-    if (/(?:^|[;&|`\s])git\s+remote\s+(add|set-url)\b/.test(command)) {
-      return 'Blocked: modifying git remotes is not allowed.';
-    }
-
-    // Block: git push to a remote other than origin
-    const pushMatch = command.match(/(?:^|[;&|`\s])git\s+push\s+(.*)/);
-    if (pushMatch) {
-      const args = pushMatch[1].trim().split(/\s+/).filter(a => !a.startsWith('-'));
-      if (args.length > 0 && args[0] !== 'origin') {
-        return `Blocked: git push to remote "${args[0]}" is not allowed. Only "origin" is permitted.`;
-      }
-    }
-  }
-
-  // --- gh CLI checks ---
-  const hasGh = /(?:^|[;&|`\s])gh\s/.test(command) || command.trimStart().startsWith('gh ');
-  if (hasGh) {
-    if (/(?:^|[;&|`\s])gh\s+pr\s+create\b/.test(command)) {
-      return 'Blocked: gh pr create is not allowed. Create a local TBC PR instead with tbc-db pr-create.';
-    }
-
-    // Block: gh operations targeting a different repo
-    const ghRepoMatch = command.match(/(?:^|[;&|`\s])gh\s+.*--repo\s+([^\s]+)/);
-    if (ghRepoMatch) {
-      const targetRepo = ghRepoMatch[1].replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
-      if (allowedRepo && targetRepo !== allowedRepo) {
-        return `Blocked: gh operation targeting "${targetRepo}" is not allowed. Only "${allowedRepo}" is permitted.`;
-      }
-    }
-
-    // Block: gh repo clone / gh repo create / gh repo fork
-    if (/(?:^|[;&|`\s])gh\s+repo\s+(clone|create|fork)\b/.test(command)) {
-      return 'Blocked: gh repo clone/create/fork is not allowed.';
-    }
-  }
-
-  return null; // allowed
-}
 
 function checkSensitiveDbAccess(command) {
   if (!command) return null;
@@ -125,7 +79,7 @@ function extractTbcDbCommand(command) {
   const positionalIssueMatch = args.match(/^(?:issue-view|issue-edit|issue-close|comments)\s+(\d+)\b/);
   const issueId = issueFlagMatch?.[1] || positionalIssueMatch?.[1] || null;
   const prFlagMatch = args.match(/--pr\s+(\d+)/);
-  const positionalPrMatch = args.match(/^(?:pr-view|pr-edit)\s+(\d+)\b/);
+  const positionalPrMatch = args.match(/^(?:pr-view|pr-edit|pr-comments)\s+(\d+)\b/);
   const prId = prFlagMatch?.[1] || positionalPrMatch?.[1] || null;
   const actorMatch = args.match(/--(?:actor|creator|author|editor|closer)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
   const actor = actorMatch ? (actorMatch[1] || actorMatch[2] || actorMatch[3]) : null;
@@ -134,10 +88,12 @@ function extractTbcDbCommand(command) {
   if (/^issue-list\b/.test(args)) return { kind: 'issue-list' };
   if (/^issue-view\b/.test(args)) return { kind: 'issue-view', issueId };
   if (/^comments\b/.test(args)) return { kind: 'comments', issueId };
-  if (/^comment\b/.test(args)) return { kind: 'comment', issueId, actor };
+  if (/^comment\b/.test(args)) return { kind: 'comment', issueId, prId, actor };
   if (/^issue-edit\b/.test(args)) return { kind: 'issue-edit', issueId, actor };
   if (/^issue-close\b/.test(args)) return { kind: 'issue-close', issueId, actor };
   if (/^pr-create\b/.test(args)) return { kind: 'pr-create', actor };
+  if (/^pr-comment\b/.test(args)) return { kind: 'pr-comment', prId, actor };
+  if (/^pr-comments\b/.test(args)) return { kind: 'pr-comments', prId };
   if (/^pr-list\b/.test(args)) return { kind: 'pr-list' };
   if (/^pr-view\b/.test(args)) return { kind: 'pr-view', prId };
   if (/^pr-edit\b/.test(args)) return { kind: 'pr-edit', prId, actor };
@@ -385,13 +341,14 @@ async function executeTrustedTbcDbChain(chain, cwd, timeout, bashEnv = null, run
   };
 }
 
+
 function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (!issuePolicy) return null;
   const parsed = extractTbcDbCommand(command);
   if (!parsed) return null;
 
   const actor = issuePolicy.actor || null;
-  const mutatingKinds = new Set(['issue-create', 'comment', 'issue-edit', 'issue-close', 'pr-create', 'pr-edit']);
+  const mutatingKinds = new Set(['issue-create', 'comment', 'issue-edit', 'issue-close', 'pr-create', 'pr-comment', 'pr-edit']);
   if (actor && mutatingKinds.has(parsed.kind)) {
     if (!parsed.actor) {
       return `Blocked: ${parsed.kind} requires --actor ${actor}.`;
@@ -405,13 +362,16 @@ function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (mode === 'full') return null;
 
   if (mode === 'blind') {
-    if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create') return null;
-    return 'Blocked: blind mode cannot view the issue tracker or PR board. Work only from the task and repository; you may still create a new issue or PR record if needed.';
+    if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create' || parsed.kind === 'comment' || parsed.kind === 'pr-comment') return null;
+    return 'Blocked: blind mode cannot view the issue tracker or PR board. Work only from the task and repository; you may still create a new issue or PR record, or add comments to issues/PRs, if needed.';
   }
 
   if (mode === 'focused') {
-    if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create') return null;
-    return 'Blocked: focused mode cannot view the issue tracker or PR board. Work from the task, repository, shared knowledge, and your own notes; you may still create a new issue or PR record if needed.';
+    if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create' || parsed.kind === 'comment' || parsed.kind === 'pr-comment') return null;
+    const focused = new Set((issuePolicy.issues || []).map(String));
+    if ((parsed.kind === 'issue-view' || parsed.kind === 'comments') && parsed.issueId && focused.has(String(parsed.issueId))) return null;
+    if ((parsed.kind === 'pr-view' || parsed.kind === 'pr-comments') && parsed.prId && focused.has(String(parsed.prId))) return null;
+    return 'Blocked: focused mode cannot browse/list the issue tracker or PR board. Work from injected #id JSON, task, repository, shared knowledge, and your own notes; exact referenced object views are allowed only for ids in your focused set.';
   }
 
   return null;
@@ -520,6 +480,11 @@ export function buildSandboxProfile(allowedPaths) {
     '/opt/homebrew',
     '/etc',
     '/dev',
+    // tbc-db may be invoked from mixed shell commands that cannot use the
+    // trusted direct runner path. The Homebrew bin is a symlink into this
+    // checkout, so the sandbox must be able to read the CLI implementation
+    // while still explicitly denying raw project.db access below.
+    TBC_APP_ROOT,
   ];
   for (const allowPath of systemReadPaths) {
     if (!fs.existsSync(allowPath)) continue;
@@ -546,8 +511,11 @@ export function buildSandboxProfile(allowedPaths) {
   }
   if (allowedPaths?.dbPath) {
     const p = quotePath(allowedPaths.dbPath);
-    lines.push(`(deny file-read* (literal "${p}"))`);
-    lines.push(`(deny file-write* (literal "${p}"))`);
+    // Mixed shell commands may invoke the real tbc-db binary inside the
+    // sandbox. Preflight command screening still blocks raw project.db paths
+    // and $TBC_DB access, but the sanctioned CLI itself needs DB read/write.
+    lines.push(`(allow file-read* (literal "${p}"))`);
+    lines.push(`(allow file-write* (literal "${p}"))`);
   }
   return lines.join('\n');
 }
@@ -762,11 +730,6 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       return;
     }
 
-    const gitBlock = checkGitCommand(command, allowedRepo);
-    if (gitBlock) {
-      resolve({ output: gitBlock, exitCode: 1, ok: false });
-      return;
-    }
     const dbBlock = checkSensitiveDbAccess(originalCommand);
     if (dbBlock) {
       resolve({ output: dbBlock, exitCode: 1, ok: false });
@@ -784,6 +747,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       return;
     }
 
+
     const pathBlock = checkPathAccessInCommand(command, cwd, allowedPaths);
     if (pathBlock) {
       resolve({ output: pathBlock, exitCode: 1, ok: false });
@@ -794,7 +758,9 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     let spawnArgs = ['-c', command];
     let sandboxProfilePath = null;
     let sandboxTempDir = null;
+    let githubAuthCleanup = () => {};
     let env = bashEnv ? { ...process.env, ...bashEnv } : { ...process.env };
+    env.PATH = `${path.join(TBC_APP_ROOT, 'bin')}${path.delimiter}${env.PATH || ''}`;
     if (allowedPaths && os.platform() === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) {
       const sandboxTempParent = fs.existsSync(cwd) ? cwd : os.tmpdir();
       sandboxTempDir = fs.mkdtempSync(path.join(sandboxTempParent, '.tbc-agent-tmp-'));
@@ -819,6 +785,10 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       spawnCmd = '/usr/bin/sandbox-exec';
       spawnArgs = ['-f', sandboxProfilePath, 'bash', '-c', command];
     }
+
+    const githubAuth = createGithubAuthEnv(env, { tempParent: sandboxTempDir || (fs.existsSync(cwd) ? cwd : os.tmpdir()) });
+    env = githubAuth.env;
+    githubAuthCleanup = githubAuth.cleanup;
 
     const proc = spawn(spawnCmd, spawnArgs, {
       cwd,
@@ -868,6 +838,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
+      githubAuthCleanup();
       if (sandboxTempDir) {
         try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
       }
@@ -883,6 +854,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       if (sandboxProfilePath) {
         try { fs.rmSync(path.dirname(sandboxProfilePath), { recursive: true, force: true }); } catch {}
       }
+      githubAuthCleanup();
       if (sandboxTempDir) {
         try { fs.rmSync(sandboxTempDir, { recursive: true, force: true }); } catch {}
       }
