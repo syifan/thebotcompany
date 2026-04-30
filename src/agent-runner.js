@@ -760,6 +760,7 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
     let sandboxTempDir = null;
     let githubAuthCleanup = () => {};
     let env = bashEnv ? { ...process.env, ...bashEnv } : { ...process.env };
+    env.PATH = `${path.join(TBC_APP_ROOT, 'bin')}${path.delimiter}${env.PATH || ''}`;
     if (allowedPaths && os.platform() === 'darwin' && fs.existsSync('/usr/bin/sandbox-exec')) {
       const sandboxTempParent = fs.existsSync(cwd) ? cwd : os.tmpdir();
       sandboxTempDir = fs.mkdtempSync(path.join(sandboxTempParent, '.tbc-agent-tmp-'));
