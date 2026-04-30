@@ -203,6 +203,11 @@ describe('agent filesystem allowlist', () => {
     const knowledgeReal = fs.realpathSync(p.knowledge);
     assert.ok(profile.includes(`(allow file-read* (subpath "${repoReal}"`));
     assert.ok(profile.includes(`(allow file-write* (subpath "${knowledgeReal}"`));
+    const dbReal = fs.realpathSync(p.allowedWorker.dbPath);
+    for (const suffix of ['', '-journal', '-wal', '-shm']) {
+      assert.ok(profile.includes(`(allow file-read* (literal "${dbReal}${suffix}"))`));
+      assert.ok(profile.includes(`(allow file-write* (literal "${dbReal}${suffix}"))`));
+    }
   });
 
   it('blocks dynamic outside-project paths in Bash when sandbox-exec is available', async (t) => {
