@@ -1,4 +1,4 @@
-import { extractObjectRefIds } from './object-refs.js';
+import { extractFocusedRefIds } from './object-refs.js';
 
 export async function autoPauseWait(runner, deps = {}, intervalMs, resumeCondition = null) {
     const retryAt = Date.now() + intervalMs;
@@ -42,7 +42,7 @@ export function parseVisibility(runner, deps = {}, value, task) {
     if (!visMode || visMode === 'full') return null;
     if (visMode === 'blind') return { mode: 'blind', issues: [] };
     if (visMode === 'focused') {
-      return { mode: 'focused', issues: extractObjectRefIds(task).map(String) };
+      return { mode: 'focused', issues: extractFocusedRefIds(task) };
     }
     return null;
   }

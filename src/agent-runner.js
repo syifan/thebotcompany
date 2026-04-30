@@ -369,8 +369,8 @@ function checkIssueAccessInCommand(command, issuePolicy = null) {
   if (mode === 'focused') {
     if (parsed.kind === 'issue-create' || parsed.kind === 'pr-create' || parsed.kind === 'comment' || parsed.kind === 'pr-comment') return null;
     const focused = new Set((issuePolicy.issues || []).map(String));
-    if ((parsed.kind === 'issue-view' || parsed.kind === 'comments') && parsed.issueId && focused.has(String(parsed.issueId))) return null;
-    if ((parsed.kind === 'pr-view' || parsed.kind === 'pr-comments') && parsed.prId && focused.has(String(parsed.prId))) return null;
+    if ((parsed.kind === 'issue-view' || parsed.kind === 'comments') && parsed.issueId && (focused.has(String(parsed.issueId)) || focused.has(`issue:${parsed.issueId}`))) return null;
+    if ((parsed.kind === 'pr-view' || parsed.kind === 'pr-comments') && parsed.prId && (focused.has(String(parsed.prId)) || focused.has(`tbc_pr:${parsed.prId}`))) return null;
     return 'Blocked: focused mode cannot browse/list the issue tracker or PR board. Work from injected #id JSON, task, repository, shared knowledge, and your own notes; exact referenced object views are allowed only for ids in your focused set.';
   }
 
