@@ -514,8 +514,15 @@ export function buildSandboxProfile(allowedPaths) {
     // Mixed shell commands may invoke the real tbc-db binary inside the
     // sandbox. Preflight command screening still blocks raw project.db paths
     // and $TBC_DB access, but the sanctioned CLI itself needs DB read/write.
+    // SQLite may also create adjacent rollback/WAL sidecar files while opening
+    // the database. Allow only those exact sidecars so sandboxed tbc-db calls
+    // do not fail with SQLITE_CANTOPEN.
     lines.push(`(allow file-read* (literal "${p}"))`);
     lines.push(`(allow file-write* (literal "${p}"))`);
+    for (const suffix of ['-journal', '-wal', '-shm']) {
+      lines.push(`(allow file-read* (literal "${p}${suffix}"))`);
+      lines.push(`(allow file-write* (literal "${p}${suffix}"))`);
+    }
   }
   return lines.join('\n');
 }
