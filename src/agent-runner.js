@@ -248,6 +248,78 @@ function trustedTbcDbArgsForCommand(command) {
   return chain?.length === 1 ? chain[0] : null;
 }
 
+
+
+function splitTopLevelCommandSeparators(command) {
+  const parts = [];
+  let quote = null;
+  let escaped = false;
+  let start = 0;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === ';' || ch === '\n' || ch === '\r') {
+      parts.push(command.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(command.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+function stripTbcDbDecorators(part) {
+  let text = String(part || '').trim();
+  if (!text) return '';
+
+  // Agents frequently add display-only filters/redirections around tbc-db.
+  // The project database is intentionally denied inside the normal sandbox,
+  // so run the tbc-db portion through the trusted DB boundary and ignore the
+  // display decorator instead of leaking SQLITE_CANTOPEN back to the model.
+  const pipeIdx = findTopLevelToken(text, '|');
+  if (pipeIdx >= 0) text = text.slice(0, pipeIdx).trim();
+  text = text.replace(/\s+(?:\d?>&\d|\d?>[^\s]+|&>[^\s]+)\s*$/g, '').trim();
+  return text;
+}
+
+function findTopLevelToken(text, token) {
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === token) return i;
+  }
+  return -1;
+}
+
+function trustedTbcDbLenientChainForCommand(command) {
+  const text = String(command || '').trim();
+  if (!text || !/\btbc-db(?:\s|$)/.test(text)) return null;
+
+  const segments = splitTopLevelCommandSeparators(text).flatMap(segment => splitTopLevelAndAnd(segment) || [segment]);
+  const chain = [];
+  for (const raw of segments) {
+    if (/^(?:set\s|echo\s|printf\s|rc=|ec=|exit\b|true\b|false\b|sleep\b|\[\s|test\s)/.test(raw)) continue;
+    if (/^cd\s+/.test(raw)) continue;
+    if (/^(?:for|while|if|then|do|done|fi)\b/.test(raw)) return null;
+
+    const tbcIdx = raw.search(/(?:^|\s)tbc-db(?:\s|$)/);
+    if (tbcIdx < 0) continue;
+    const tbcPart = stripTbcDbDecorators(raw.slice(tbcIdx).trim());
+    const args = trustedTbcDbArgsFromPart(tbcPart);
+    if (!args) return null;
+    chain.push(args);
+  }
+
+  return chain.length ? chain : null;
+}
+
 function executeTrustedTbcDb(args, cwd, timeout, bashEnv = null, runtime = null) {
   return new Promise((resolve) => {
     if (!bashEnv?.TBC_DB) {
@@ -741,12 +813,16 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
       return;
     }
 
-    const trustedTbcDbChain = trustedTbcDbChainForCommand(command);
+    const trustedTbcDbChain = trustedTbcDbChainForCommand(command) || trustedTbcDbLenientChainForCommand(command);
     if (trustedTbcDbChain) {
       executeTrustedTbcDbChain(trustedTbcDbChain, cwd, timeout, bashEnv, runtime).then(resolve);
       return;
     }
 
+    if (/\btbc-db(?:\s|$)/.test(command)) {
+      resolve({ output: 'Error: tbc-db must be run as a simple command so TBC can route it through the trusted project database boundary. Avoid shell loops, variables, command substitutions, and complex pipes around tbc-db.', exitCode: 1, ok: false });
+      return;
+    }
 
     const pathBlock = checkPathAccessInCommand(command, cwd, allowedPaths);
     if (pathBlock) {
@@ -1060,15 +1136,52 @@ function normalizeToolExecutionResult(toolName, result) {
   };
 }
 
-async function executeToolDetailed(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
+function toolValidationError(toolName, message) {
+  return normalizeToolExecutionResult(toolName, `Error: invalid ${toolName} tool input: ${message}`);
+}
+
+function validateToolInput(toolName, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return 'input must be an object';
+  }
   switch (toolName) {
-    case 'Bash':  return normalizeToolExecutionResult('Bash', await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy));
-    case 'Read':  return normalizeToolExecutionResult('Read', executeRead(toolInput, cwd, allowedPaths));
-    case 'Write': return normalizeToolExecutionResult('Write', executeWrite(toolInput, cwd, allowedPaths));
-    case 'Edit':  return normalizeToolExecutionResult('Edit', executeEdit(toolInput, cwd, allowedPaths));
-    case 'Glob':  return normalizeToolExecutionResult('Glob', executeGlob(toolInput, cwd, allowedPaths));
-    case 'Grep':  return normalizeToolExecutionResult('Grep', executeGrep(toolInput, cwd, allowedPaths));
-    default:      return normalizeToolExecutionResult(toolName, `Unknown tool: ${toolName}`);
+    case 'Bash':
+      return typeof input.command === 'string' ? null : 'command must be a string';
+    case 'Read':
+      return typeof input.file_path === 'string' ? null : 'file_path must be a string';
+    case 'Write':
+      if (typeof input.file_path !== 'string') return 'file_path must be a string';
+      return typeof input.content === 'string' ? null : 'content must be a string';
+    case 'Edit':
+      if (typeof input.file_path !== 'string') return 'file_path must be a string';
+      if (typeof input.old_string !== 'string') return 'old_string must be a string';
+      return typeof input.new_string === 'string' ? null : 'new_string must be a string';
+    case 'Glob':
+      return typeof input.pattern === 'string' ? null : 'pattern must be a string';
+    case 'Grep':
+      return typeof input.pattern === 'string' ? null : 'pattern must be a string';
+    default:
+      return null;
+  }
+}
+
+async function executeToolDetailed(toolName, toolInput, cwd, remainingMs = 0, bashEnv = null, runtime = null, allowedRepo = null, allowedPaths = null, issuePolicy = null) {
+  const validationError = validateToolInput(toolName, toolInput);
+  if (validationError) return toolValidationError(toolName, validationError);
+
+  try {
+    switch (toolName) {
+      case 'Bash':  return normalizeToolExecutionResult('Bash', await executeBash(toolInput, cwd, remainingMs, bashEnv, runtime, allowedRepo, allowedPaths, issuePolicy));
+      case 'Read':  return normalizeToolExecutionResult('Read', executeRead(toolInput, cwd, allowedPaths));
+      case 'Write': return normalizeToolExecutionResult('Write', executeWrite(toolInput, cwd, allowedPaths));
+      case 'Edit':  return normalizeToolExecutionResult('Edit', executeEdit(toolInput, cwd, allowedPaths));
+      case 'Glob':  return normalizeToolExecutionResult('Glob', executeGlob(toolInput, cwd, allowedPaths));
+      case 'Grep':  return normalizeToolExecutionResult('Grep', executeGrep(toolInput, cwd, allowedPaths));
+      default:      return normalizeToolExecutionResult(toolName, `Unknown tool: ${toolName}`);
+    }
+  } catch (err) {
+    const message = err?.stack || err?.message || String(err);
+    return normalizeToolExecutionResult(toolName, `Tool error: ${message}`);
   }
 }
 

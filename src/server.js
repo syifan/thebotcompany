@@ -427,8 +427,8 @@ const routeContext = {
 
 // --- HTTP API ---
 const server = http.createServer(async (req, res) => {
-
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  try {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathParts = url.pathname.split('/').filter(Boolean);
   
   // CORS: only allow requests from the same origin (the dashboard served by this server)
@@ -527,6 +527,16 @@ const server = http.createServer(async (req, res) => {
 
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
+  } catch (err) {
+    const message = err?.stack || err?.message || String(err);
+    log(`HTTP handler error: ${message}`);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Internal server error' }));
+    } else {
+      res.destroy(err);
+    }
+  }
 });
 
 // --- Helpers ---
@@ -557,6 +567,16 @@ server.listen(PORT, () => {
   if (SERVE_STATIC && fs.existsSync(MONITOR_DIST)) {
     log(`Serving monitor from ${MONITOR_DIST}`);
   }
+});
+
+process.on('unhandledRejection', (reason) => {
+  const message = reason?.stack || reason?.message || String(reason);
+  log(`Unhandled rejection: ${message}`);
+});
+
+process.on('uncaughtException', (err) => {
+  const message = err?.stack || err?.message || String(err);
+  log(`Uncaught exception: ${message}`);
 });
 
 process.on('SIGINT', () => {

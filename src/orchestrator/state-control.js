@@ -25,7 +25,23 @@ export async function startRunner(runner, deps = {}) {
     
     runner.running = true;
     deps.log(`Starting project runner (data: ${runner.projectDir}, cycle: ${runner.cycleCount})`, runner.id);
-    runner.runLoop();
+    runner.runLoop().catch((err) => {
+      const message = err?.stack || err?.message || String(err);
+      deps.log(`Project runner crashed: ${message}`, runner.id);
+      runner.running = false;
+      runner.setState({ isPaused: true, pauseReason: `Project runner crashed: ${err?.message || String(err)}` });
+      runner.currentAgent = null;
+      runner.currentAgentProcess = null;
+      runner.currentAgentStartTime = null;
+      runner.currentAgentLog = [];
+      runner.currentAgentModel = null;
+      runner.currentAgentCost = 0;
+      runner.currentAgentUsage = null;
+      runner.currentAgentKeyId = null;
+      runner.currentAgentVisibility = null;
+      deps.broadcastEvent?.({ type: 'error', project: runner.id, message: `Project runner crashed: ${err?.message || String(err)}` });
+      deps.broadcastStatusUpdate?.(runner.id);
+    });
   }
 
 export function loadRunnerState(runner, deps = {}) {

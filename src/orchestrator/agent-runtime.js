@@ -199,58 +199,72 @@ export async function runAgentForRunner(runner, deps = {}, agent, config, mode =
     runner.currentAgentModel = tierLabel;
 
     const projectId = runner.id;
-    const result = await runAgentWithAPI({
-      prompt: skillContent,
-      model: agentModel,
-      token: resolvedToken,
-      keyType: resolvedKeyType,
-      provider: providerHint,
-      customConfig,
-      reasoningEffort,
-      cwd: runner.path,
-      timeoutMs: config.agentTimeoutMs || 0,
-      env: agentEnv,
-      allowedRepo: agent.name === 'doctor' ? null : (runner.repo || null),
-      allowedPaths: runner._getAgentFilesystemPolicy(agent, visibility),
-      issuePolicy: { ...(visibility || { mode: 'full', issues: [] }), actor: agent.name },
-      abortSignal: runAbortController.signal,
-      keyId: resolvedKeyId,
-      onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),
-      resolveNewToken: async () => {
-        const newKey = await resolveKeyForProject(config, null, oauthTokenGetter);
-        if (newKey?.provider) {
-          const newRuntimeSelection = deps.getProviderRuntimeSelection({
-            provider: newKey.provider,
-            modelTier: agentTierOrModel,
-            keyResult: newKey,
-            projectModels: null,
-          });
-          newKey.model = newRuntimeSelection.selectedModel;
-          newKey.reasoningEffort = newRuntimeSelection.reasoningEffort || null;
-          newKey.customConfig = newRuntimeSelection.customConfig || null;
-        }
-        if (newKey?.keyId) runner.currentAgentKeyId = newKey.keyId;
-        return newKey;
-      },
-      log: (msg) => {
-        deps.log(`  [${agent.name}] ${msg}`, projectId);
-        if (typeof msg === 'string' && msg.startsWith('Tool: ')) return;
-        const event = { time: Date.now(), type: 'thinking', content: String(msg) };
-        runner.currentAgentLog.push(event);
-        if (runner.currentAgentLog.length > 500) runner.currentAgentLog.shift();
-        deps.broadcastLiveAgentEvent(projectId, event);
-      },
-      onEvent: (event) => {
-        const enriched = { time: Date.now(), ...event };
-        runner.currentAgentLog.push(enriched);
-        if (runner.currentAgentLog.length > 500) runner.currentAgentLog.shift();
-        deps.broadcastLiveAgentEvent(projectId, enriched);
-      },
-      onProgress: ({ usage, cost }) => {
-        runner.currentAgentCost = cost;
-        runner.currentAgentUsage = usage;
-      },
-    });
+    let result;
+    try {
+      result = await runAgentWithAPI({
+        prompt: skillContent,
+        model: agentModel,
+        token: resolvedToken,
+        keyType: resolvedKeyType,
+        provider: providerHint,
+        customConfig,
+        reasoningEffort,
+        cwd: runner.path,
+        timeoutMs: config.agentTimeoutMs || 0,
+        env: agentEnv,
+        allowedRepo: agent.name === 'doctor' ? null : (runner.repo || null),
+        allowedPaths: runner._getAgentFilesystemPolicy(agent, visibility),
+        issuePolicy: { ...(visibility || { mode: 'full', issues: [] }), actor: agent.name },
+        abortSignal: runAbortController.signal,
+        keyId: resolvedKeyId,
+        onRateLimited: (kid, cooldownMs) => markRateLimited(kid, cooldownMs || 5 * 60_000),
+        resolveNewToken: async () => {
+          const newKey = await resolveKeyForProject(config, null, oauthTokenGetter);
+          if (newKey?.provider) {
+            const newRuntimeSelection = deps.getProviderRuntimeSelection({
+              provider: newKey.provider,
+              modelTier: agentTierOrModel,
+              keyResult: newKey,
+              projectModels: null,
+            });
+            newKey.model = newRuntimeSelection.selectedModel;
+            newKey.reasoningEffort = newRuntimeSelection.reasoningEffort || null;
+            newKey.customConfig = newRuntimeSelection.customConfig || null;
+          }
+          if (newKey?.keyId) runner.currentAgentKeyId = newKey.keyId;
+          return newKey;
+        },
+        log: (msg) => {
+          deps.log(`  [${agent.name}] ${msg}`, projectId);
+          if (typeof msg === 'string' && msg.startsWith('Tool: ')) return;
+          const event = { time: Date.now(), type: 'thinking', content: String(msg) };
+          runner.currentAgentLog.push(event);
+          if (runner.currentAgentLog.length > 500) runner.currentAgentLog.shift();
+          deps.broadcastLiveAgentEvent(projectId, event);
+        },
+        onEvent: (event) => {
+          const enriched = { time: Date.now(), ...event };
+          runner.currentAgentLog.push(enriched);
+          if (runner.currentAgentLog.length > 500) runner.currentAgentLog.shift();
+          deps.broadcastLiveAgentEvent(projectId, enriched);
+        },
+        onProgress: ({ usage, cost }) => {
+          runner.currentAgentCost = cost;
+          runner.currentAgentUsage = usage;
+        },
+      });
+    } catch (err) {
+      const message = err?.stack || err?.message || String(err);
+      deps.log(`Agent runner exception for ${agent.name}: ${message}`, runner.id);
+      result = {
+        success: false,
+        resultText: `Agent runner exception: ${message}`,
+        cost: runner.currentAgentCost || 0,
+        durationMs: Date.now() - runner.currentAgentStartTime,
+        timedOut: false,
+        usage: runner.currentAgentUsage || null,
+      };
+    }
 
     if (result.success && resolvedKeyId) {
       markKeySucceeded(resolvedKeyId);
