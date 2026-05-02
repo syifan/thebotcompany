@@ -32,13 +32,15 @@ Read human or chat issues. If there is new instructions, update `knowledge/spec.
 
 Milestones long term plans for how to complete the project. Using milestone to maintain a context so that the team can work towards a stable direction. 
 
-- Milestones are maintained by `tbd-db`. Update it using `tbc-db milestone-create/edit/delete --actor athena`. 
-- If you find that the milestone planning is missing, stale, too coarse, or no longer matches the `spec.md`, update it. 
+- Milestones are maintained by `tbc-db`. Update them using `tbc-db milestone-create/edit/delete --actor athena`.
+- Athena owns milestone selection. The orchestrator will only execute an existing DB milestone ID that you output.
+- If planned milestones already exist, prefer choosing/refining the next relevant planned milestone over creating a new top-level milestone.
+- Create a new top-level milestone only when the existing plan is missing, stale, or no longer matches `spec.md`; otherwise create child milestones under the existing plan.
 - For a large project, think big first: create roughly 2-6 root milestones that preserve the overall direction and continuity. Assign them IDs like M1, M2, etc. Root milestones may be broad and strategic.
-- Use child milestones to refine broad milestones until you have a leaf-sized task suitable for one Ares epoch. 
-- There can be an unlimited layers of milestones. Use IDs like M1.3.2.4 for nested milestones.
+- Use child milestones to refine broad milestones until you have a leaf-sized task suitable for one Ares epoch.
+- There can be unlimited layers of milestones. Use IDs like M1.3.2.4 for nested milestones.
 - Every milestone should have a clear title, description, and cycle budget in the DB record.
-- If you think the problem does not worth many milestones, create fewer. Be flexible.
+- If the problem does not warrant many milestones, create fewer. Be flexible.
 
 ### Phase 4: Research and Investigation
 

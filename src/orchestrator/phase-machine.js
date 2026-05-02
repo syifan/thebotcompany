@@ -72,6 +72,19 @@ ${task || ''}`;
   return result;
 }
 
+async function validateAthenaMilestoneDirective(runner, resultText) {
+  const match = String(resultText || '').match(/<!-- MILESTONE -->\s*([\s\S]*?)\s*<!-- \/MILESTONE -->/);
+  if (!match) return null;
+  const payload = match[1].trim();
+  if (!payload || payload.startsWith('{')) return null;
+  const milestoneId = payload.replace(/^['"]|['"]$/g, '').trim();
+  const milestone = await runner.getMilestoneRecord(milestoneId);
+  if (milestone) return null;
+  return {
+    message: `MILESTONE directive references ${milestoneId}, but no DB milestone record with that id exists. Athena owns milestone planning: create or edit the milestone with tbc-db milestone-* --actor athena first, then output only its id.`,
+  };
+}
+
 export async function runRunnerLoop(runner, deps = {}) {
     const broadcastEvent = deps.broadcastEvent || (() => {});
     while (runner.running) {
@@ -123,14 +136,8 @@ export async function runRunnerLoop(runner, deps = {}) {
       if (runner.phase === 'athena') {
         const athena = managers.find(m => m.name === 'athena');
         if (athena) {
-          // Build situation context for Athena
-          if (!runner.pendingMilestoneId) {
-            const parentMilestoneId = runner.currentMilestoneId || null;
-            runner.pendingMilestoneId = await runner.allocateNextMilestoneId(parentMilestoneId);
-            runner.saveState();
-          }
-          const reservedBranchPrefix = runner.makeMilestoneBranchPrefix(runner.pendingMilestoneId);
-
+          // Build situation context for Athena. Athena owns milestone planning; the
+          // orchestrator only validates and executes the DB milestone id Athena emits.
           let situation = '';
           if (runner.examinationFeedback) {
             situation = `> **Situation: Project Completion Rejected by Themis**\n> ${runner.examinationFeedback}\n\n`;
@@ -143,9 +150,17 @@ export async function runRunnerLoop(runner, deps = {}) {
           } else {
             situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles without completing the milestone.\n> Previous milestone: ${runner.currentMilestoneId || 'unknown'}\n> Current branch: ${runner.currentMilestoneBranch || 'not set'}\n\n`;
           }
-          situation += `> **Reserved milestone ID:** ${runner.pendingMilestoneId}\n> Use this ID if you create the next executable milestone record this cycle.\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n\n`;
+          situation += `> **Milestone planning:** Select an existing DB milestone record or create/refine one yourself with tbc-db milestone-* --actor athena. Output only that existing milestone id in the MILESTONE directive when ready.\n\n`;
 
-          const result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
+          let result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
+          if (result?.success && result?.resultText) {
+            const problem = await validateAthenaMilestoneDirective(runner, result.resultText);
+            if (problem) {
+              deps.log(`Rejecting Athena milestone response: ${problem.message}`, runner.id);
+              const correction = `> **Orchestrator rejected your previous milestone directive before acting on it.**\n> Problem: ${problem.message}\n> Generate a corrected response now. If you need to hand off a milestone, first create or edit the DB milestone record, then output only its id.\n\n${situation}`;
+              result = await runner.runAgent(athena, config, null, correction, null);
+            }
+          }
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
