@@ -210,6 +210,12 @@ function assertPrCreateActor(actor) {
   assertManagerPrActor(actor);
 }
 
+function assertMilestoneWriteActor(actor) {
+  if (actor !== 'athena') {
+    throw new Error(`Only Athena may mutate milestones. Got: ${actor || '(missing actor)'}`);
+  }
+}
+
 function assertPrDecisionActor(actor, status) {
   if (!status || status === 'open') return;
   assertManagerPrActor(actor);
@@ -538,6 +544,7 @@ const commands = {
     const { values } = parseArgs({
       args,
       options: {
+        actor: { type: 'string' },
         id: { type: 'string' },
         title: { type: 'string', short: 't' },
         description: { type: 'string', short: 'd' },
@@ -552,10 +559,11 @@ const commands = {
       strict: false,
     });
     if (!values.description && !values.title) {
-      console.error('Usage: tbc-db milestone-create [--id M1] --title "..." [--description "..."] [--parent M1] [--cycles 8] [--phase planned] [--status active|completed|failed]');
+      console.error('Usage: tbc-db milestone-create --actor athena [--id M1] --title "..." [--description "..."] [--parent M1] [--cycles 8] [--phase planned] [--status active|completed|failed]');
       process.exit(1);
     }
     try {
+      assertMilestoneWriteActor(values.actor);
       const status = normalizeMilestoneStatus(values.status);
       const cyclesBudget = parseIntegerOption(values.cycles, '--cycles') ?? 0;
       const milestoneId = values.id || allocateNextMilestoneId(values.parent || null);
@@ -651,10 +659,11 @@ const commands = {
 
   'milestone-edit'() {
     const milestoneId = args[0];
-    if (!milestoneId) { console.error('Usage: tbc-db milestone-edit <milestone_id> [--title "..."] [--description "..."] [--parent M1|none] [--cycles 8] [--used 2] [--phase planned] [--status active|completed|failed]'); process.exit(1); }
+    if (!milestoneId) { console.error('Usage: tbc-db milestone-edit <milestone_id> --actor athena [--title "..."] [--description "..."] [--parent M1|none] [--cycles 8] [--used 2] [--phase planned] [--status active|completed|failed]'); process.exit(1); }
     const { values } = parseArgs({
       args: args.slice(1),
       options: {
+        actor: { type: 'string' },
         title: { type: 'string', short: 't' },
         description: { type: 'string', short: 'd' },
         parent: { type: 'string', short: 'p' },
@@ -673,6 +682,7 @@ const commands = {
     const sets = [];
     const params = [];
     try {
+      assertMilestoneWriteActor(values.actor);
       if (values.title !== undefined) { sets.push('title = ?'); params.push(values.title || null); }
       if (values.description !== undefined) { sets.push('description = ?'); params.push(values.description); }
       if (values.parent !== undefined) {
@@ -707,12 +717,13 @@ const commands = {
 
   'milestone-delete'() {
     const milestoneId = args[0];
-    if (!milestoneId) { console.error('Usage: tbc-db milestone-delete <milestone_id> [--recursive]'); process.exit(1); }
+    if (!milestoneId) { console.error('Usage: tbc-db milestone-delete <milestone_id> --actor athena [--recursive]'); process.exit(1); }
     const { values } = parseArgs({
       args: args.slice(1),
-      options: { recursive: { type: 'boolean', default: false } },
+      options: { actor: { type: 'string' }, recursive: { type: 'boolean', default: false } },
       strict: false,
     });
+    try { assertMilestoneWriteActor(values.actor); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }
     if (!milestoneById(milestoneId)) { console.error(`Milestone ${milestoneId} not found`); process.exit(1); }
     const children = db.prepare('SELECT milestone_id FROM milestones WHERE parent_milestone_id = ?').all(milestoneId);
     if (children.length && !values.recursive) {
@@ -1052,11 +1063,11 @@ Comments:
   pr-comments   <pr_id>
 
 Milestones:
-  milestone-create [--id M1] --title "..." [--description "..."] [--parent M1] [--cycles 8] [--phase planned] [--status active|completed|failed]
+  milestone-create --actor athena [--id M1] --title "..." [--description "..."] [--parent M1] [--cycles 8] [--phase planned] [--status active|completed|failed]
   milestone-list   [--status active|completed|failed|all] [--phase planned] [--parent M1|root] [--json]
   milestone-view   <milestone_id>
-  milestone-edit   <milestone_id> [--title "..."] [--description "..."] [--parent M1|none] [--cycles 8] [--used 2] [--phase planned] [--status active|completed|failed]
-  milestone-delete <milestone_id> [--recursive]
+  milestone-edit   <milestone_id> --actor athena [--title "..."] [--description "..."] [--parent M1|none] [--cycles 8] [--used 2] [--phase planned] [--status active|completed|failed]
+  milestone-delete <milestone_id> --actor athena [--recursive]
 
 TBC PRs:
   pr-create     --title "..." --head branch --actor manager [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]

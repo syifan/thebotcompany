@@ -49,9 +49,9 @@ Milestones are the DB-backed roadmap tree. Use them for planning and continuity.
 ```bash
 # Create roadmap milestones
 # Use phase=planned for future roadmap nodes; status remains active until completed/failed.
-tbc-db milestone-create --id M1 --title "Authentication foundation" --description "Build the core auth model" --phase planned
+tbc-db milestone-create --actor athena --id M1 --title "Authentication foundation" --description "Build the core auth model" --phase planned
 
-tbc-db milestone-create --title "Login UI" --description "User-facing login flow" --parent M1 --phase planned --cycles 8
+tbc-db milestone-create --actor athena --title "Login UI" --description "User-facing login flow" --parent M1 --phase planned --cycles 8
 
 # List/view milestones
 tbc-db milestone-list
@@ -59,8 +59,8 @@ tbc-db milestone-list --parent M1
 tbc-db milestone-view M1
 
 # Edit or delete milestones
-tbc-db milestone-edit M1 --title "Auth foundation" --description "Updated roadmap goal"
-tbc-db milestone-delete M1.1
+tbc-db milestone-edit M1 --actor athena --title "Auth foundation" --description "Updated roadmap goal"
+tbc-db milestone-delete M1.1 --actor athena
 ```
 
 ### TBC PRs
@@ -88,7 +88,8 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 
 ## Rules
 
-- **Always use your agent name** as `--creator` or `--author`
+- **Always use your agent name** as `--creator`, `--author`, or `--actor`
+- **Only Athena may mutate milestones** — everyone can read `milestone-list`/`milestone-view`, but milestone create/edit/delete requires `--actor athena`
 - **One issue per task** — keep issues focused and small
 - **Close issues when done** — don't leave stale issues open
 - **Comment on progress** — leave notes so other agents (and your future self) know what happened
