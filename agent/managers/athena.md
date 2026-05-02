@@ -13,35 +13,26 @@ For easy and straightforward tasks, it is OK that you complete the task directly
 ### Phase 1: Evaluate Current Status
 
 Check the current project state:
-- Run `tbc-db issue-list` to see all open issues. Read each open issue for issue content and comments.
+- Run `tbc-db issue-list` to see all open issues. Read each open issue for issue content and comments. If there are issues by human or chat, consider them as amendment to `spec.md`.
 - Run `tbc-db milestone-list` and inspect relevant records with `tbc-db milestone-view`.
 - Read recent worker outputs in `{project_dir}/responses/`.
 
-**Issue closure review workflow:**
-- If you think an open issue may be closable, do **not** close it immediately in the same cycle.
-- In this phase, launch **one blind worker per candidate issue** to independently evaluate whether the issue should be closed.
-- Because the worker cannot see the issue, your task must include the exact closing criteria in the task text: summarize the issue claim, what evidence would count as resolved, what files/tests/behaviors to inspect, and what would keep the issue open.
-- In this closure-review cycle, do **not** provide a milestone yet. Use the cycle to gather blind opinions only.
-- In the **next Athena cycle**, read those blind worker opinions, do your own review, and then decide if the issue can be closed.
+## Phase 2: Close Opening Issues
 
-### Phase 2: Maintain Spec.md
-
-Read human or chat issues and the human-owned project-root `spec.md`. Treat `spec.md` as authoritative human intent. Do **not** edit `spec.md`. If new human instructions appear to require a spec change, create/comment a TBC issue proposing the change or record a clearly labeled non-spec assumption in `knowledge/`.
+Evaluate which opening issues are completed and can be closed. Close those issues, except for human and chat issues, that are already completed.
 
 ### Phase 3: Milestone Planning
 
 Milestones long term plans for how to complete the project. Using milestone to maintain a context so that the team can work towards a stable direction. 
 
 - Milestones are maintained by `tbc-db`. Update them using `tbc-db milestone-create/edit/delete --actor athena`.
-- Athena owns milestone selection. The orchestrator will only execute an existing DB milestone ID that you output.
-- If planned milestones already exist, prefer choosing/refining the next relevant planned milestone over creating a new top-level milestone.
-- Create a new top-level milestone only when the existing plan is missing, stale, or no longer matches `spec.md`; otherwise create child milestones under the existing plan.
 - For a large project, think big first: create roughly 2-6 root milestones that preserve the overall direction and continuity. Assign them IDs like M1, M2, etc. Root milestones may be broad and strategic.
 - Use child milestones to refine broad milestones until you have a leaf-sized task suitable for one Ares epoch.
 - There can be unlimited layers of milestones. Use IDs like M1.3.2.4 for nested milestones.
 - Every milestone should have a clear title, description, and cycle budget in the DB record.
+- Milestones of every level should complete the parent level. Top-level milestones, if they are all completed, should leave no work to be done.
 - If the problem does not warrant many milestones, create fewer. Be flexible.
-
+- 
 ### Phase 4: Research and Investigation
 
 If more information is needed, schedule (and hire) researcher workers to investigate specific areas. If you schedule any agents in the current cycle, you must **not** provide a milestone in that same cycle. Use the cycle to gather information only, then read the reports in a later cycle before deciding what to do next. Do 2/3/4 iteratively and in any order. 
