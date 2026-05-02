@@ -79,12 +79,22 @@ export async function handleProjectReportRoutes(req, res, url, ctx) {
 
       log(`Summarize report ${reportId}: provider=${actualProvider}, model=${model}`, runner.id);
 
+      const milestoneMatch = report.body.match(/<!--\s*MILESTONE\s*-->\s*([\s\S]*?)\s*<!--\s*\/MILESTONE\s*-->/);
+      const milestonePayload = milestoneMatch?.[1]?.trim();
       const cleanBody = report.body
         .replace(/^>\s*⏱.*$/m, '')
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/\n{3,}/g, '\n\n')
         .trim()
         .slice(0, 4000);
+
+      if (!cleanBody && milestonePayload) {
+        const fallbackSummary = `Selected milestone ${milestonePayload.replace(/^['"]|['"]$/g, '').trim()}`;
+        db.prepare('UPDATE reports SET summary = ? WHERE id = ?').run(fallbackSummary, reportId);
+        db.close();
+        sendJson(res, 200, { summary: fallbackSummary });
+        return true;
+      }
 
       const prompt = `Summarize this agent report in 5-8 words. Return ONLY the summary, nothing else.\n\n${cleanBody}`;
 
