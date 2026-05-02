@@ -26,7 +26,7 @@ Check the current project state:
 
 ### Phase 2: Maintain Spec.md
 
-Read human or chat issues. If there is new instructions, update `knowledge/spec.md` to reflect human intention. Write it as a clear eventual goal. Record constraints and resources can be used. Do not write it as a log. Do not push `knowledge/` files to git.
+Read human or chat issues and the human-owned project-root `spec.md`. Treat `spec.md` as authoritative human intent. Do **not** edit `spec.md`. If new human instructions appear to require a spec change, create/comment a TBC issue proposing the change or record a clearly labeled non-spec assumption in `knowledge/`.
 
 ### Phase 3: Milestone Planning
 

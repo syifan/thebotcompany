@@ -5,8 +5,8 @@ Use this canonical project layout:
 ```text
 <project>/
 ├── repo/
+├── spec.md
 ├── knowledge/
-│   └── spec.md
 ├── skills/
 │   └── workers/
 ├── project.db
@@ -22,7 +22,8 @@ Use this canonical project layout:
 ## Meaning
 
 - `repo/` — the git repository and tracked source files
-- `knowledge/` — private project knowledge, including `spec.md` and optional supporting documents
+- `spec.md` — human-owned project specification, outside the repo and read-only to agents
+- `knowledge/` — private project knowledge and optional supporting documents
 - `skills/` — private project skills and worker skill material
 - `project.db` — the canonical TBC project database
 - `orchestrator.log` — project orchestration log
@@ -33,6 +34,7 @@ Use this canonical project layout:
 
 - Do not treat `knowledge/` or `skills/` as part of the git repo
 - Do not create or expect `spec.md` at repo root
+- Agents may read project-root `spec.md` but must not edit it
 - Per-agent personal files belong in `agents/<agent_name>/`
 - Project-wide operational state belongs directly under the project root
 - If the structure is already canonical, keep using it

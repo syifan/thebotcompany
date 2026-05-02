@@ -22,7 +22,8 @@ function mkProject() {
   fs.writeFileSync(path.join(repo, 'repo.txt'), 'repo ok');
   fs.writeFileSync(path.join(own, 'note.txt'), 'own ok');
   fs.writeFileSync(path.join(other, 'secret.txt'), 'other secret');
-  fs.writeFileSync(path.join(knowledge, 'spec.md'), 'shared knowledge');
+  fs.writeFileSync(path.join(knowledge, 'analysis.md'), 'shared knowledge');
+  fs.writeFileSync(path.join(projectRoot, 'spec.md'), 'human spec');
   fs.writeFileSync(path.join(skills, 'nora.md'), 'role: worker');
   fs.writeFileSync(path.join(projectRoot, 'project.db'), 'sqlite');
   return {
@@ -34,7 +35,7 @@ function mkProject() {
     knowledge,
     skills,
     allowedWorker: {
-      read: [repo, knowledge, own],
+      read: [repo, knowledge, path.join(projectRoot, 'spec.md'), own],
       write: [repo, knowledge, own],
       denied: [
         path.join(projectRoot, 'agents'),
@@ -48,7 +49,7 @@ function mkProject() {
       dbPath: path.join(projectRoot, 'project.db'),
     },
     allowedFocused: {
-      read: [repo, knowledge, own],
+      read: [repo, knowledge, path.join(projectRoot, 'spec.md'), own],
       write: [repo, knowledge, own],
       denied: [
         path.join(projectRoot, 'agents'),
@@ -76,7 +77,7 @@ function mkProject() {
       dbPath: path.join(projectRoot, 'project.db'),
     },
     allowedManager: {
-      read: [repo, knowledge, own, skills],
+      read: [repo, knowledge, path.join(projectRoot, 'spec.md'), own, skills],
       write: [repo, knowledge, own, skills],
       denied: [
         path.join(projectRoot, 'agents'),
@@ -110,17 +111,21 @@ describe('agent filesystem allowlist', () => {
   });
 
 
-  it('allows full and focused agents to write shared knowledge but blocks blind agents', () => {
+  it('allows shared knowledge writes but makes project spec read-only to agents', () => {
     const p = mkProject();
     const workerWrite = executeWrite({ file_path: path.join(p.knowledge, 'analysis.md'), content: 'durable finding' }, p.repo, p.allowedWorker);
     assert.match(workerWrite, /Successfully wrote/i);
 
-    const focusedEdit = executeEdit({ file_path: path.join(p.knowledge, 'spec.md'), old_string: 'shared', new_string: 'updated shared' }, p.repo, p.allowedFocused);
-    assert.match(focusedEdit, /Successfully edited/i);
+    const specRead = executeRead({ file_path: path.join(p.projectRoot, 'spec.md') }, p.repo, p.allowedFocused);
+    const specEdit = executeEdit({ file_path: path.join(p.projectRoot, 'spec.md'), old_string: 'human', new_string: 'agent' }, p.repo, p.allowedFocused);
+    assert.match(specRead, /human spec/i);
+    assert.match(specEdit, /access denied/i);
 
-    const blindRead = executeRead({ file_path: path.join(p.knowledge, 'spec.md') }, p.repo, p.allowedBlind);
+    const blindRead = executeRead({ file_path: path.join(p.knowledge, 'analysis.md') }, p.repo, p.allowedBlind);
+    const blindSpecRead = executeRead({ file_path: path.join(p.projectRoot, 'spec.md') }, p.repo, p.allowedBlind);
     const blindWrite = executeWrite({ file_path: path.join(p.knowledge, 'blind.md'), content: 'nope' }, p.repo, p.allowedBlind);
     assert.match(blindRead, /access denied/i);
+    assert.match(blindSpecRead, /access denied/i);
     assert.match(blindWrite, /access denied/i);
   });
 

@@ -58,9 +58,10 @@ export async function handleProjectRegistryRoutes(req, res, url, pathParts, ctx)
         gitAuth.cleanup();
       }
 
+      const projectSpecPath = path.join(parsed.projectDir, 'spec.md');
       const knowledgeSpecPath = path.join(parsed.projectDir, 'knowledge', 'spec.md');
       const repoSpecPath = path.join(parsed.repoDir, 'spec.md');
-      const specPath = fs.existsSync(knowledgeSpecPath) ? knowledgeSpecPath : repoSpecPath;
+      const specPath = fs.existsSync(projectSpecPath) ? projectSpecPath : (fs.existsSync(knowledgeSpecPath) ? knowledgeSpecPath : repoSpecPath);
       const hasSpec = fs.existsSync(specPath);
       const specContent = hasSpec ? fs.readFileSync(specPath, 'utf-8') : null;
 
@@ -90,10 +91,9 @@ export async function handleProjectRegistryRoutes(req, res, url, pathParts, ctx)
 
       if (spec && (spec.whatToBuild || spec.successCriteria)) {
         const projectRoot = path.dirname(resolvedPath);
-        const knowledgeDir = path.join(projectRoot, 'knowledge');
-        const specPath = path.join(knowledgeDir, 'spec.md');
+        const specPath = path.join(projectRoot, 'spec.md');
         const specContent = `# Project Specification\n\n## What do you want to build?\n\n${spec.whatToBuild || ''}\n\n## How do you consider the project is success?\n\n${spec.successCriteria || ''}\n`;
-        fs.mkdirSync(knowledgeDir, { recursive: true });
+        fs.mkdirSync(projectRoot, { recursive: true });
         fs.writeFileSync(specPath, specContent);
       }
 

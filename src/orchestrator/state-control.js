@@ -19,6 +19,17 @@ export async function startRunner(runner, deps = {}) {
     fs.mkdirSync(path.join(runner.projectDir, 'knowledge', 'analysis'), { recursive: true });
     fs.mkdirSync(path.join(runner.projectDir, 'knowledge', 'decisions'), { recursive: true });
     fs.mkdirSync(runner.workerSkillsDir, { recursive: true });
+
+    // Migrate legacy agent-writable knowledge/spec.md to human-owned project spec.md.
+    const legacySpecPath = path.join(runner.knowledgeDir, 'spec.md');
+    if (!fs.existsSync(runner.specPath) && fs.existsSync(legacySpecPath)) {
+      try {
+        fs.renameSync(legacySpecPath, runner.specPath);
+        deps.log(`Migrated knowledge/spec.md to project spec.md`, runner.id);
+      } catch (error) {
+        deps.log(`Warning: failed to migrate knowledge/spec.md: ${error.message}`, runner.id);
+      }
+    }
     
     // Load persisted state
     runner.loadState();
