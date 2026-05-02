@@ -1078,9 +1078,46 @@ export default function ProjectView({
             
             <div className="flex items-center gap-1.5 pl-8 sm:pl-0 shrink-0">
               <button
+                onClick={openSpecPanel}
+                aria-label="Open project spec editor"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                title="Project Spec — edit the human-owned spec.md"
+              >
+                <FileText className="w-4 h-4" />
+              </button>
+              <button
+                onClick={openProjectSettingsPanel}
+                aria-label="Open project settings"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                title="Project Settings — model, budget, interval, and controls"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              {repoUrl && (
+                <a
+                  href={repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open repository on GitHub"
+                  className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center"
+                  title="GitHub Repository — open the source repo"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
+              )}
+              <a
+                href={projectApi('/download')}
+                aria-label="Download project data"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center"
+                title="Download Project Data — export project DB, logs, responses, knowledge, and agent files"
+              >
+                <Save className="w-4 h-4" />
+              </a>
+              <button
                 onClick={() => setNotifCenter(true)}
+                aria-label="Open notifications"
                 className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
-                title="Notifications"
+                title="Notifications — project and system alerts"
               >
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
@@ -1091,39 +1128,28 @@ export default function ProjectView({
               </button>
               <button
                 onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
+                aria-label={isWriteMode ? 'Lock write mode' : 'Unlock write mode'}
                 className={`p-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
-                title={isWriteMode ? 'Write mode (click to lock)' : 'Read-only (click to unlock)'}
+                title={isWriteMode ? 'Write Mode — click to return to read-only mode' : 'Read-only Mode — click to unlock write actions'}
               >
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
-              <button
-                onClick={openSpecPanel}
-                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                title="Project Spec"
-              >
-                <FileText className="w-4 h-4" />
-              </button>
-              <button
-                onClick={openProjectSettingsPanel}
-                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                title="Project Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              <a href={projectApi('/download')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Download project data as ZIP">
-                <Save className="w-4 h-4" />
-              </a>
-              {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Open on GitHub">
-                  <Github className="w-4 h-4" />
-                </a>
-              )}
               {isWriteMode && (selectedProject.paused ? (
-                <button onClick={() => controlAction('resume')} className="p-1.5 rounded bg-green-500 hover:bg-green-600 text-white transition-colors" title="Resume project">
+                <button
+                  onClick={() => controlAction('resume')}
+                  aria-label="Resume project"
+                  className="p-1.5 rounded bg-green-500 hover:bg-green-600 text-white transition-colors"
+                  title="Resume Project — continue the orchestrator loop"
+                >
                   <Play className="w-4 h-4" />
                 </button>
               ) : (
-                <button onClick={() => controlAction('pause')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors" title="Pause project">
+                <button
+                  onClick={() => controlAction('pause')}
+                  aria-label="Pause project"
+                  className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                  title="Pause Project — stop scheduling after the current safe point"
+                >
                   <Pause className="w-4 h-4" />
                 </button>
               ))}
@@ -1131,15 +1157,23 @@ export default function ProjectView({
                 <button
                   onClick={() => setDoctorConfirmOpen(true)}
                   disabled={!selectedProject.paused || selectedProject.currentAgent || doctorRunning}
+                  aria-label="Run doctor repair"
                   className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors disabled:opacity-50"
-                  title={selectedProject.paused && !selectedProject.currentAgent ? 'Run Doctor' : 'Doctor requires project to be fully paused'}
+                  title={selectedProject.paused && !selectedProject.currentAgent ? 'Doctor — inspect and repair project structure' : 'Doctor unavailable — pause project and wait for current agent to finish'}
                 >
                   <Stethoscope className="w-4 h-4" />
                 </button>
               )}
-              {isWriteMode && <button onClick={openBootstrapModal} className="p-1.5 rounded bg-red-500 hover:bg-red-600 text-white transition-colors" title="Bootstrap project">
-                <RotateCcw className="w-4 h-4" />
-              </button>}
+              {isWriteMode && (
+                <button
+                  onClick={openBootstrapModal}
+                  aria-label="Bootstrap project workspace"
+                  className="p-1.5 rounded bg-red-500 hover:bg-red-600 text-white transition-colors"
+                  title="Bootstrap Workspace — destructive reset of project operational state"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
           
