@@ -42,6 +42,27 @@ tbc-db comment --issue 42 --author leo --body "Fixed in commit abc123"
 tbc-db comments 42
 ```
 
+### Milestones
+
+Milestones are the DB-backed roadmap tree. Use them for planning and continuity. A milestone record does **not** become the current executable handoff by itself; the orchestrator only hands work to Ares when Athena emits the `MILESTONE` directive.
+
+```bash
+# Create roadmap milestones
+# Use phase=planned for future roadmap nodes; status remains active until completed/failed.
+tbc-db milestone-create --id M1 --title "Authentication foundation" --description "Build the core auth model" --phase planned
+
+tbc-db milestone-create --title "Login UI" --description "User-facing login flow" --parent M1 --phase planned --cycles 8
+
+# List/view milestones
+tbc-db milestone-list
+tbc-db milestone-list --parent M1
+tbc-db milestone-view M1
+
+# Edit or delete milestones
+tbc-db milestone-edit M1 --title "Auth foundation" --description "Updated roadmap goal"
+tbc-db milestone-delete M1.1
+```
+
 ### TBC PRs
 
 ```bash
@@ -80,7 +101,7 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 | `issues` | id, title, body, status (open/closed), creator, assignee, labels, created_at |
 | `comments` | id, issue_id, author, body, created_at |
 | `agents` | id, name, role, reports_to, model, disabled |
-| `milestones` | id, description, cycles_budget, cycles_used, phase, status |
+| `milestones` | id, milestone_id, title, description, parent_milestone_id, cycles_budget, cycles_used, phase, status |
 | `tbc_prs` | id, title, summary, base_branch, head_branch, status, issue_ids, test_status |
 
 ## Visibility
