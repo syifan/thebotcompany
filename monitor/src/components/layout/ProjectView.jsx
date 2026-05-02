@@ -379,7 +379,7 @@ export default function ProjectView({
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
+  const projectApi = useCallback((path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null, [selectedProject?.id])
 
   // Fetch project data
   const fetchProjectData = useCallback(async (initial = false) => {
