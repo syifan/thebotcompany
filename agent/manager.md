@@ -133,21 +133,7 @@ You MUST include this exact format in your response when scheduling workers:
 The schedule is an **ordered array of steps**. Each step is either:
 - `{"delay": N}` — wait N minutes before proceeding to the next step
 - `{"agent": "name", "task": "...", "visibility": "..."}` — run that agent
-
-### Rules
-- Steps execute top-to-bottom in exact order.
-- Only include workers that should run this cycle. Omitted workers are skipped.
-- Only schedule workers who report to you.
-- **ALWAYS use the `<!-- SCHEDULE -->` format.**
-- **If the format is wrong, the orchestrator silently drops the entire schedule — no error, no retry, nothing runs.**
-- Each agent step MUST include both `agent` and `task`. Missing `task` causes the entire schedule to be rejected.
-- Delay steps must have ONLY the `delay` key — extra keys cause rejection.
-- Agents run sequentially in the order you list them, not in parallel.
-- Do NOT assign issue/PR-board work to `blind` workers by saying things like "review issue #32" or "verify PR #7". Blind workers receive no issue/PR-board context. Paste neutral facts/evidence directly into the task instead.
-- `focused` workers may receive explicit `#id` references. The orchestrator injects those referenced objects as JSON into their prompt, but they still cannot browse/list the full issue or PR board.
-- Use `visibility: "full"` when the worker must inspect broader issue/PR-board state.
-- The orchestrator rejects schedules that mention issue/PR references in `blind` tasks.
-
+- 
 ### Delays
 
 Insert `{"delay": N}` steps wherever you need a pause (waiting for CI, builds, etc.):
@@ -157,6 +143,10 @@ Insert `{"delay": N}` steps wherever you need a pause (waiting for CI, builds, e
 - Maximum 240 minutes per delay
 - **Only add delays when there is a clear reason** (e.g., waiting for CI to finish, waiting for a build). Do NOT add delays by default or "just in case." If there's no specific reason to wait, don't insert a delay.
 
+
+
+
+
 ### Worker Visibility
 
 You can control what each worker sees by adding `visibility` to each agent step:
@@ -165,6 +155,18 @@ You can control what each worker sees by adding `visibility` to each agent step:
 - **`full`** (default): Worker can see the issue board, PR board, shared knowledge, and their own notes.
 - **`focused`**: Worker cannot see the issue board or PR board, but can still read shared knowledge and their own notes. They still can create a new issue or TBC PR record if needed.
 - **`blind`**: Worker cannot see the issue board or PR board, cannot read shared knowledge, and cannot read any notes, including their own. They only get the task description and the repo. They still can create a new issue or TBC PR record if needed. Use this for independent verification when you want the worker to reason only from the task and code.
+  
+### Rules
+- Steps execute top-to-bottom in exact order.
+- Only include workers that should run this cycle. Omitted workers are skipped.
+- Only schedule workers who report to you.
+- ALWAYS use the `<!-- SCHEDULE -->` format.
+- Each agent step MUST include both `agent` and `task`. Missing `task` causes the entire schedule to be rejected.
+- Delay steps must have ONLY the `delay` key — extra keys cause rejection.
+- Agents run sequentially in the order you list them, not in parallel.
+- Do NOT assign issue/PR-board work to `blind` or `focused` workers by saying things like "review issue #32" or "verify PR #7". Blind workers receive no issue/PR-board context. Paste neutral facts/evidence directly into the task instead.
+- Use `visibility: "full"` when the worker must inspect broader issue/PR-board state.
+- You can use delays without agents as a delay for yourself.
 
 ## PRs
 
