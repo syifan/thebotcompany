@@ -13,6 +13,32 @@ export async function handleProjectRepoRoutes(req, res, url, ctx) {
     return true;
   }
 
+  if (req.method === 'GET' && subPath === 'spec') {
+    if (!requireWrite(req, res)) return true;
+    try {
+      const specPath = runner.specPath;
+      const content = fs.existsSync(specPath) ? fs.readFileSync(specPath, 'utf-8') : '';
+      sendJson(res, 200, { content });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message });
+    }
+    return true;
+  }
+
+  if (req.method === 'PUT' && subPath === 'spec') {
+    if (!requireWrite(req, res)) return true;
+    try {
+      const body = await readJson(req) || {};
+      const content = typeof body.content === 'string' ? body.content : '';
+      fs.mkdirSync(runner.projectDir, { recursive: true });
+      fs.writeFileSync(runner.specPath, content);
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message });
+    }
+    return true;
+  }
+
   if (req.method === 'GET' && subPath === 'download') {
     try {
       const projectDataDir = runner.projectDir;

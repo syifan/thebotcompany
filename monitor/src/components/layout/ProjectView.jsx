@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import SegmentedControl from '@/components/ui/segmented-control'
 import StatusPill from '@/components/ui/status-pill'
-import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope } from 'lucide-react'
+import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope, FileText } from 'lucide-react'
 import { PanelSlot, closeAllPanels } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
@@ -20,6 +20,7 @@ import ChatCard from '@/components/project/ChatCard'
 import SettingsPanel from '@/components/panels/SettingsPanel'
 import NotificationPanel from '@/components/panels/NotificationPanel'
 import BootstrapPanel from '@/components/panels/BootstrapPanel'
+import SpecPanel from '@/components/panels/SpecPanel'
 import ReportsPanel from '@/components/panels/ReportsPanel'
 import ChatPanel from '@/components/panels/ChatPanel'
 import AgentDetailPanel from '@/components/panels/AgentDetailPanel'
@@ -159,6 +160,7 @@ export default function ProjectView({
   const [settingsOpen, setSettingsOpen] = useState(initialPathPanel.panel === 'settings')
   const [showApiKeyHelp, setShowApiKeyHelp] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(initialPathPanel.panel === 'project-settings')
+  const [specPanelOpen, setSpecPanelOpen] = useState(initialPathPanel.panel === 'spec')
   const [chatPanelOpen, setChatPanelOpen] = useState(initialPathPanel.panel === 'chat')
   const [chatSession, setChatSession] = useState(initialPathPanel.panel === 'chat' ? (initialPathPanel.id === 'new' || !initialPathPanel.id ? { id: null, title: 'New Chat', _temp: true } : { id: initialPathPanel.id }) : null)
   const [chatRefreshToken, setChatRefreshToken] = useState(0)
@@ -166,6 +168,7 @@ export default function ProjectView({
   const pathPanel = parseProjectPanelPath(currentPath, selectedProject)
   const isSettingsPanelOpen = settingsOpen || pathPanel.panel === 'settings'
   const isProjectSettingsPanelOpen = projectSettingsOpen || pathPanel.panel === 'project-settings'
+  const isSpecPanelOpen = specPanelOpen || pathPanel.panel === 'spec'
   const isReportsPanelOpen = reportsPanelOpen || pathPanel.panel === 'reports'
   const isChatPanelOpen = chatPanelOpen || pathPanel.panel === 'chat'
   const isIssuePanelOpen = issueModal.open || pathPanel.panel === 'issue'
@@ -285,6 +288,7 @@ export default function ProjectView({
     abortPrRequest()
     setSettingsOpen(false)
     setProjectSettingsOpen(false)
+    setSpecPanelOpen(false)
     setBootstrapModal(prev => ({ ...prev, open: false }))
     setReportsPanelOpen(false)
     setChatPanelOpen(false)
@@ -312,6 +316,16 @@ export default function ProjectView({
   const closeProjectSettingsPanel = useCallback(() => {
     setProjectSettingsOpen(false)
     clearPanelPathIfActive('project-settings')
+  }, [clearPanelPathIfActive])
+
+  const openSpecPanel = useCallback(() => {
+    setSpecPanelOpen(true)
+    navigateProjectPath(['spec'])
+  }, [navigateProjectPath])
+
+  const closeSpecPanel = useCallback(() => {
+    setSpecPanelOpen(false)
+    clearPanelPathIfActive('spec')
   }, [clearPanelPathIfActive])
 
   const openReportsPanel = useCallback((reportId = null) => {
@@ -1083,6 +1097,13 @@ export default function ProjectView({
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
               <button
+                onClick={openSpecPanel}
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                title="Project Spec"
+              >
+                <FileText className="w-4 h-4" />
+              </button>
+              <button
                 onClick={openProjectSettingsPanel}
                 className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
                 title="Project Settings"
@@ -1372,6 +1393,7 @@ export default function ProjectView({
       />
       <AgentSettingsModal agentSettingsModal={agentSettingsModal} setAgentSettingsModal={setAgentSettingsModal} saveAgentSettings={saveAgentSettings} />
       <BootstrapPanel bootstrapModal={{ ...bootstrapModal, open: isBootstrapPanelOpen }} setBootstrapModal={setBootstrapModalWithUrl} executeBootstrap={executeBootstrap} />
+      <SpecPanel open={isSpecPanelOpen} onClose={closeSpecPanel} projectApi={projectApi} authFetch={authFetch} showToast={showToast} />
       <BudgetInfoModal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)} />
       <IntervalInfoModal open={intervalInfoModal} onClose={() => setIntervalInfoModal(false)} />
       <TimeoutInfoModal open={timeoutInfoModal} onClose={() => setTimeoutInfoModal(false)} />
