@@ -108,11 +108,11 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 ## Visibility
 
 Your access to the tracker may be restricted by your manager:
-- **Full**: You can access everything
-- **Focused**: You can only read/write specific allowed issues assigned to you, plus create new issues
-- **Blind**: You cannot read the tracker, but you can still create new issues to raise blockers or findings
+- **Full**: You can read and write everything allowed by command policy
+- **Focused**: Write-only mode. You cannot browse the tracker, but you may create issues/PRs and comment on specifically referenced issues/PRs.
+- **Blind**: Write-only mode. You cannot read the tracker, but you may create issues/PRs and comments to raise blockers or findings.
 
-If you get "Access denied", respect the restriction and work with what you have.
+If you get "Access denied", respect the restriction and write only the update you need to leave.
 
 ## PR Workflow
 
