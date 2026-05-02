@@ -124,7 +124,7 @@ export async function setupMocks(page, { withAgent = false } = {}) {
   )
   await page.route(`${projBase}/bootstrap`, route => {
     if (route.request().method() === 'GET') {
-      route.fulfill({ json: { available: true, hasRoadmap: false, specContent: '', workspaceEmpty: false, repo: PROJECT_REPO } })
+      route.fulfill({ json: { available: true, specContent: '', workspaceEmpty: false, repo: PROJECT_REPO } })
     } else {
       route.fulfill({ json: { success: true } })
     }

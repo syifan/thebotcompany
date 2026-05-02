@@ -6,8 +6,7 @@ Use this canonical project layout:
 <project>/
 ├── repo/
 ├── knowledge/
-│   ├── spec.md
-│   ├── roadmap.md
+│   └── spec.md
 ├── skills/
 │   └── workers/
 ├── project.db
@@ -23,7 +22,7 @@ Use this canonical project layout:
 ## Meaning
 
 - `repo/` — the git repository and tracked source files
-- `knowledge/` — private project knowledge, including `spec.md`, `roadmap.md`, and optional supporting documents
+- `knowledge/` — private project knowledge, including `spec.md` and optional supporting documents
 - `skills/` — private project skills and worker skill material
 - `project.db` — the canonical TBC project database
 - `orchestrator.log` — project orchestration log

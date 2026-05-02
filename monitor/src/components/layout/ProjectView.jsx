@@ -152,7 +152,7 @@ export default function ProjectView({
   })
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
-  const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+  const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
@@ -728,13 +728,13 @@ export default function ProjectView({
   const openBootstrapModal = async () => {
     if (!selectedProject) return
     navigateProjectPath(['bootstrap'])
-    setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+    setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
     try {
       const res = await authFetch(projectApi('/bootstrap'))
       const data = await res.json()
-      setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false, removeRoadmap: !!data.hasRoadmap, specMode: 'keep', specContent: data.specContent || '', whatToBuild: '', successCriteria: '' })
+      setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false, specMode: 'keep', specContent: data.specContent || '', whatToBuild: '', successCriteria: '' })
     } catch (err) {
-      setBootstrapModal({ open: true, loading: false, preview: null, error: err.message, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+      setBootstrapModal({ open: true, loading: false, preview: null, error: err.message, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
     }
   }
 
@@ -743,7 +743,6 @@ export default function ProjectView({
     setBootstrapModal(prev => ({ ...prev, executing: true, error: null }))
     try {
       const body = {
-        removeRoadmap: bootstrapModal.removeRoadmap,
         spec: {
           mode: bootstrapModal.specMode,
           content: bootstrapModal.specContent,
@@ -758,7 +757,7 @@ export default function ProjectView({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+      setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
       navigateProjectPath()
       await fetchGlobalStatus()
       await fetchProjectData()

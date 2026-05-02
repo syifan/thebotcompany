@@ -23,7 +23,6 @@ Do not push `knowledge/` files to git.
 
 ### Milestone Planning Rules
 
-- Do **not** maintain `knowledge/roadmap.md`. The roadmap lives in the project DB.
 - Use `tbc-db milestone-list` and `tbc-db milestone-view` to inspect existing roadmap milestones.
 - Only Athena may write milestones. When you create/edit/delete milestone records, always pass `--actor athena`.
 - On a new project or when the roadmap is missing/stale, create or update a milestone tree with `tbc-db milestone-create/edit/delete` before choosing the next executable handoff.
