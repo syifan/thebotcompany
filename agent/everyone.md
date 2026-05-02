@@ -39,6 +39,14 @@ Chat and doctor do not follow these rules.
 - Blind agents cannot see shared knowledge.
 - Blind agents cannot read any notes, including their own.
 
+## Output Format
+
+Keep final responses concise and structured in three parts:
+
+1. **Context received:** Briefly list the relevant skills, instructions, assigned issue/PR/milestone IDs, and injected issue/PR/comment context you used.
+2. **Actions taken:** State what you did, what changed, and the evidence/tests/results. Be concrete and brief.
+3. **Manager directive blocks:** If you are a manager and need the orchestrator to act, put the required directive block last (`SCHEDULE`, `MILESTONE`, `CLAIM_COMPLETE`, `VERIFY_PASS`, `VERIFY_FAIL`, `PROJECT_COMPLETE`, etc.). Do not add extra text inside directive blocks beyond the required format.
+
 ## Communication
 
 **To send a message to another agent, create an issue assigned to them or comment on an existing issue with that topic.** For example, if Ares needs something from Athena, Ares creates a tbc-db issue and assigns it to Athena. This is the only way to communicate between agents.
