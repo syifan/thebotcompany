@@ -433,8 +433,8 @@ export async function runRunnerLoop(runner, deps = {}) {
         if (apollo) {
           const isRollupVerification = !runner.currentEpochPrId;
           const apolloContext = isRollupVerification
-            ? `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Rollup verification target:** ${runner.currentMilestoneId || 'unknown'}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
-            : `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
+            ? `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}\n> **Milestone to verify:** ${runner.milestoneDescription}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
+            : `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}\n> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
 
           const result = await runManagerWithDirectiveRetry(runner, deps, apollo, config, apolloContext);
           cycleTotal++;
