@@ -143,11 +143,7 @@ export async function runRunnerLoop(runner, deps = {}) {
           } else {
             situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles without completing the milestone.\n> Previous milestone: ${runner.currentMilestoneId || 'unknown'}\n> Current branch: ${runner.currentMilestoneBranch || 'not set'}\n\n`;
           }
-          situation += `> **Assigned milestone ID:** ${runner.pendingMilestoneId}\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n`;
-          if (runner.currentMilestoneId) {
-            situation += `> **Optional reset:** If the current subtree is wrong, you may return a milestone with \"reset_to\": \"${runner.currentMilestoneId}\" or any ancestor milestone id (or \"root\") to abandon deeper branches and replan from that level.\n`;
-          }
-          situation += `\n`;
+          situation += `> **Reserved milestone ID:** ${runner.pendingMilestoneId}\n> Use this ID if you create the next executable milestone record this cycle.\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n\n`;
 
           const result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
           cycleTotal++;
@@ -164,23 +160,47 @@ export async function runRunnerLoop(runner, deps = {}) {
             const milestoneMatch = result.resultText.match(/<!-- MILESTONE -->\s*([\s\S]*?)\s*<!-- \/MILESTONE -->/);
             if (milestoneMatch) {
               try {
-                const milestone = JSON.parse(milestoneMatch[1]);
-                const milestoneTitle = milestone.title || milestone.description.slice(0, 80);
-                const resetTarget = runner.normalizeResetTargetMilestone(milestone.reset_to);
-                const resetTo = resetTarget ? resetTarget.milestoneId : (runner.currentMilestoneId || null);
-                const shouldReusePendingMilestoneId = !!runner.pendingMilestoneId && resetTo === (runner.currentMilestoneId || null);
-                const milestoneId = shouldReusePendingMilestoneId
-                  ? runner.pendingMilestoneId
-                  : await runner.allocateNextMilestoneId(resetTo);
-                if (milestone.reset_to && !resetTarget) {
-                  deps.log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, runner.id);
-                } else if (milestone.reset_to && resetTarget) {
-                  deps.log(`Athena reset planning anchor to ${resetTarget.label}`, runner.id);
+                const payload = milestoneMatch[1].trim();
+                let milestoneId;
+                let milestoneTitle;
+                let milestoneDescription;
+                let milestoneCyclesBudget;
+                let parentMilestoneId;
+
+                if (payload.startsWith('{')) {
+                  // Backward-compatible support for older Athena prompts.
+                  const milestone = JSON.parse(payload);
+                  milestoneTitle = milestone.title || milestone.description.slice(0, 80);
+                  milestoneDescription = milestone.description;
+                  milestoneCyclesBudget = milestone.cycles || 20;
+                  const resetTarget = runner.normalizeResetTargetMilestone(milestone.reset_to);
+                  const resetTo = resetTarget ? resetTarget.milestoneId : (runner.currentMilestoneId || null);
+                  const shouldReusePendingMilestoneId = !!runner.pendingMilestoneId && resetTo === (runner.currentMilestoneId || null);
+                  milestoneId = shouldReusePendingMilestoneId
+                    ? runner.pendingMilestoneId
+                    : await runner.allocateNextMilestoneId(resetTo);
+                  parentMilestoneId = runner.getParentMilestoneId(milestoneId);
+                  if (milestone.reset_to && !resetTarget) {
+                    deps.log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, runner.id);
+                  } else if (milestone.reset_to && resetTarget) {
+                    deps.log(`Athena reset planning anchor to ${resetTarget.label}`, runner.id);
+                  }
+                } else {
+                  milestoneId = payload.replace(/^['"]|['"]$/g, '').trim();
+                  const milestone = await runner.getMilestoneRecord(milestoneId);
+                  if (!milestone) {
+                    throw new Error(`Milestone ${milestoneId} not found`);
+                  }
+                  milestoneTitle = milestone.title || milestone.milestone_id;
+                  milestoneDescription = milestone.description || milestoneTitle;
+                  milestoneCyclesBudget = milestone.cycles_budget || 20;
+                  parentMilestoneId = milestone.parent_milestone_id || runner.getParentMilestoneId(milestoneId);
                 }
+
                 runner.setState({
                   milestoneTitle,
-                  milestoneDescription: milestone.description,
-                  milestoneCyclesBudget: milestone.cycles || 20,
+                  milestoneDescription,
+                  milestoneCyclesBudget,
                   milestoneCyclesUsed: 0,
                   currentMilestoneId: milestoneId,
                   pendingMilestoneId: null,
@@ -197,10 +217,10 @@ export async function runRunnerLoop(runner, deps = {}) {
                 await runner.upsertMilestoneRecord({
                   milestoneId,
                   title: milestoneTitle,
-                  description: milestone.description,
-                  cyclesBudget: milestone.cycles || 20,
+                  description: milestoneDescription,
+                  cyclesBudget: milestoneCyclesBudget,
                   branchName: null,
-                  parentMilestoneId: milestoneId.includes('.') ? milestoneId.split('.').slice(0, -1).join('.') : null,
+                  parentMilestoneId,
                   phase: 'implementation',
                   status: 'active',
                 });

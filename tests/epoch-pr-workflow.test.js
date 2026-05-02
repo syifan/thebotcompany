@@ -16,11 +16,11 @@ describe('epoch-as-PR orchestrator flow', () => {
     assert.doesNotMatch(orchestratorSource, /CLAIM_COMPLETE ignored because no orchestrator-managed epoch PR exists/i);
   });
 
-  it('assigns milestone ids before Athena starts and derives epoch ids separately', () => {
+  it('reserves milestone ids before Athena starts and derives epoch ids separately', () => {
     assert.match(orchestratorSource, /pendingMilestoneId/);
     assert.match(orchestratorSource, /allocateNextMilestoneId/);
     assert.match(orchestratorSource, /allocateNextEpochId/);
-    assert.match(orchestratorSource, /Assigned milestone ID/);
+    assert.match(orchestratorSource, /Reserved milestone ID/);
   });
 
   it('returns Apollo failures to Athena for split and replan', () => {
@@ -46,10 +46,10 @@ describe('epoch-as-PR orchestrator flow', () => {
     assert.doesNotMatch(block, /currentMilestoneId: null/);
   });
 
-  it('lets Athena reset planning to an ancestor milestone or root before allocating the next milestone id', () => {
-    assert.match(orchestratorSource, /normalizeResetTargetMilestone\(milestone\.reset_to\)/);
-    assert.match(orchestratorSource, /await (?:this|runner)\.allocateNextMilestoneId\(resetTo\)/);
-    assert.match(orchestratorSource, /Athena reset planning anchor to/);
+  it('lets Athena hand off an existing DB milestone by id', () => {
+    assert.match(orchestratorSource, /await (?:this|runner)\.getMilestoneRecord\(milestoneId\)/);
+    assert.match(orchestratorSource, /Milestone \$\{milestoneId\} not found/);
+    assert.match(orchestratorSource, /currentMilestoneId: milestoneId/);
   });
 
   it('escalates a successful child milestone to parent rollup verification instead of jumping to root', () => {
