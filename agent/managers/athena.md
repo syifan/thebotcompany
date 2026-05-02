@@ -15,7 +15,7 @@ For easy and straightforward tasks, it is OK that you complete the task directly
 Check the current project state yourself:
 - Run `tbc-db issue-list` to see all open issues. Read each open issue for issue content and comments.
 - Run `tbc-db milestone-list` and inspect relevant records with `tbc-db milestone-view`.
-- Read worker reports: check `{project_dir}/agents/{agent_name}/note.md` for each worker and `{project_dir}/responses/` for recent agent logs.
+- Read shared worker outputs only: issue comments, TBC PR records/comments, `knowledge/` documents, and `{project_dir}/responses/` for recent agent logs. Do **not** read another agent's private `agents/{agent_name}/note.md`.
 
 You should not trust what other agents say. Do your own evaluation.
 
