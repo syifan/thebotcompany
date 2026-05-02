@@ -119,4 +119,4 @@ If you get "Access denied", respect the restriction and write only the update yo
 - For agent-delivered work, create a **TBC PR** with `tbc-db pr-create` instead of `gh pr create`
 - Update the record as work progresses with `tbc-db pr-edit`
 - Use `pr-list` and `pr-view` to inspect active TBC PRs
-- GitHub PRs are optional mirrors, not the default workflow
+- **Never use GitHub PRs** for agent workflow. Use TBC PRs only.
