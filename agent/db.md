@@ -10,7 +10,7 @@ All commands are available as `tbc-db <command>` — no setup needed, just run t
 
 ```bash
 # Create an issue
-tbc-db issue-create --title "Fix memory leak" --creator ares --assignee leo --body "Details here"
+tbc-db issue-create --title "Fix memory leak" --actor ares --assignee leo --body "Details here"
 
 # List open issues
 tbc-db issue-list
@@ -88,7 +88,7 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 
 ## Rules
 
-- **Always use your agent name** as `--creator`, `--author`, or `--actor`
+- **Always use your agent name** as `--actor` or `--author`
 - **Only Athena may mutate milestones** — everyone can read `milestone-list`/`milestone-view`, but milestone create/edit/delete requires `--actor athena`
 - **One issue per task** — keep issues focused and small
 - **Close issues when done** — don't leave stale issues open

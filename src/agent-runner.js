@@ -81,7 +81,7 @@ function extractTbcDbCommand(command) {
   const prFlagMatch = args.match(/--pr\s+(\d+)/);
   const positionalPrMatch = args.match(/^(?:pr-view|pr-edit|pr-comments)\s+(\d+)\b/);
   const prId = prFlagMatch?.[1] || positionalPrMatch?.[1] || null;
-  const actorMatch = args.match(/--(?:actor|creator|author|editor|closer)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
+  const actorMatch = args.match(/--(?:actor|author)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/);
   const actor = actorMatch ? (actorMatch[1] || actorMatch[2] || actorMatch[3]) : null;
 
   if (/^issue-create\b/.test(args)) return { kind: 'issue-create', actor };

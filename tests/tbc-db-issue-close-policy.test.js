@@ -21,30 +21,50 @@ function run(args, dbPath) {
 }
 
 describe('tbc-db issue action initiator policy', () => {
-  it('requires an explicit editor for issue edits', () => {
+  it('requires an explicit actor for issue edits', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-close-'));
     const dbPath = path.join(dir, 'project.db');
 
-    let res = run(['issue-create', '--title', 'Agent issue', '--creator', 'ares', '--body', 'body'], dbPath);
+    let res = run(['issue-create', '--title', 'Agent issue', '--actor', 'ares', '--body', 'body'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
 
     res = run(['issue-edit', '1', '--title', 'Updated title'], dbPath);
     assert.notEqual(res.status, 0);
-    assert.match(res.stderr, /--actor|--editor/i);
+    assert.match(res.stderr, /--actor/i);
 
     res = run(['issue-edit', '1', '--actor', 'ares', '--title', 'Updated title'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
     assert.match(res.stdout, /Updated issue #1/);
   });
 
-  it('allows the same agent who opened the issue to close it', () => {
+  it('rejects removed creator/editor/closer aliases', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-close-'));
     const dbPath = path.join(dir, 'project.db');
 
     let res = run(['issue-create', '--title', 'Agent issue', '--creator', 'ares', '--body', 'body'], dbPath);
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /Unknown option '--creator'|--actor/i);
+
+    res = run(['issue-create', '--title', 'Agent issue', '--actor', 'ares', '--body', 'body'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
 
+    res = run(['issue-edit', '1', '--editor', 'ares', '--title', 'Updated title'], dbPath);
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /Unknown option '--editor'|--actor/i);
+
     res = run(['issue-close', '1', '--closer', 'ares'], dbPath);
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /Unknown option '--closer'|--actor/i);
+  });
+
+  it('allows the same agent who opened the issue to close it', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-close-'));
+    const dbPath = path.join(dir, 'project.db');
+
+    let res = run(['issue-create', '--title', 'Agent issue', '--actor', 'ares', '--body', 'body'], dbPath);
+    assert.equal(res.status, 0, res.stderr || res.stdout);
+
+    res = run(['issue-close', '1', '--actor', 'ares'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
     assert.match(res.stdout, /Closed issue #1/);
   });
@@ -53,10 +73,10 @@ describe('tbc-db issue action initiator policy', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-close-'));
     const dbPath = path.join(dir, 'project.db');
 
-    let res = run(['issue-create', '--title', 'Worker issue', '--creator', 'leo', '--body', 'body'], dbPath);
+    let res = run(['issue-create', '--title', 'Worker issue', '--actor', 'leo', '--body', 'body'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
 
-    res = run(['issue-close', '1', '--closer', 'athena'], dbPath);
+    res = run(['issue-close', '1', '--actor', 'athena'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
     assert.match(res.stdout, /Closed issue #1/);
   });
@@ -65,10 +85,10 @@ describe('tbc-db issue action initiator policy', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-close-'));
     const dbPath = path.join(dir, 'project.db');
 
-    let res = run(['issue-create', '--title', 'Agent issue', '--creator', 'leo', '--body', 'body'], dbPath);
+    let res = run(['issue-create', '--title', 'Agent issue', '--actor', 'leo', '--body', 'body'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
 
-    res = run(['issue-close', '1', '--closer', 'maya'], dbPath);
+    res = run(['issue-close', '1', '--actor', 'maya'], dbPath);
     assert.notEqual(res.status, 0);
     assert.match(res.stderr, /can only be closed by leo or athena/i);
   });
@@ -77,14 +97,14 @@ describe('tbc-db issue action initiator policy', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-close-'));
     const dbPath = path.join(dir, 'project.db');
 
-    let res = run(['issue-create', '--title', 'Manager issue', '--creator', 'ares', '--body', 'body'], dbPath);
+    let res = run(['issue-create', '--title', 'Manager issue', '--actor', 'ares', '--body', 'body'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
 
-    res = run(['issue-close', '1', '--closer', 'apollo'], dbPath);
+    res = run(['issue-close', '1', '--actor', 'apollo'], dbPath);
     assert.notEqual(res.status, 0);
     assert.match(res.stderr, /can only be closed by ares or athena/i);
 
-    res = run(['issue-close', '1', '--closer', 'athena'], dbPath);
+    res = run(['issue-close', '1', '--actor', 'athena'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
     assert.match(res.stdout, /Closed issue #1/);
   });
@@ -93,14 +113,14 @@ describe('tbc-db issue action initiator policy', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tbc-db-close-'));
     const dbPath = path.join(dir, 'project.db');
 
-    let res = run(['issue-create', '--title', 'Human issue', '--creator', 'human', '--body', 'body'], dbPath);
+    let res = run(['issue-create', '--title', 'Human issue', '--actor', 'human', '--body', 'body'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
 
-    res = run(['issue-close', '1', '--closer', 'ares'], dbPath);
+    res = run(['issue-close', '1', '--actor', 'ares'], dbPath);
     assert.notEqual(res.status, 0);
     assert.match(res.stderr, /can only be closed by chat or human/i);
 
-    res = run(['issue-close', '1', '--closer', 'chat'], dbPath);
+    res = run(['issue-close', '1', '--actor', 'chat'], dbPath);
     assert.equal(res.status, 0, res.stderr || res.stdout);
     assert.match(res.stdout, /Closed issue #1/);
   });

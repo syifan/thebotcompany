@@ -303,14 +303,12 @@ const commands = {
         actor: { type: 'string' },
         title: { type: 'string', short: 't' },
         body: { type: 'string', short: 'b', default: '' },
-        actor: { type: 'string' },
-        creator: { type: 'string', short: 'c' },
         assignee: { type: 'string', short: 'a' },
         labels: { type: 'string', short: 'l', default: '' },
       },
-      strict: false,
+      strict: true,
     });
-    const actor = values.actor || values.creator;
+    const actor = values.actor;
     if (!values.title || !actor) {
       console.error('Usage: tbc-db issue-create --title "..." --actor name [--body "..."] [--assignee name] [--labels "label1,label2"]');
       process.exit(1);
@@ -329,11 +327,10 @@ const commands = {
         status: { type: 'string', short: 's', default: 'open' },
         assignee: { type: 'string', short: 'a' },
         actor: { type: 'string' },
-        creator: { type: 'string', short: 'c' },
         label: { type: 'string', short: 'l' },
         json: { type: 'boolean', default: false },
       },
-      strict: false,
+      strict: true,
     });
     let query = 'SELECT * FROM issues WHERE 1=1';
     const params = [];
@@ -343,8 +340,8 @@ const commands = {
     if (values.assignee) {
       query += ' AND assignee = ?'; params.push(values.assignee);
     }
-    if (values.creator) {
-      query += ' AND creator = ?'; params.push(values.creator);
+    if (values.actor) {
+      query += ' AND creator = ?'; params.push(values.actor);
     }
     if (values.label) {
       query += ' AND labels LIKE ?'; params.push(`%${values.label}%`);
@@ -401,18 +398,16 @@ const commands = {
       args: args.slice(1),
       options: {
         actor: { type: 'string' },
-        closer: { type: 'string', short: 'c' },
       },
-      strict: false,
+      strict: true,
     });
-    const actor = values.actor || values.closer;
+    const actor = values.actor;
     if (!id || !actor) { console.error('Usage: tbc-db issue-close <id> --actor name'); process.exit(1); }
     const issue = db.prepare('SELECT id, creator, status FROM issues WHERE id = ?').get(id);
     if (!issue) { console.error(`Issue #${id} not found`); process.exit(1); }
     if (issue.status === 'closed') { console.log(`Issue #${id} already closed`); return; }
-    const closer = actor;
     const { allowed, special } = resolveAllowedIssueCloser(issue.creator);
-    if (!allowed.has(closer)) {
+    if (!allowed.has(actor)) {
       if (special === 'chat-human') {
         console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by chat or human`);
       } else {
@@ -421,7 +416,7 @@ const commands = {
       process.exit(1);
     }
     const now = new Date().toISOString();
-    db.prepare("UPDATE issues SET status = 'closed', closed_at = ?, closed_by = ?, updated_at = ?, updated_by = ? WHERE id = ?").run(now, closer, now, closer, id);
+    db.prepare("UPDATE issues SET status = 'closed', closed_at = ?, closed_by = ?, updated_at = ?, updated_by = ? WHERE id = ?").run(now, actor, now, actor, id);
     console.log(`Closed issue #${id}`);
   },
 
@@ -433,17 +428,15 @@ const commands = {
       args: args.slice(1),
       options: {
         actor: { type: 'string' },
-        editor: { type: 'string', short: 'e' },
         title: { type: 'string', short: 't' },
         body: { type: 'string', short: 'b' },
         assignee: { type: 'string', short: 'a' },
         labels: { type: 'string', short: 'l' },
       },
-      strict: false,
+      strict: true,
     });
-    const actor = values.actor || values.editor;
+    const actor = values.actor;
     if (!actor) { console.error('Usage: tbc-db issue-edit <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]'); process.exit(1); }
-    if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
     const sets = [];
     const params = [];
     if (values.title) { sets.push('title = ?'); params.push(values.title); }
@@ -1049,11 +1042,11 @@ const commands = {
     console.log(`tbc-db — Agent communication database
 
 Issues:
-  issue-create  --title "..." --creator name [--body "..."] [--assignee name] [--labels "..."]
-  issue-list    [--status open|closed|all] [--assignee name] [--creator name] [--label name] [--json]
+  issue-create  --title "..." --actor name [--body "..."] [--assignee name] [--labels "..."]
+  issue-list    [--status open|closed|all] [--assignee name] [--actor name] [--label name] [--json]
   issue-view    <id>
-  issue-edit    <id> --editor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]
-  issue-close   <id> --closer name
+  issue-edit    <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]
+  issue-close   <id> --actor name
 
 Comments:
   comment       --issue <id> --actor name --body "..."
