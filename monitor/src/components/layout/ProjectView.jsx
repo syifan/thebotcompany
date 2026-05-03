@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import SegmentedControl from '@/components/ui/segmented-control'
 import StatusPill from '@/components/ui/status-pill'
-import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope } from 'lucide-react'
+import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope, FileText } from 'lucide-react'
 import { PanelSlot, closeAllPanels } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
@@ -20,6 +20,7 @@ import ChatCard from '@/components/project/ChatCard'
 import SettingsPanel from '@/components/panels/SettingsPanel'
 import NotificationPanel from '@/components/panels/NotificationPanel'
 import BootstrapPanel from '@/components/panels/BootstrapPanel'
+import SpecPanel from '@/components/panels/SpecPanel'
 import ReportsPanel from '@/components/panels/ReportsPanel'
 import ChatPanel from '@/components/panels/ChatPanel'
 import AgentDetailPanel from '@/components/panels/AgentDetailPanel'
@@ -152,13 +153,14 @@ export default function ProjectView({
   })
   const [createIssueModal, setCreateIssueModal] = useState({ open: false, title: '', body: '', receiver: '', creating: false, error: null, focusedField: 'title' })
   const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl'
-  const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+  const [bootstrapModal, setBootstrapModal] = useState({ open: false, loading: false, preview: null, error: null, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
   const [budgetInfoModal, setBudgetInfoModal] = useState(false)
   const [intervalInfoModal, setIntervalInfoModal] = useState(false)
   const [timeoutInfoModal, setTimeoutInfoModal] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(initialPathPanel.panel === 'settings')
   const [showApiKeyHelp, setShowApiKeyHelp] = useState(false)
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(initialPathPanel.panel === 'project-settings')
+  const [specPanelOpen, setSpecPanelOpen] = useState(initialPathPanel.panel === 'spec')
   const [chatPanelOpen, setChatPanelOpen] = useState(initialPathPanel.panel === 'chat')
   const [chatSession, setChatSession] = useState(initialPathPanel.panel === 'chat' ? (initialPathPanel.id === 'new' || !initialPathPanel.id ? { id: null, title: 'New Chat', _temp: true } : { id: initialPathPanel.id }) : null)
   const [chatRefreshToken, setChatRefreshToken] = useState(0)
@@ -166,6 +168,7 @@ export default function ProjectView({
   const pathPanel = parseProjectPanelPath(currentPath, selectedProject)
   const isSettingsPanelOpen = settingsOpen || pathPanel.panel === 'settings'
   const isProjectSettingsPanelOpen = projectSettingsOpen || pathPanel.panel === 'project-settings'
+  const isSpecPanelOpen = specPanelOpen || pathPanel.panel === 'spec'
   const isReportsPanelOpen = reportsPanelOpen || pathPanel.panel === 'reports'
   const isChatPanelOpen = chatPanelOpen || pathPanel.panel === 'chat'
   const isIssuePanelOpen = issueModal.open || pathPanel.panel === 'issue'
@@ -285,6 +288,7 @@ export default function ProjectView({
     abortPrRequest()
     setSettingsOpen(false)
     setProjectSettingsOpen(false)
+    setSpecPanelOpen(false)
     setBootstrapModal(prev => ({ ...prev, open: false }))
     setReportsPanelOpen(false)
     setChatPanelOpen(false)
@@ -312,6 +316,16 @@ export default function ProjectView({
   const closeProjectSettingsPanel = useCallback(() => {
     setProjectSettingsOpen(false)
     clearPanelPathIfActive('project-settings')
+  }, [clearPanelPathIfActive])
+
+  const openSpecPanel = useCallback(() => {
+    setSpecPanelOpen(true)
+    navigateProjectPath(['spec'])
+  }, [navigateProjectPath])
+
+  const closeSpecPanel = useCallback(() => {
+    setSpecPanelOpen(false)
+    clearPanelPathIfActive('spec')
   }, [clearPanelPathIfActive])
 
   const openReportsPanel = useCallback((reportId = null) => {
@@ -365,7 +379,7 @@ export default function ProjectView({
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
-  const projectApi = (path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null
+  const projectApi = useCallback((path) => selectedProject ? `/api/projects/${selectedProject.id}${path}` : null, [selectedProject?.id])
 
   // Fetch project data
   const fetchProjectData = useCallback(async (initial = false) => {
@@ -728,13 +742,13 @@ export default function ProjectView({
   const openBootstrapModal = async () => {
     if (!selectedProject) return
     navigateProjectPath(['bootstrap'])
-    setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+    setBootstrapModal({ open: true, loading: true, preview: null, error: null, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
     try {
       const res = await authFetch(projectApi('/bootstrap'))
       const data = await res.json()
-      setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false, removeRoadmap: !!data.hasRoadmap, specMode: 'keep', specContent: data.specContent || '', whatToBuild: '', successCriteria: '' })
+      setBootstrapModal({ open: true, loading: false, preview: data, error: null, executing: false, specMode: 'keep', specContent: data.specContent || '', whatToBuild: '', successCriteria: '' })
     } catch (err) {
-      setBootstrapModal({ open: true, loading: false, preview: null, error: err.message, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+      setBootstrapModal({ open: true, loading: false, preview: null, error: err.message, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
     }
   }
 
@@ -743,7 +757,6 @@ export default function ProjectView({
     setBootstrapModal(prev => ({ ...prev, executing: true, error: null }))
     try {
       const body = {
-        removeRoadmap: bootstrapModal.removeRoadmap,
         spec: {
           mode: bootstrapModal.specMode,
           content: bootstrapModal.specContent,
@@ -758,7 +771,7 @@ export default function ProjectView({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false, removeRoadmap: true, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
+      setBootstrapModal({ open: false, loading: false, preview: null, error: null, executing: false, specMode: 'keep', specContent: '', whatToBuild: '', successCriteria: '' })
       navigateProjectPath()
       await fetchGlobalStatus()
       await fetchProjectData()
@@ -1065,9 +1078,46 @@ export default function ProjectView({
             
             <div className="flex items-center gap-1.5 pl-8 sm:pl-0 shrink-0">
               <button
+                onClick={openSpecPanel}
+                aria-label="Open project spec editor"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                title="Project Spec — edit the human-owned spec.md"
+              >
+                <FileText className="w-4 h-4" />
+              </button>
+              <button
+                onClick={openProjectSettingsPanel}
+                aria-label="Open project settings"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                title="Project Settings — model, budget, interval, and controls"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              {repoUrl && (
+                <a
+                  href={repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open repository on GitHub"
+                  className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center"
+                  title="GitHub Repository — open the source repo"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
+              )}
+              <a
+                href={projectApi('/download')}
+                aria-label="Download project data"
+                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center"
+                title="Download Project Data — export project DB, logs, responses, knowledge, and agent files"
+              >
+                <Save className="w-4 h-4" />
+              </a>
+              <button
                 onClick={() => setNotifCenter(true)}
+                aria-label="Open notifications"
                 className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors relative"
-                title="Notifications"
+                title="Notifications — project and system alerts"
               >
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
@@ -1078,32 +1128,28 @@ export default function ProjectView({
               </button>
               <button
                 onClick={() => isWriteMode ? handleLogout() : setLoginModal(true)}
+                aria-label={isWriteMode ? 'Lock write mode' : 'Unlock write mode'}
                 className={`p-1.5 rounded transition-colors ${isWriteMode ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600'}`}
-                title={isWriteMode ? 'Write mode (click to lock)' : 'Read-only (click to unlock)'}
+                title={isWriteMode ? 'Write Mode — click to return to read-only mode' : 'Read-only Mode — click to unlock write actions'}
               >
                 {isWriteMode ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               </button>
-              <button
-                onClick={openProjectSettingsPanel}
-                className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
-                title="Project Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              <a href={projectApi('/download')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Download project data as ZIP">
-                <Save className="w-4 h-4" />
-              </a>
-              {repoUrl && (
-                <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center" title="Open on GitHub">
-                  <Github className="w-4 h-4" />
-                </a>
-              )}
               {isWriteMode && (selectedProject.paused ? (
-                <button onClick={() => controlAction('resume')} className="p-1.5 rounded bg-green-500 hover:bg-green-600 text-white transition-colors" title="Resume project">
+                <button
+                  onClick={() => controlAction('resume')}
+                  aria-label="Resume project"
+                  className="p-1.5 rounded bg-green-500 hover:bg-green-600 text-white transition-colors"
+                  title="Resume Project — continue the orchestrator loop"
+                >
                   <Play className="w-4 h-4" />
                 </button>
               ) : (
-                <button onClick={() => controlAction('pause')} className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors" title="Pause project">
+                <button
+                  onClick={() => controlAction('pause')}
+                  aria-label="Pause project"
+                  className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors"
+                  title="Pause Project — stop scheduling after the current safe point"
+                >
                   <Pause className="w-4 h-4" />
                 </button>
               ))}
@@ -1111,15 +1157,23 @@ export default function ProjectView({
                 <button
                   onClick={() => setDoctorConfirmOpen(true)}
                   disabled={!selectedProject.paused || selectedProject.currentAgent || doctorRunning}
+                  aria-label="Run doctor repair"
                   className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 transition-colors disabled:opacity-50"
-                  title={selectedProject.paused && !selectedProject.currentAgent ? 'Run Doctor' : 'Doctor requires project to be fully paused'}
+                  title={selectedProject.paused && !selectedProject.currentAgent ? 'Doctor — inspect and repair project structure' : 'Doctor unavailable — pause project and wait for current agent to finish'}
                 >
                   <Stethoscope className="w-4 h-4" />
                 </button>
               )}
-              {isWriteMode && <button onClick={openBootstrapModal} className="p-1.5 rounded bg-red-500 hover:bg-red-600 text-white transition-colors" title="Bootstrap project">
-                <RotateCcw className="w-4 h-4" />
-              </button>}
+              {isWriteMode && (
+                <button
+                  onClick={openBootstrapModal}
+                  aria-label="Bootstrap project workspace"
+                  className="p-1.5 rounded bg-red-500 hover:bg-red-600 text-white transition-colors"
+                  title="Bootstrap Workspace — destructive reset of project operational state"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
           
@@ -1373,6 +1427,7 @@ export default function ProjectView({
       />
       <AgentSettingsModal agentSettingsModal={agentSettingsModal} setAgentSettingsModal={setAgentSettingsModal} saveAgentSettings={saveAgentSettings} />
       <BootstrapPanel bootstrapModal={{ ...bootstrapModal, open: isBootstrapPanelOpen }} setBootstrapModal={setBootstrapModalWithUrl} executeBootstrap={executeBootstrap} />
+      <SpecPanel open={isSpecPanelOpen} onClose={closeSpecPanel} projectApi={projectApi} authFetch={authFetch} showToast={showToast} />
       <BudgetInfoModal open={budgetInfoModal} onClose={() => setBudgetInfoModal(false)} />
       <IntervalInfoModal open={intervalInfoModal} onClose={() => setIntervalInfoModal(false)} />
       <TimeoutInfoModal open={timeoutInfoModal} onClose={() => setTimeoutInfoModal(false)} />

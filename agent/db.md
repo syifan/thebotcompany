@@ -10,7 +10,7 @@ All commands are available as `tbc-db <command>` — no setup needed, just run t
 
 ```bash
 # Create an issue
-tbc-db issue-create --title "Fix memory leak" --creator ares --assignee leo --body "Details here"
+tbc-db issue-create --title "Fix memory leak" --actor ares --assignee leo --body "Details here"
 
 # List open issues
 tbc-db issue-list
@@ -42,6 +42,27 @@ tbc-db comment --issue 42 --author leo --body "Fixed in commit abc123"
 tbc-db comments 42
 ```
 
+### Milestones
+
+Milestones are the DB-backed roadmap tree. Use them for planning and continuity. A milestone record does **not** become the current executable handoff by itself; the orchestrator only hands work to Ares when Athena emits the `MILESTONE` directive.
+
+```bash
+# Create roadmap milestones
+# Use phase=planned for future roadmap nodes; status remains active until completed/failed.
+tbc-db milestone-create --actor athena --id M1 --title "Authentication foundation" --description "Build the core auth model" --phase planned
+
+tbc-db milestone-create --actor athena --title "Login UI" --description "User-facing login flow" --parent M1 --phase planned --cycles 8
+
+# List/view milestones
+tbc-db milestone-list
+tbc-db milestone-list --parent M1
+tbc-db milestone-view M1
+
+# Edit or delete milestones
+tbc-db milestone-edit M1 --actor athena --title "Auth foundation" --description "Updated roadmap goal"
+tbc-db milestone-delete M1.1 --actor athena
+```
+
 ### TBC PRs
 
 ```bash
@@ -67,7 +88,8 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 
 ## Rules
 
-- **Always use your agent name** as `--creator` or `--author`
+- **Always use your agent name** as `--actor` or `--author`
+- **Only Athena may mutate milestones** — everyone can read `milestone-list`/`milestone-view`, but milestone create/edit/delete requires `--actor athena`
 - **One issue per task** — keep issues focused and small
 - **Close issues when done** — don't leave stale issues open
 - **Comment on progress** — leave notes so other agents (and your future self) know what happened
@@ -80,21 +102,21 @@ tbc-db query "SELECT * FROM issues WHERE status = 'open' ORDER BY created_at DES
 | `issues` | id, title, body, status (open/closed), creator, assignee, labels, created_at |
 | `comments` | id, issue_id, author, body, created_at |
 | `agents` | id, name, role, reports_to, model, disabled |
-| `milestones` | id, description, cycles_budget, cycles_used, phase, status |
+| `milestones` | id, milestone_id, title, description, parent_milestone_id, cycles_budget, cycles_used, phase, status |
 | `tbc_prs` | id, title, summary, base_branch, head_branch, status, issue_ids, test_status |
 
 ## Visibility
 
 Your access to the tracker may be restricted by your manager:
-- **Full**: You can access everything
-- **Focused**: You can only read/write specific allowed issues assigned to you, plus create new issues
-- **Blind**: You cannot read the tracker, but you can still create new issues to raise blockers or findings
+- **Full**: You can read and write everything allowed by command policy
+- **Focused**: Write-only mode. You cannot browse the tracker, but you may create issues/PRs and comment on specifically referenced issues/PRs.
+- **Blind**: Write-only mode. You cannot read the tracker, but you may create issues/PRs and comments to raise blockers or findings.
 
-If you get "Access denied", respect the restriction and work with what you have.
+If you get "Access denied", respect the restriction and write only the update you need to leave.
 
 ## PR Workflow
 
 - For agent-delivered work, create a **TBC PR** with `tbc-db pr-create` instead of `gh pr create`
 - Update the record as work progresses with `tbc-db pr-edit`
 - Use `pr-list` and `pr-view` to inspect active TBC PRs
-- GitHub PRs are optional mirrors, not the default workflow
+- **Never use GitHub PRs** for agent workflow. Use TBC PRs only.

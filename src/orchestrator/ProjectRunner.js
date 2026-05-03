@@ -177,6 +177,10 @@ class ProjectRunner {
     return path.join(this.projectDir, 'knowledge');
   }
 
+  get specPath() {
+    return path.join(this.projectDir, 'spec.md');
+  }
+
   get workerSkillsDir() {
     return path.join(this.skillsDir, 'workers');
   }

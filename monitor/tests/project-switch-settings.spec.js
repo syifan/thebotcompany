@@ -35,7 +35,7 @@ test.describe('Settings panel on project switch', () => {
     await page.waitForLoadState('networkidle')
 
     // Click the Project Settings button (gear icon)
-    const settingsButton = page.locator('button[title="Project Settings"]')
+    const settingsButton = page.getByLabel('Open project settings')
     await settingsButton.waitFor({ timeout: 5000 })
     await settingsButton.click()
 

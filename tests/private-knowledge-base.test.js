@@ -13,7 +13,7 @@ function read(file) {
   return fs.readFileSync(file, 'utf-8');
 }
 
-describe('private knowledge base for spec, roadmap, and internal analysis docs', () => {
+describe('project spec and private knowledge base docs', () => {
   it('defines a shared knowledge-base path outside the repo root', () => {
     const src = read(serverPath);
     assert.match(src, /get knowledgeDir\(\)/, 'Expected a knowledgeDir getter in ProjectRunner.js');
@@ -21,16 +21,14 @@ describe('private knowledge base for spec, roadmap, and internal analysis docs',
       'Expected knowledge base to live under project knowledge/, not the repo root');
   });
 
-  it('bootstrap preview should read spec/roadmap from knowledge base, not repo root', () => {
+  it('bootstrap preview should read human-owned project spec, not repo-root or knowledge spec', () => {
     const src = `${read(serverPath)}\n${read(lifecyclePath)}`;
     assert.doesNotMatch(src, /path\.join\((?:this|runner)\.path, 'spec\.md'\)/,
       'bootstrap preview should not read spec.md from the repo root');
-    assert.doesNotMatch(src, /path\.join\((?:this|runner)\.path, 'roadmap\.md'\)/,
-      'bootstrap preview should not read roadmap.md from the repo root');
-    assert.match(src, /path\.join\((?:this|runner)\.knowledgeDir, 'spec\.md'\)/,
-      'bootstrap preview should read spec.md from private knowledge dir');
-    assert.match(src, /path\.join\((?:this|runner)\.knowledgeDir, 'roadmap\.md'\)/,
-      'bootstrap preview should read roadmap.md from private knowledge dir');
+    assert.doesNotMatch(src, /path\.join\((?:this|runner)\.knowledgeDir, 'spec\.md'\)/,
+      'bootstrap preview should not read spec.md from knowledge dir');
+    assert.match(src, /(?:this|runner)\.specPath|path\.join\((?:this|runner)\.projectDir, 'spec\.md'\)/,
+      'bootstrap preview should read project-root spec.md');
   });
 
   it('startup/bootstrap should create the private knowledge directory and subfolders for internal docs', () => {
@@ -43,9 +41,11 @@ describe('private knowledge base for spec, roadmap, and internal analysis docs',
       'Expected a private decisions subdirectory under knowledge/');
   });
 
-  it('repo-root spec/roadmap and internal analysis docs should no longer be canonical private artifacts', () => {
+  it('repo-root spec and internal analysis docs should no longer be canonical private artifacts', () => {
     const src = read(serverPath);
-    assert.doesNotMatch(src, /Read spec\.md and check roadmap\.md from project repo/,
+    assert.doesNotMatch(src, /Read spec\.md from project repo/,
       'ProjectRunner.js comments should not describe repo-root planning files as canonical');
+    assert.match(src, /get specPath\(\)/,
+      'ProjectRunner should expose project-root specPath');
   });
 });

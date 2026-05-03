@@ -15,11 +15,13 @@ export function getAgentFilesystemPolicy(runner, agent, visibility = null) {
     const visMode = visibility?.mode || 'full';
     const repoDir = runner.path;
     const knowledgeDir = runner.knowledgeDir;
+    const specPath = runner.specPath || path.join(runner.projectDir, 'spec.md');
     const ownWorkspaceDir = path.join(runner.agentsDir, agent.name);
     const read = [repoDir];
     const write = [repoDir];
     if (visMode !== 'blind') {
       read.push(knowledgeDir);
+      read.push(specPath);
       read.push(ownWorkspaceDir);
       write.push(knowledgeDir);
       write.push(ownWorkspaceDir);

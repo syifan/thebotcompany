@@ -51,7 +51,7 @@ describe('issue visibility policy', () => {
     const viewResult = await executeTool('Bash', { command: 'tbc-db issue-view 12' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.blind);
     assert.match(viewResult, /access denied|blind mode|issue tracker|pr board/i);
 
-    const createResult = await executeTool('Bash', { command: 'tbc-db issue-create --title "Need help" --creator leo --body "blocked"' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.blind);
+    const createResult = await executeTool('Bash', { command: 'tbc-db issue-create --title "Need help" --actor leo --body "blocked"' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.blind);
     assert.doesNotMatch(createResult, /access denied|blind mode|issue tracker|pr board/i);
 
     const prCreate = await executeTool('Bash', { command: 'tbc-db pr-create --title "Draft" --head leo/draft --actor leo' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.blind);
@@ -87,7 +87,7 @@ describe('issue visibility policy', () => {
   it('focused allows issue/pr creation and issue/pr comments only', async () => {
     const p = mkProject();
 
-    const createResult = await executeTool('Bash', { command: 'tbc-db issue-create --title "New blocker" --creator leo --body "blocked"' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
+    const createResult = await executeTool('Bash', { command: 'tbc-db issue-create --title "New blocker" --actor leo --body "blocked"' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);
     assert.doesNotMatch(createResult, /access denied|focused mode|issue tracker|pr board/i);
 
     const prCreate = await executeTool('Bash', { command: 'tbc-db pr-create --title "Draft" --head leo/draft --actor leo' }, p.repo, 0, { TBC_DB: '/tmp/project.db' }, null, null, p.allowedPaths, p.issuePolicies.focused);

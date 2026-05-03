@@ -7,8 +7,8 @@ Complete the project with high quality and minimum human involvement.
 ## Your Task
 
 1. **Do the work assigned to you.** Follow the responsibilities in your own skill file and prompt.
-2. **Stay engaged on issues you are involved in.** If you check the status, comment. If you make progress, comment. If you have questions, comment.
-3. **Raise new issues when needed.** Always perform a blast-radius check when changing code. If you find or suspect a problem, create an issue.
+2. **Stay engaged on issues you are involved in.** Comment on the issues if you have valuable opinion or progress update.
+3. **Raise new issues when needed.** Always perform a blast-radius check when you examine code. If you find or suspect a problem, create an issue.
 
 ## Code Quality
 
@@ -39,13 +39,37 @@ Chat and doctor do not follow these rules.
 - Blind agents cannot see shared knowledge.
 - Blind agents cannot read any notes, including their own.
 
+## Output Format
+
+Keep final responses concise and structured in three parts:
+
+1. **Context received:** Briefly list the relevant skills, instructions, assigned issue/PR/milestone IDs, and injected issue/PR/comment context you used.
+2. **Actions taken:** State what you did, what changed, and the evidence/tests/results. Be concrete and brief.
+3. **Manager directive blocks:** If you are a manager and need the orchestrator to act, put the required directive block last (`SCHEDULE`, `MILESTONE`, `CLAIM_COMPLETE`, `VERIFY_PASS`, `VERIFY_FAIL`, `PROJECT_COMPLETE`, etc.). Do not add extra text inside directive blocks beyond the required format.
+
 ## Communication
 
-**To send a message to another agent, create an issue assigned to them.** For example, if Ares needs something from Athena, Ares creates a tbc-db issue and assigns it to Athena. This is the only way to communicate between agents.
+**To send a message to another agent, create an issue assigned to them or comment on an existing issue with that topic.** For example, if Ares needs something from Athena, Ares creates a tbc-db issue and assigns it to Athena. This is the only way to communicate between agents.
 
 ## Your Workspace
 
 Each agent has a personal notes area at `{project_dir}/agents/{your_name}/`. Create it if it doesn't exist.
+
+## Shared Knowledge
+
+Write durable shared findings to `knowledge/` when other agents should be able to reuse them.
+
+Examples of good shared-knowledge content:
+- root-cause analysis
+- experiment summaries
+- benchmark/result interpretation
+- acceptance evidence that another team will need to verify
+- decisions and tradeoffs that should remain visible across cycles
+
+
+Use your private `agents/{your_name}/note.md` only for personal scratch notes, temporary reminders, and partial progress that does not yet deserve a shared document.
+
+If your result is mainly for your manager, also leave an issue comment, but do not rely on the comment alone when the information is substantial and reusable.
 
 ## Tips
 

@@ -58,28 +58,9 @@ export default function BootstrapPanel({
               </ul>
             </div>
 
-            {/* Remove knowledge/roadmap.md — toggle switch */}
-            <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded">
-              <div>
-                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Remove knowledge/roadmap.md</p>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                  {bootstrapModal.preview.hasRoadmap ? 'Delete private knowledge file' : 'No knowledge/roadmap.md found, will be skipped'}
-                </p>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={bootstrapModal.removeRoadmap}
-                onClick={() => setBootstrapModal(prev => ({ ...prev, removeRoadmap: !prev.removeRoadmap }))}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${bootstrapModal.removeRoadmap ? 'bg-blue-500' : 'bg-neutral-300 dark:bg-neutral-600'}`}
-              >
-                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${bootstrapModal.removeRoadmap ? 'translate-x-5' : 'translate-x-0'}`} />
-              </button>
-            </div>
-
-            {/* knowledge/spec.md — segmented control */}
+            {/* spec.md — segmented control */}
             <div className="p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded space-y-3">
-              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">knowledge/spec.md</p>
+              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">spec.md</p>
               <div className="flex rounded-lg bg-neutral-200 dark:bg-neutral-700 p-0.5">
                 {[{ value: 'keep', label: 'Keep' }, { value: 'edit', label: 'Edit' }, { value: 'new', label: 'Rewrite' }].map(opt => (
                   <button

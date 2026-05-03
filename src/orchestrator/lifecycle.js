@@ -51,12 +51,11 @@ export function bootstrapPreview(runner, deps = {}) {
     if (projectDataExists) {
       projectDataContents = fs.readdirSync(runner.projectDir).filter(name => !['repo', 'knowledge', 'skills', 'config.yaml'].includes(name));
     }
-    // Read spec.md and check roadmap.md from private knowledge base
+    // Read human-owned spec.md from the project root (outside repo and knowledge/).
     let specContent = null;
-    const specPath = path.join(runner.knowledgeDir, 'spec.md');
+    const specPath = runner.specPath || path.join(runner.projectDir, 'spec.md');
     try { specContent = fs.readFileSync(specPath, 'utf-8'); } catch {}
-    const hasRoadmap = fs.existsSync(path.join(runner.knowledgeDir, 'roadmap.md'));
-    return { available: true, projectDataEmpty: projectDataContents.length === 0, repo: runner.repo, specContent, hasRoadmap };
+    return { available: true, projectDataEmpty: projectDataContents.length === 0, repo: runner.repo, specContent };
   }
 
 export function bootstrap(runner, deps = {}, options = {}) {
@@ -111,22 +110,9 @@ export function bootstrap(runner, deps = {}, options = {}) {
     });
     deps.log(`Reset cycle count, project paused`, runner.id);
 
-    // 3. Remove roadmap.md from private knowledge base if requested
-    if (options.removeRoadmap) {
-      const roadmapPath = path.join(runner.knowledgeDir, 'roadmap.md');
-      if (fs.existsSync(roadmapPath)) {
-        try {
-          fs.unlinkSync(roadmapPath);
-          deps.log(`Removed private roadmap.md`, runner.id);
-        } catch (e) {
-          deps.log(`Warning: failed to remove private roadmap.md: ${e.message}`, runner.id);
-        }
-      }
-    }
-
-    // 4. Update private spec.md if requested
+    // 3. Update human-owned project spec.md if requested
     if (options.spec && options.spec.mode !== 'keep') {
-      const specPath = path.join(runner.knowledgeDir, 'spec.md');
+      const specPath = runner.specPath || path.join(runner.projectDir, 'spec.md');
       let newContent = '';
       if (options.spec.mode === 'edit') {
         newContent = options.spec.content || '';
@@ -138,7 +124,7 @@ export function bootstrap(runner, deps = {}, options = {}) {
       if (newContent) {
         try {
           fs.writeFileSync(specPath, newContent);
-          deps.log(`Updated private knowledge/spec.md`, runner.id);
+          deps.log(`Updated project spec.md`, runner.id);
         } catch (e) {
           deps.log(`Warning: failed to update spec.md: ${e.message}`, runner.id);
         }

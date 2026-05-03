@@ -72,6 +72,19 @@ ${task || ''}`;
   return result;
 }
 
+async function validateAthenaMilestoneDirective(runner, resultText) {
+  const match = String(resultText || '').match(/<!-- MILESTONE -->\s*([\s\S]*?)\s*<!-- \/MILESTONE -->/);
+  if (!match) return null;
+  const payload = match[1].trim();
+  if (!payload || payload.startsWith('{')) return null;
+  const milestoneId = payload.replace(/^['"]|['"]$/g, '').trim();
+  const milestone = await runner.getMilestoneRecord(milestoneId);
+  if (milestone) return null;
+  return {
+    message: `MILESTONE directive references ${milestoneId}, but no DB milestone record with that id exists. Athena owns milestone planning: create or edit the milestone with tbc-db milestone-* --actor athena first, then output only its id.`,
+  };
+}
+
 export async function runRunnerLoop(runner, deps = {}) {
     const broadcastEvent = deps.broadcastEvent || (() => {});
     while (runner.running) {
@@ -123,14 +136,8 @@ export async function runRunnerLoop(runner, deps = {}) {
       if (runner.phase === 'athena') {
         const athena = managers.find(m => m.name === 'athena');
         if (athena) {
-          // Build situation context for Athena
-          if (!runner.pendingMilestoneId) {
-            const parentMilestoneId = runner.currentMilestoneId || null;
-            runner.pendingMilestoneId = await runner.allocateNextMilestoneId(parentMilestoneId);
-            runner.saveState();
-          }
-          const reservedBranchPrefix = runner.makeMilestoneBranchPrefix(runner.pendingMilestoneId);
-
+          // Build situation context for Athena. Athena owns milestone planning; the
+          // orchestrator only validates and executes the DB milestone id Athena emits.
           let situation = '';
           if (runner.examinationFeedback) {
             situation = `> **Situation: Project Completion Rejected by Themis**\n> ${runner.examinationFeedback}\n\n`;
@@ -143,13 +150,17 @@ export async function runRunnerLoop(runner, deps = {}) {
           } else {
             situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles without completing the milestone.\n> Previous milestone: ${runner.currentMilestoneId || 'unknown'}\n> Current branch: ${runner.currentMilestoneBranch || 'not set'}\n\n`;
           }
-          situation += `> **Assigned milestone ID:** ${runner.pendingMilestoneId}\n> **Reserved branch prefix:** ${reservedBranchPrefix}\n`;
-          if (runner.currentMilestoneId) {
-            situation += `> **Optional reset:** If the current subtree is wrong, you may return a milestone with \"reset_to\": \"${runner.currentMilestoneId}\" or any ancestor milestone id (or \"root\") to abandon deeper branches and replan from that level.\n`;
-          }
-          situation += `\n`;
+          situation += `> **Milestone planning:** Select an existing DB milestone record or create/refine one yourself with tbc-db milestone-* --actor athena. Output only that existing milestone id in the MILESTONE directive when ready.\n\n`;
 
-          const result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
+          let result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
+          if (result?.success && result?.resultText) {
+            const problem = await validateAthenaMilestoneDirective(runner, result.resultText);
+            if (problem) {
+              deps.log(`Rejecting Athena milestone response: ${problem.message}`, runner.id);
+              const correction = `> **Orchestrator rejected your previous milestone directive before acting on it.**\n> Problem: ${problem.message}\n> Generate a corrected response now. If you need to hand off a milestone, first create or edit the DB milestone record, then output only its id.\n\n${situation}`;
+              result = await runner.runAgent(athena, config, null, correction, null);
+            }
+          }
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
@@ -164,23 +175,47 @@ export async function runRunnerLoop(runner, deps = {}) {
             const milestoneMatch = result.resultText.match(/<!-- MILESTONE -->\s*([\s\S]*?)\s*<!-- \/MILESTONE -->/);
             if (milestoneMatch) {
               try {
-                const milestone = JSON.parse(milestoneMatch[1]);
-                const milestoneTitle = milestone.title || milestone.description.slice(0, 80);
-                const resetTarget = runner.normalizeResetTargetMilestone(milestone.reset_to);
-                const resetTo = resetTarget ? resetTarget.milestoneId : (runner.currentMilestoneId || null);
-                const shouldReusePendingMilestoneId = !!runner.pendingMilestoneId && resetTo === (runner.currentMilestoneId || null);
-                const milestoneId = shouldReusePendingMilestoneId
-                  ? runner.pendingMilestoneId
-                  : await runner.allocateNextMilestoneId(resetTo);
-                if (milestone.reset_to && !resetTarget) {
-                  deps.log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, runner.id);
-                } else if (milestone.reset_to && resetTarget) {
-                  deps.log(`Athena reset planning anchor to ${resetTarget.label}`, runner.id);
+                const payload = milestoneMatch[1].trim();
+                let milestoneId;
+                let milestoneTitle;
+                let milestoneDescription;
+                let milestoneCyclesBudget;
+                let parentMilestoneId;
+
+                if (payload.startsWith('{')) {
+                  // Backward-compatible support for older Athena prompts.
+                  const milestone = JSON.parse(payload);
+                  milestoneTitle = milestone.title || milestone.description.slice(0, 80);
+                  milestoneDescription = milestone.description;
+                  milestoneCyclesBudget = milestone.cycles || 20;
+                  const resetTarget = runner.normalizeResetTargetMilestone(milestone.reset_to);
+                  const resetTo = resetTarget ? resetTarget.milestoneId : (runner.currentMilestoneId || null);
+                  const shouldReusePendingMilestoneId = !!runner.pendingMilestoneId && resetTo === (runner.currentMilestoneId || null);
+                  milestoneId = shouldReusePendingMilestoneId
+                    ? runner.pendingMilestoneId
+                    : await runner.allocateNextMilestoneId(resetTo);
+                  parentMilestoneId = runner.getParentMilestoneId(milestoneId);
+                  if (milestone.reset_to && !resetTarget) {
+                    deps.log(`Ignoring invalid reset_to target from Athena: ${milestone.reset_to}`, runner.id);
+                  } else if (milestone.reset_to && resetTarget) {
+                    deps.log(`Athena reset planning anchor to ${resetTarget.label}`, runner.id);
+                  }
+                } else {
+                  milestoneId = payload.replace(/^['"]|['"]$/g, '').trim();
+                  const milestone = await runner.getMilestoneRecord(milestoneId);
+                  if (!milestone) {
+                    throw new Error(`Milestone ${milestoneId} not found`);
+                  }
+                  milestoneTitle = milestone.title || milestone.milestone_id;
+                  milestoneDescription = milestone.description || milestoneTitle;
+                  milestoneCyclesBudget = milestone.cycles_budget || 20;
+                  parentMilestoneId = milestone.parent_milestone_id || runner.getParentMilestoneId(milestoneId);
                 }
+
                 runner.setState({
                   milestoneTitle,
-                  milestoneDescription: milestone.description,
-                  milestoneCyclesBudget: milestone.cycles || 20,
+                  milestoneDescription,
+                  milestoneCyclesBudget,
                   milestoneCyclesUsed: 0,
                   currentMilestoneId: milestoneId,
                   pendingMilestoneId: null,
@@ -197,10 +232,10 @@ export async function runRunnerLoop(runner, deps = {}) {
                 await runner.upsertMilestoneRecord({
                   milestoneId,
                   title: milestoneTitle,
-                  description: milestone.description,
-                  cyclesBudget: milestone.cycles || 20,
+                  description: milestoneDescription,
+                  cyclesBudget: milestoneCyclesBudget,
                   branchName: null,
-                  parentMilestoneId: milestoneId.includes('.') ? milestoneId.split('.').slice(0, -1).join('.') : null,
+                  parentMilestoneId,
                   phase: 'implementation',
                   status: 'active',
                 });
@@ -413,8 +448,8 @@ export async function runRunnerLoop(runner, deps = {}) {
         if (apollo) {
           const isRollupVerification = !runner.currentEpochPrId;
           const apolloContext = isRollupVerification
-            ? `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Rollup verification target:** ${runner.currentMilestoneId || 'unknown'}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
-            : `> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
+            ? `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}\n> **Milestone to verify:** ${runner.milestoneDescription}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
+            : `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}\n> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
 
           const result = await runManagerWithDirectiveRetry(runner, deps, apollo, config, apolloContext);
           cycleTotal++;

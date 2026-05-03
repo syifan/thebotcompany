@@ -243,6 +243,7 @@ export function stripAllMetaBlocks(text) {
     .replace(/<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/g, '')
     .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE|EXAM_PASS|EXAM_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
     .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|EXAM_PASS|EXAM_FAIL)\s*-->/g, '')
+    .replace(/^\s*\d+\.\s*\*\*Manager directive blocks:\*\*\s*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
@@ -251,7 +252,9 @@ export function parseMilestoneBlock(text) {
   if (!text) return null
   const match = text.match(/<!--\s*MILESTONE\s*-->\s*([\s\S]*?)\s*<!--\s*\/MILESTONE\s*-->/)
   if (!match) return null
-  try { return JSON.parse(match[1]) } catch { return null }
+  const payload = match[1].trim()
+  if (!payload) return null
+  try { return JSON.parse(payload) } catch { return { id: payload.replace(/^['"]|['"]$/g, '').trim() } }
 }
 
 export function parseProjectComplete(text) {
@@ -310,7 +313,9 @@ export function MetaBlockBadges({ text, expandable = true }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
       {milestone && (
         <MetaCard
-          label={`🎯 Milestone: ${milestone.title || milestone.description?.slice(0, 60)} · ${milestone.cycles} cycles`}
+          label={milestone.id
+            ? `🎯 Milestone: ${milestone.id}`
+            : `🎯 Milestone: ${milestone.title || milestone.description?.slice(0, 60)}${milestone.cycles ? ` · ${milestone.cycles} cycles` : ''}`}
           color="#8b5cf6"
           expandable={expandable}
           defaultOpen={false}

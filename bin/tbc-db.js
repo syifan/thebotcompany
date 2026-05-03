@@ -210,6 +210,12 @@ function assertPrCreateActor(actor) {
   assertManagerPrActor(actor);
 }
 
+function assertMilestoneWriteActor(actor) {
+  if (actor !== 'athena') {
+    throw new Error(`Only Athena may mutate milestones. Got: ${actor || '(missing actor)'}`);
+  }
+}
+
 function assertPrDecisionActor(actor, status) {
   if (!status || status === 'open') return;
   assertManagerPrActor(actor);
@@ -242,6 +248,52 @@ function localIdFor(type, id) {
   return db.prepare('SELECT local_id FROM object_refs WHERE type = ? AND id = ?').get(type, id)?.local_id || id;
 }
 
+function getParentMilestoneId(milestoneId = '') {
+  const value = String(milestoneId || '').trim();
+  if (!value || !value.includes('.')) return null;
+  return value.split('.').slice(0, -1).join('.') || null;
+}
+
+function allocateNextMilestoneId(parentMilestoneId = null) {
+  let nextId = 'M1';
+  if (parentMilestoneId) {
+    const rows = db.prepare(`SELECT milestone_id FROM milestones WHERE parent_milestone_id = ? OR milestone_id LIKE ?`).all(parentMilestoneId, `${parentMilestoneId}.%`);
+    let maxChild = 0;
+    for (const row of rows) {
+      const key = String(row.milestone_id || '');
+      const suffix = key.slice(parentMilestoneId.length + 1);
+      if (/^\d+$/.test(suffix)) maxChild = Math.max(maxChild, Number(suffix));
+    }
+    nextId = `${parentMilestoneId}.${maxChild + 1}`;
+  } else {
+    const rows = db.prepare(`SELECT milestone_id FROM milestones WHERE milestone_id GLOB 'M*'`).all();
+    let maxTop = 0;
+    for (const row of rows) {
+      const m = String(row.milestone_id || '').match(/^M(\d+)$/);
+      if (m) maxTop = Math.max(maxTop, Number(m[1]));
+    }
+    nextId = `M${maxTop + 1}`;
+  }
+  return nextId;
+}
+
+function normalizeMilestoneStatus(status) {
+  const value = status || 'active';
+  if (['active', 'completed', 'failed'].includes(value)) return value;
+  throw new Error(`Invalid milestone status: ${value}. Allowed: active, completed, failed`);
+}
+
+function milestoneById(milestoneId) {
+  return db.prepare('SELECT * FROM milestones WHERE milestone_id = ?').get(milestoneId);
+}
+
+function parseIntegerOption(value, name) {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`Invalid ${name}: ${value}`);
+  return parsed;
+}
+
 const commands = {
   // ===== ISSUES =====
   'issue-create'() {
@@ -251,14 +303,12 @@ const commands = {
         actor: { type: 'string' },
         title: { type: 'string', short: 't' },
         body: { type: 'string', short: 'b', default: '' },
-        actor: { type: 'string' },
-        creator: { type: 'string', short: 'c' },
         assignee: { type: 'string', short: 'a' },
         labels: { type: 'string', short: 'l', default: '' },
       },
-      strict: false,
+      strict: true,
     });
-    const actor = values.actor || values.creator;
+    const actor = values.actor;
     if (!values.title || !actor) {
       console.error('Usage: tbc-db issue-create --title "..." --actor name [--body "..."] [--assignee name] [--labels "label1,label2"]');
       process.exit(1);
@@ -277,11 +327,10 @@ const commands = {
         status: { type: 'string', short: 's', default: 'open' },
         assignee: { type: 'string', short: 'a' },
         actor: { type: 'string' },
-        creator: { type: 'string', short: 'c' },
         label: { type: 'string', short: 'l' },
         json: { type: 'boolean', default: false },
       },
-      strict: false,
+      strict: true,
     });
     let query = 'SELECT * FROM issues WHERE 1=1';
     const params = [];
@@ -291,8 +340,8 @@ const commands = {
     if (values.assignee) {
       query += ' AND assignee = ?'; params.push(values.assignee);
     }
-    if (values.creator) {
-      query += ' AND creator = ?'; params.push(values.creator);
+    if (values.actor) {
+      query += ' AND creator = ?'; params.push(values.actor);
     }
     if (values.label) {
       query += ' AND labels LIKE ?'; params.push(`%${values.label}%`);
@@ -349,18 +398,16 @@ const commands = {
       args: args.slice(1),
       options: {
         actor: { type: 'string' },
-        closer: { type: 'string', short: 'c' },
       },
-      strict: false,
+      strict: true,
     });
-    const actor = values.actor || values.closer;
+    const actor = values.actor;
     if (!id || !actor) { console.error('Usage: tbc-db issue-close <id> --actor name'); process.exit(1); }
     const issue = db.prepare('SELECT id, creator, status FROM issues WHERE id = ?').get(id);
     if (!issue) { console.error(`Issue #${id} not found`); process.exit(1); }
     if (issue.status === 'closed') { console.log(`Issue #${id} already closed`); return; }
-    const closer = actor;
     const { allowed, special } = resolveAllowedIssueCloser(issue.creator);
-    if (!allowed.has(closer)) {
+    if (!allowed.has(actor)) {
       if (special === 'chat-human') {
         console.error(`Blocked: issue #${id} was opened by ${issue.creator} and can only be closed by chat or human`);
       } else {
@@ -369,7 +416,7 @@ const commands = {
       process.exit(1);
     }
     const now = new Date().toISOString();
-    db.prepare("UPDATE issues SET status = 'closed', closed_at = ?, closed_by = ?, updated_at = ?, updated_by = ? WHERE id = ?").run(now, closer, now, closer, id);
+    db.prepare("UPDATE issues SET status = 'closed', closed_at = ?, closed_by = ?, updated_at = ?, updated_by = ? WHERE id = ?").run(now, actor, now, actor, id);
     console.log(`Closed issue #${id}`);
   },
 
@@ -381,17 +428,15 @@ const commands = {
       args: args.slice(1),
       options: {
         actor: { type: 'string' },
-        editor: { type: 'string', short: 'e' },
         title: { type: 'string', short: 't' },
         body: { type: 'string', short: 'b' },
         assignee: { type: 'string', short: 'a' },
         labels: { type: 'string', short: 'l' },
       },
-      strict: false,
+      strict: true,
     });
-    const actor = values.actor || values.editor;
+    const actor = values.actor;
     if (!actor) { console.error('Usage: tbc-db issue-edit <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]'); process.exit(1); }
-    if (!values.actor) { console.error('Usage: tbc-db pr-edit <id> --actor name [--title "..."] [--summary "..."] [--base main] [--head branch] [--status ready_for_review] [--issues "1,2"] [--test pass]'); process.exit(1); }
     const sets = [];
     const params = [];
     if (values.title) { sets.push('title = ?'); params.push(values.title); }
@@ -485,6 +530,207 @@ const commands = {
       console.log('');
     }
     if (comments.length === 0) console.log('(no comments)');
+  },
+
+  // ===== MILESTONES =====
+  'milestone-create'() {
+    const { values } = parseArgs({
+      args,
+      options: {
+        actor: { type: 'string' },
+        id: { type: 'string' },
+        title: { type: 'string', short: 't' },
+        description: { type: 'string', short: 'd' },
+        parent: { type: 'string', short: 'p' },
+        cycles: { type: 'string', short: 'c', default: '0' },
+        phase: { type: 'string', default: 'planned' },
+        status: { type: 'string', short: 's', default: 'active' },
+        branch: { type: 'string' },
+        pr: { type: 'string' },
+        'failure-reason': { type: 'string' },
+      },
+      strict: false,
+    });
+    if (!values.description && !values.title) {
+      console.error('Usage: tbc-db milestone-create --actor athena [--id M1] --title "..." [--description "..."] [--parent M1] [--cycles 8] [--phase planned] [--status active|completed|failed]');
+      process.exit(1);
+    }
+    try {
+      assertMilestoneWriteActor(values.actor);
+      const status = normalizeMilestoneStatus(values.status);
+      const cyclesBudget = parseIntegerOption(values.cycles, '--cycles') ?? 0;
+      const milestoneId = values.id || allocateNextMilestoneId(values.parent || null);
+      if (milestoneById(milestoneId)) {
+        console.error(`Milestone ${milestoneId} already exists`);
+        process.exit(1);
+      }
+      if (values.parent && !milestoneById(values.parent)) {
+        console.error(`Parent milestone ${values.parent} not found`);
+        process.exit(1);
+      }
+      const parentMilestoneId = values.parent || getParentMilestoneId(milestoneId);
+      if (parentMilestoneId && !milestoneById(parentMilestoneId)) {
+        console.error(`Parent milestone ${parentMilestoneId} not found`);
+        process.exit(1);
+      }
+      const now = new Date().toISOString();
+      db.prepare(`INSERT INTO milestones (milestone_id, title, description, cycles_budget, cycles_used, branch_name, parent_milestone_id, linked_pr_id, failure_reason, phase, status, completed_at)
+        VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          milestoneId,
+          values.title || null,
+          values.description || values.title,
+          cyclesBudget,
+          values.branch || null,
+          parentMilestoneId,
+          values.pr ? Number(values.pr) : null,
+          values['failure-reason'] || null,
+          values.phase || 'planned',
+          status,
+          status === 'completed' ? now : null,
+        );
+      console.log(`Created milestone ${milestoneId}`);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  },
+
+  'milestone-list'() {
+    const { values } = parseArgs({
+      args,
+      options: {
+        status: { type: 'string', short: 's', default: 'all' },
+        phase: { type: 'string' },
+        parent: { type: 'string', short: 'p' },
+        json: { type: 'boolean', default: false },
+      },
+      strict: false,
+    });
+    const params = [];
+    let query = 'SELECT * FROM milestones WHERE 1=1';
+    if (values.status && values.status !== 'all') { query += ' AND status = ?'; params.push(values.status); }
+    if (values.phase) { query += ' AND phase = ?'; params.push(values.phase); }
+    if (values.parent !== undefined) {
+      if (values.parent === 'root') query += ' AND parent_milestone_id IS NULL';
+      else { query += ' AND parent_milestone_id = ?'; params.push(values.parent); }
+    }
+    query += ' ORDER BY milestone_id';
+    const rows = db.prepare(query).all(...params);
+    if (values.json) {
+      jsonOut(rows);
+    } else {
+      for (const row of rows) {
+        const parent = row.parent_milestone_id ? ` parent=${row.parent_milestone_id}` : '';
+        const title = row.title ? ` ${row.title}` : '';
+        const cycles = row.cycles_budget ? ` cycles=${row.cycles_budget}` : '';
+        console.log(`${row.milestone_id || `(row ${row.id})`} [${row.status}/${row.phase}]${title}${parent}${cycles}`);
+      }
+      if (rows.length === 0) console.log('(no milestones)');
+    }
+  },
+
+  'milestone-view'() {
+    const milestoneId = args[0];
+    if (!milestoneId) { console.error('Usage: tbc-db milestone-view <milestone_id>'); process.exit(1); }
+    const milestone = milestoneById(milestoneId);
+    if (!milestone) { console.error(`Milestone ${milestoneId} not found`); process.exit(1); }
+    console.log(`# Milestone ${milestone.milestone_id}: ${milestone.title || '(untitled)'}`);
+    console.log(`Status: ${milestone.status} | Phase: ${milestone.phase || 'none'} | Cycles: ${milestone.cycles_used || 0}/${milestone.cycles_budget || 0}`);
+    if (milestone.parent_milestone_id) console.log(`Parent: ${milestone.parent_milestone_id}`);
+    if (milestone.branch_name) console.log(`Branch: ${milestone.branch_name}`);
+    if (milestone.linked_pr_id) console.log(`Linked PR: ${milestone.linked_pr_id}`);
+    console.log(`Created: ${milestone.created_at}${milestone.completed_at ? ` | Completed: ${milestone.completed_at}` : ''}`);
+    if (milestone.failure_reason) console.log(`Failure: ${milestone.failure_reason}`);
+    if (milestone.description) console.log(`\n${milestone.description}`);
+    const children = db.prepare('SELECT milestone_id, title, status, phase FROM milestones WHERE parent_milestone_id = ? ORDER BY milestone_id').all(milestoneId);
+    if (children.length) {
+      console.log(`\n--- Children (${children.length}) ---`);
+      for (const child of children) console.log(`${child.milestone_id} [${child.status}/${child.phase}] ${child.title || ''}`.trim());
+    }
+  },
+
+  'milestone-edit'() {
+    const milestoneId = args[0];
+    if (!milestoneId) { console.error('Usage: tbc-db milestone-edit <milestone_id> --actor athena [--title "..."] [--description "..."] [--parent M1|none] [--cycles 8] [--used 2] [--phase planned] [--status active|completed|failed]'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: {
+        actor: { type: 'string' },
+        title: { type: 'string', short: 't' },
+        description: { type: 'string', short: 'd' },
+        parent: { type: 'string', short: 'p' },
+        cycles: { type: 'string', short: 'c' },
+        used: { type: 'string' },
+        phase: { type: 'string' },
+        status: { type: 'string', short: 's' },
+        branch: { type: 'string' },
+        pr: { type: 'string' },
+        'failure-reason': { type: 'string' },
+      },
+      strict: false,
+    });
+    const current = milestoneById(milestoneId);
+    if (!current) { console.error(`Milestone ${milestoneId} not found`); process.exit(1); }
+    const sets = [];
+    const params = [];
+    try {
+      assertMilestoneWriteActor(values.actor);
+      if (values.title !== undefined) { sets.push('title = ?'); params.push(values.title || null); }
+      if (values.description !== undefined) { sets.push('description = ?'); params.push(values.description); }
+      if (values.parent !== undefined) {
+        const parent = values.parent === 'none' || values.parent === 'root' ? null : values.parent;
+        if (parent === milestoneId) throw new Error('Milestone cannot be its own parent');
+        if (parent && !milestoneById(parent)) throw new Error(`Parent milestone ${parent} not found`);
+        sets.push('parent_milestone_id = ?'); params.push(parent);
+      }
+      if (values.cycles !== undefined) { sets.push('cycles_budget = ?'); params.push(parseIntegerOption(values.cycles, '--cycles')); }
+      if (values.used !== undefined) { sets.push('cycles_used = ?'); params.push(parseIntegerOption(values.used, '--used')); }
+      if (values.phase !== undefined) { sets.push('phase = ?'); params.push(values.phase || null); }
+      if (values.status !== undefined) {
+        const status = normalizeMilestoneStatus(values.status);
+        sets.push('status = ?'); params.push(status);
+        if (status === 'completed') {
+          sets.push('completed_at = COALESCE(completed_at, ?)');
+          params.push(new Date().toISOString());
+        }
+      }
+      if (values.branch !== undefined) { sets.push('branch_name = ?'); params.push(values.branch || null); }
+      if (values.pr !== undefined) { sets.push('linked_pr_id = ?'); params.push(values.pr ? Number(values.pr) : null); }
+      if (values['failure-reason'] !== undefined) { sets.push('failure_reason = ?'); params.push(values['failure-reason'] || null); }
+      if (sets.length === 0) { console.error('Nothing to update'); process.exit(1); }
+      params.push(milestoneId);
+      db.prepare(`UPDATE milestones SET ${sets.join(', ')} WHERE milestone_id = ?`).run(...params);
+      console.log(`Updated milestone ${milestoneId}`);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  },
+
+  'milestone-delete'() {
+    const milestoneId = args[0];
+    if (!milestoneId) { console.error('Usage: tbc-db milestone-delete <milestone_id> --actor athena [--recursive]'); process.exit(1); }
+    const { values } = parseArgs({
+      args: args.slice(1),
+      options: { actor: { type: 'string' }, recursive: { type: 'boolean', default: false } },
+      strict: false,
+    });
+    try { assertMilestoneWriteActor(values.actor); } catch (err) { console.error(`Error: ${err.message}`); process.exit(1); }
+    if (!milestoneById(milestoneId)) { console.error(`Milestone ${milestoneId} not found`); process.exit(1); }
+    const children = db.prepare('SELECT milestone_id FROM milestones WHERE parent_milestone_id = ?').all(milestoneId);
+    if (children.length && !values.recursive) {
+      console.error(`Milestone ${milestoneId} has child milestones. Re-run with --recursive to delete the subtree.`);
+      process.exit(1);
+    }
+    if (values.recursive) {
+      const prefix = `${milestoneId}.%`;
+      const result = db.prepare('DELETE FROM milestones WHERE milestone_id = ? OR milestone_id LIKE ?').run(milestoneId, prefix);
+      console.log(`Deleted ${result.changes} milestone(s)`);
+    } else {
+      db.prepare('DELETE FROM milestones WHERE milestone_id = ?').run(milestoneId);
+      console.log(`Deleted milestone ${milestoneId}`);
+    }
   },
 
   // ===== TBC PRS =====
@@ -796,11 +1042,11 @@ const commands = {
     console.log(`tbc-db — Agent communication database
 
 Issues:
-  issue-create  --title "..." --creator name [--body "..."] [--assignee name] [--labels "..."]
-  issue-list    [--status open|closed|all] [--assignee name] [--creator name] [--label name] [--json]
+  issue-create  --title "..." --actor name [--body "..."] [--assignee name] [--labels "..."]
+  issue-list    [--status open|closed|all] [--assignee name] [--actor name] [--label name] [--json]
   issue-view    <id>
-  issue-edit    <id> --editor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]
-  issue-close   <id> --closer name
+  issue-edit    <id> --actor name [--title "..."] [--body "..."] [--assignee name] [--labels "..."]
+  issue-close   <id> --actor name
 
 Comments:
   comment       --issue <id> --actor name --body "..."
@@ -808,6 +1054,13 @@ Comments:
   comments      <issue_id>
   pr-comment    --pr <id> --actor name --body "..."
   pr-comments   <pr_id>
+
+Milestones:
+  milestone-create --actor athena [--id M1] --title "..." [--description "..."] [--parent M1] [--cycles 8] [--phase planned] [--status active|completed|failed]
+  milestone-list   [--status active|completed|failed|all] [--phase planned] [--parent M1|root] [--json]
+  milestone-view   <milestone_id>
+  milestone-edit   <milestone_id> --actor athena [--title "..."] [--description "..."] [--parent M1|none] [--cycles 8] [--used 2] [--phase planned] [--status active|completed|failed]
+  milestone-delete <milestone_id> --actor athena [--recursive]
 
 TBC PRs:
   pr-create     --title "..." --head branch --actor manager [--summary "..."] [--milestone <id>] [--parent <prId>] [--epoch <n>] [--branch <name>] [--base main] [--issues "1,2"] [--test unknown]
