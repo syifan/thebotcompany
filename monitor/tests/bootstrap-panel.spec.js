@@ -7,7 +7,7 @@ test.describe('Bootstrap panel', () => {
     await page.goto(PROJECT_PATH)
     await page.waitForLoadState('networkidle')
 
-    const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
+    const bootstrapBtn = page.getByLabel('Bootstrap project workspace')
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
 
     // Wait for the bootstrap API request to complete
@@ -26,7 +26,7 @@ test.describe('Bootstrap panel', () => {
     await page.goto(PROJECT_PATH)
     await page.waitForLoadState('networkidle')
 
-    const bootstrapBtn = page.locator('button[title="Bootstrap project"]')
+    const bootstrapBtn = page.getByLabel('Bootstrap project workspace')
     await expect(bootstrapBtn).toBeVisible({ timeout: 10000 })
 
     const responsePromise = page.waitForResponse(resp => 

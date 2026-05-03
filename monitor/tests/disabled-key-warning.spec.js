@@ -70,7 +70,7 @@ test.describe('Project pinned to disabled key', () => {
     await page.waitForLoadState('networkidle')
 
     // Open project settings
-    const settingsButton = page.locator('button[title="Project Settings"]')
+    const settingsButton = page.getByLabel('Open project settings')
     await settingsButton.waitFor({ timeout: 10000 })
     await settingsButton.click()
 
@@ -118,7 +118,7 @@ test.describe('Project pinned to disabled key', () => {
     await page.goto(`/github.com/${PROJECT_ID}`)
     await page.waitForLoadState('networkidle')
 
-    const settingsButton = page.locator('button[title="Project Settings"]')
+    const settingsButton = page.getByLabel('Open project settings')
     await settingsButton.waitFor({ timeout: 10000 })
     await settingsButton.click()
 
@@ -160,7 +160,7 @@ test.describe('Project pinned to disabled key', () => {
     await page.goto(`/github.com/${PROJECT_ID}`)
     await page.waitForLoadState('networkidle')
 
-    const settingsButton = page.locator('button[title="Project Settings"]')
+    const settingsButton = page.getByLabel('Open project settings')
     await settingsButton.waitFor({ timeout: 10000 })
     await settingsButton.click()
 
@@ -230,7 +230,7 @@ test.describe('Project pinned to disabled key', () => {
     await page.goto(`/github.com/${PROJECT_ID}`)
     await page.waitForLoadState('networkidle')
 
-    const settingsButton = page.locator('button[title="Project Settings"]')
+    const settingsButton = page.getByLabel('Open project settings')
     await settingsButton.waitFor({ timeout: 10000 })
     await settingsButton.click()
 
