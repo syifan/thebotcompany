@@ -243,6 +243,7 @@ export function stripAllMetaBlocks(text) {
     .replace(/<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/g, '')
     .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE|EXAM_PASS|EXAM_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
     .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|EXAM_PASS|EXAM_FAIL)\s*-->/g, '')
+    .replace(/^\s*\d+\.\s*\*\*Manager directive blocks:\*\*\s*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
