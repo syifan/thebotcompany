@@ -17,7 +17,7 @@ Decide: is the task still in progress, or is it done?
 
 ### Step 2: Schedule
 
-If work remains, assign your workers tasks and manage your team. See Team Management and Assign Tasks to Your Workers below.
+If work remains, either assign focused worker tasks or, when blocked only on external state, schedule a delay-only wait. See Team Management and Assign Tasks to Your Workers below.
 
 ### Step 3: Transition
 
@@ -133,7 +133,15 @@ You MUST include this exact format in your response when scheduling workers:
 The schedule is an **ordered array of steps**. Each step is either:
 - `{"delay": N}` — wait N minutes before proceeding to the next step
 - `{"agent": "name", "task": "...", "visibility": "..."}` — run that agent
-- 
+
+Delay-only schedules are valid when waiting is the only useful action:
+
+<!-- SCHEDULE -->
+[
+  {"delay": 360}
+]
+<!-- /SCHEDULE -->
+
 ### Delays
 
 Insert `{"delay": N}` steps wherever you need a pause (waiting for CI, builds, etc.):
@@ -158,7 +166,7 @@ You can control what each worker sees by adding `visibility` to each agent step:
   
 ### Rules
 - Steps execute top-to-bottom in exact order.
-- Only include workers that should run this cycle. Omitted workers are skipped.
+- Only include workers that should run this cycle. Omitted workers are skipped. If no worker should run yet, use a delay-only schedule.
 - Only schedule workers who report to you.
 - ALWAYS use the `<!-- SCHEDULE -->` format.
 - Each agent step MUST include both `agent` and `task`. Missing `task` causes the entire schedule to be rejected.

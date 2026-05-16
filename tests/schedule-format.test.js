@@ -76,6 +76,26 @@ describe('strict schedule directive format', () => {
     }));
   });
 
+  it('accepts delay-only schedules in the backend parser', () => {
+    const parseSchedule = loadServerParseSchedule();
+    const waitOnly = `<!-- SCHEDULE -->\n[\n  {"delay":360}\n]\n<!-- /SCHEDULE -->`;
+    assert.deepEqual(parseSchedule(waitOnly), {
+      _steps: [
+        { delay: 360 },
+      ],
+    });
+  });
+
+  it('accepts delay-only schedules in the frontend parser', () => {
+    const parseScheduleBlock = loadFrontendParseScheduleBlock();
+    const waitOnly = `<!-- SCHEDULE -->\n[\n  {"delay":360}\n]\n<!-- /SCHEDULE -->`;
+    assert.equal(JSON.stringify(parseScheduleBlock(waitOnly)), JSON.stringify({
+      _steps: [
+        { delay: 360 },
+      ],
+    }));
+  });
+
   it('rejects the old object-style schedule format in the backend parser', () => {
     const parseSchedule = loadServerParseSchedule();
     const legacy = `<!-- SCHEDULE -->\n{"agents":{"delay":20,"diana":{"issue":2,"title":"Research","prompt":"Do it"}}}\n<!-- /SCHEDULE -->`;
