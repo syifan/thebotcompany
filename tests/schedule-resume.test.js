@@ -95,10 +95,11 @@ describe('Schedule resume after reboot', () => {
   });
 
   describe('delay cap', () => {
-    it('caps delay at 120 minutes', () => {
-      // sleepDelay: Math.min(Math.max(parseFloat(minutes) || 0, 0), 120) * 60000
-      const capDelay = (minutes) => Math.min(Math.max(parseFloat(minutes) || 0, 0), 120) * 60000;
-      assert.strictEqual(capDelay(210), 120 * 60000); // 210 capped to 120
+    it('caps delay at 360 minutes', () => {
+      // sleepDelay: Math.min(Math.max(parseFloat(minutes) || 0, 0), 360) * 60000
+      const capDelay = (minutes) => Math.min(Math.max(parseFloat(minutes) || 0, 0), 360) * 60000;
+      assert.strictEqual(capDelay(420), 360 * 60000); // 420 capped to 360
+      assert.strictEqual(capDelay(210), 210 * 60000); // 210 stays 210
       assert.strictEqual(capDelay(60), 60 * 60000);   // 60 stays 60
       assert.strictEqual(capDelay(0), 0);
       assert.strictEqual(capDelay(-5), 0);

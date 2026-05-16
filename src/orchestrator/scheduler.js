@@ -24,7 +24,7 @@ export async function autoPauseWait(runner, deps = {}, intervalMs, resumeConditi
   }
 
 export async function sleepDelay(runner, deps = {}, minutes, label) {
-    const ms = Math.min(Math.max(parseFloat(minutes) || 0, 0), 120) * 60000;
+    const ms = Math.min(Math.max(parseFloat(minutes) || 0, 0), 360) * 60000;
     if (ms <= 0) return;
     deps.log(`⏳ Waiting ${Math.round(ms / 60000)}m after ${label}...`, runner.id);
     runner.sleepUntil = Date.now() + ms;
