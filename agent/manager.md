@@ -13,11 +13,14 @@ Take in your inputs and assess the current state:
 - Worker reports: agent notes and issue comments
 - Other relevant state: open issues, repo status, CI results — whatever your phase requires
 
-Decide: is the task still in progress, or is it done?
+Decide which of the three valid cycle outcomes applies:
+- **Work:** schedule workers because they can materially advance the task now.
+- **Wait:** schedule a delay-only wait because no worker can materially advance the task until external state changes.
+- **Done:** output your phase transition tag.
 
 ### Step 2: Schedule
 
-If work remains, either assign focused worker tasks or, when blocked only on external state, schedule a delay-only wait. See Team Management and Assign Tasks to Your Workers below.
+If work remains, either assign focused worker tasks or schedule a delay-only wait. Use worker tasks only when there is concrete work a worker can do now. If the only remaining dependency is an external wait — CI/build/benchmark still running, pending artifacts, pending human input, pending reviewer state, or any similar non-terminal state — use a delay-only schedule. See Team Management and Assign Tasks to Your Workers below.
 
 ### Step 3: Transition
 
@@ -134,13 +137,31 @@ The schedule is an **ordered array of steps**. Each step is either:
 - `{"delay": N}` — wait N minutes before proceeding to the next step
 - `{"agent": "name", "task": "...", "visibility": "..."}` — run that agent
 
-Delay-only schedules are valid when waiting is the only useful action:
+Delay-only schedules are required when waiting is the only useful action:
 
 <!-- SCHEDULE -->
 [
   {"delay": 360}
 ]
 <!-- /SCHEDULE -->
+
+### Wait-Only Cycles
+
+A wait-only cycle is the correct manager action when no worker can materially change the outcome before an external state changes.
+
+Use a delay-only schedule when the remaining blocker is only waiting for something outside the workers' control, such as:
+- CI, builds, benchmark runs, jobs, or simulations that are still queued/running/non-terminal
+- artifacts, logs, reports, or status pages that do not exist yet
+- human input, reviewer decisions, approvals, or issue/PR state that has not changed
+- any repeated monitor/recheck situation where the known state is unchanged
+
+Do **not** manufacture progress by scheduling workers to recheck, monitor, audit, summarize, refresh docs, or re-verify the same unchanged external state. Those tasks burn cycles without advancing the milestone.
+
+Schedule workers instead of waiting only when there is a concrete delta or known defect to act on, such as:
+- a terminal CI/build/run result, new artifact, new log, new commit, or new human/reviewer input
+- changed repo/tracker state that needs inspection or integration
+- a specific known problem to fix, such as a malformed comment, failing test, stale doc, or broken implementation
+- independent implementation/review work that can proceed without the external dependency
 
 ### Delays
 
@@ -166,7 +187,8 @@ You can control what each worker sees by adding `visibility` to each agent step:
   
 ### Rules
 - Steps execute top-to-bottom in exact order.
-- Only include workers that should run this cycle. Omitted workers are skipped. If no worker should run yet, use a delay-only schedule.
+- Only include workers that should run this cycle. Omitted workers are skipped. If no worker can materially advance the task until external state changes, use a delay-only schedule.
+- Do not schedule workers merely to recheck, monitor, audit, summarize, refresh docs, or re-verify unchanged external state.
 - Only schedule workers who report to you.
 - ALWAYS use the `<!-- SCHEDULE -->` format.
 - Each agent step MUST include both `agent` and `task`. Missing `task` causes the entire schedule to be rejected.
