@@ -56,6 +56,11 @@ function normalizeStep(step) {
       ? { delay: step.delay }
       : null
   }
+  if (step.waitFor !== undefined) {
+    return Object.keys(step).length === 1 && step.waitFor && typeof step.waitFor === 'object' && !Array.isArray(step.waitFor)
+      ? { waitFor: step.waitFor }
+      : null
+  }
   if (typeof step.agent === 'string' && step.agent.trim()) {
     const { agent, ...rest } = step
     if (!Object.prototype.hasOwnProperty.call(rest, 'task')) return null
@@ -86,9 +91,9 @@ export function getAgentEntries(schedule) {
   const entries = []
   for (const step of steps) {
     const keys = Object.keys(step)
-    if (keys.length === 1 && keys[0] === 'delay') continue
+    if (keys.length === 1 && (keys[0] === 'delay' || keys[0] === 'waitFor')) continue
     for (const key of keys) {
-      if (key !== 'delay') entries.push([key, step[key]])
+      if (key !== 'delay' && key !== 'waitFor') entries.push([key, step[key]])
     }
   }
   return entries
@@ -129,8 +134,24 @@ function ScheduleBody({ schedule }) {
           )
         }
 
+        // waitFor step
+        if (keys.length === 1 && keys[0] === 'waitFor') {
+          return (
+            <div key={`waitfor-${i}`} style={{ display: 'flex', justifyContent: 'center', padding: '6px 0' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, color: dark ? '#737373' : '#a3a3a3',
+                background: dark ? '#262626' : '#f5f5f5',
+                padding: '3px 10px', borderRadius: 12,
+              }}>
+                <Clock style={{ width: 12, height: 12 }} /> wait for run {step.waitFor.run}
+              </span>
+            </div>
+          )
+        }
+
         // Agent step
-        const name = keys.find(k => k !== 'delay')
+        const name = keys.find(k => k !== 'delay' && k !== 'waitFor')
         if (!name) return null
         const value = step[name]
         const task = typeof value === 'string' ? value : (value.task || '')

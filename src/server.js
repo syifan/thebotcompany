@@ -288,6 +288,7 @@ function broadcastEvent(event) {
     error: `⚠️ ${event.message}`,
     'agent-done': `${event.success ? '✓' : '✗'} ${event.agent}: ${event.summary || 'no response'}`,
     'project-complete': `🏁 Project ${event.success ? 'completed' : 'ended'}: ${event.message}`,
+    'project-blocked': `🚧 Project needs your decisions: ${event.message || event.summary || ''}`,
   };
   const notification = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),

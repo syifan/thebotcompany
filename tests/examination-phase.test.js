@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parseExamVerdict } from '../src/orchestrator/phase-machine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(__dirname, '..', 'src', 'orchestrator', 'ProjectRunner.js');
@@ -63,9 +64,9 @@ describe('Themis examination phase', () => {
       'Expected examination workers to run under Themis ownership');
     assert.match(src, /executeSchedule\((?:this|runner)\.currentSchedule, config, 'themis'\)/,
       'Expected interrupted Themis schedules to resume under Themis ownership');
-    assert.match(src, /let decision = null/,
+    assert.match(src, /let verdict = null/,
       'Expected examination to support non-terminal cycles');
-    assert.match(src, /No decision yet, stay in examination phase/,
+    assert.match(src, /Investigation continues, stay in examination phase/,
       'Expected schedule-only examination cycles to remain in examination');
   });
 
@@ -89,58 +90,72 @@ describe('Themis examination phase', () => {
       'Expected correction prompt to tell managers to use focused\/full visibility for issue\/PR-board work');
   });
 
-  it('finalizes completion only on EXAM_PASS', () => {
+  it('finalizes completion on any verdict — audit without veto', () => {
     const src = readOrchestratorSource();
-    const examBlock = src.match(/else if \((?:this|runner)\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
+    const examBlock = src.match(/else if \((?:this|runner)\.phase === 'examination'\) \{([\s\S]*?)\n      \}\n\n      \/\/ If no agent succeeded/);
     assert.ok(examBlock, 'Could not find examination phase block');
     const block = examBlock[1];
 
-    assert.match(block, /EXAM_PASS/,
-      'Expected EXAM_PASS handling');
+    assert.match(block, /parseExamVerdict/,
+      'Expected examination to parse a verdict (EXAM_PASS or EXAM_FINDINGS)');
     assert.match(block, /isComplete:\s*true/,
-      'Expected EXAM_PASS to finalize the project');
-    assert.match(block, /phase:\s*'athena'/,
-      'Expected EXAM_PASS to exit examination phase cleanly');
+      'Expected a verdict to finalize the project');
+    assert.match(block, /completionSuccess:\s*true/,
+      'Expected findings verdicts to still complete the project successfully');
+    assert.match(block, /writeFinalAuditReport/,
+      'Expected the verdict to be written to a final audit report');
+    assert.match(block, /examinationFeedback: null/,
+      'Examination must clear feedback, never send it back to Athena');
+    assert.doesNotMatch(block, /phase: 'athena',\s*\n\s*examinationFeedback: [^n]/,
+      'The EXAM_FAIL → Athena feedback loop must be gone');
+    assert.doesNotMatch(block, /createIssue/,
+      'Examination must not create tracker issues');
   });
 
-  it('does not overwrite EXAM_PASS with failure just because no schedule exists', () => {
+  it('retries once and completes inconclusively rather than looping to Athena', () => {
     const src = readOrchestratorSource();
-    assert.doesNotMatch(
-      src,
-      /if \(result\.resultText\.includes\('\<\!-- EXAM_PASS --\>'\)\) \{\s*decision = 'pass';\s*\}[\s\S]*?else if \(!schedule\) \{\s*decision = 'fail';\s*\}/,
-      'EXAM_PASS must remain terminal success even when Themis returns no schedule'
-    );
+    assert.match(src, /Audit inconclusive — Themis returned no verdict after a retry\./,
+      'Expected a terminal inconclusive fallback');
+    assert.doesNotMatch(src, /Themis rejected project completion/,
+      'The EXAM_FAIL rejection loop must be gone');
   });
 
-  it('returns to athena and creates issues on EXAM_FAIL', () => {
+  it('writes the audit report outside the repo, in the project data dir', () => {
     const src = readOrchestratorSource();
-    const examBlock = src.match(/else if \((?:this|runner)\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
-    assert.ok(examBlock, 'Could not find examination phase block');
-    const block = examBlock[1];
+    assert.match(src, /path\.join\(runner\.projectDir, 'reports'\)/,
+      'Audit reports belong under {projectDir}/reports');
+    assert.match(src, /final-audit-/,
+      'Audit report filenames should be recognizable');
+  });
+});
 
-    assert.match(block, /decision === 'fail'/,
-      'Expected explicit EXAM_FAIL handling');
-    assert.match(block, /phase:\s*'athena'/,
-      'Expected failed examination result to return control to Athena');
-    assert.match(block, /issue-create|createIssue|INSERT INTO issues/i,
-      'Expected failed examination result to create issues');
+describe('parseExamVerdict', () => {
+  it('recognizes EXAM_PASS as a clean verdict', () => {
+    assert.deepEqual(parseExamVerdict('done <!-- EXAM_PASS -->{"message":"ok"}<!-- /EXAM_PASS -->'),
+      { verdict: 'clean', summary: null, findings: [] });
   });
 
-  it('still falls back to raw feedback when EXAM_FAIL JSON is absent or incomplete', () => {
-    const src = readOrchestratorSource();
-    const examBlock = src.match(/else if \((?:this|runner)\.phase === 'examination'\) \{([\s\S]*?)\n      \}/);
-    assert.ok(examBlock, 'Could not find examination phase block');
-    const block = examBlock[1];
-
-    assert.match(block, /rawFeedback/,
-      'Expected examination failure path to fall back to raw Themis output when structured feedback is absent');
+  it('parses EXAM_FINDINGS with severity', () => {
+    const verdict = parseExamVerdict('<!-- EXAM_FINDINGS -->{"summary":"partial","findings":[{"title":"Gap","detail":"evidence","severity":"high"}]}<!-- /EXAM_FINDINGS -->');
+    assert.equal(verdict.verdict, 'findings');
+    assert.equal(verdict.summary, 'partial');
+    assert.deepEqual(verdict.findings, [{ title: 'Gap', detail: 'evidence', severity: 'high' }]);
   });
 
-  it('gives Athena context when Themis rejects project completion', () => {
-    const src = readOrchestratorSource();
-    const athenaSituation = src.match(/let situation = '';/);
-    assert.ok(athenaSituation, 'Could not find Athena situation builder');
-    assert.match(src, /examinationFeedback/,
-      'Expected server state to track examination feedback for Athena');
+  it('maps legacy EXAM_FAIL blocks to findings instead of rejection', () => {
+    const verdict = parseExamVerdict('<!-- EXAM_FAIL -->{"summary":"nope","feedback":"fix it","issues":[{"title":"Blocker","body":"details"}]}<!-- /EXAM_FAIL -->');
+    assert.equal(verdict.verdict, 'findings');
+    assert.equal(verdict.summary, 'nope');
+    assert.deepEqual(verdict.findings, [{ title: 'Blocker', detail: 'details', severity: null }]);
+  });
+
+  it('degrades unparseable verdict JSON into a findings verdict', () => {
+    const verdict = parseExamVerdict('<!-- EXAM_FINDINGS -->not json<!-- /EXAM_FINDINGS -->');
+    assert.equal(verdict.verdict, 'findings');
+    assert.equal(verdict.findings.length, 1);
+  });
+
+  it('returns null when no verdict tag is present', () => {
+    assert.equal(parseExamVerdict('<!-- SCHEDULE -->[{"delay":5}]<!-- /SCHEDULE -->'), null);
   });
 });

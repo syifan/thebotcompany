@@ -38,6 +38,8 @@ export function getStatus(runner, deps = {}) {
       isComplete: runner.isComplete || false,
       completionSuccess: runner.completionSuccess || false,
       completionMessage: runner.completionMessage || null,
+      isBlocked: runner.isBlocked || false,
+      blockedDecisions: runner.blockedDecisions || null,
       config: runner.loadConfig(),
       agents: runner.loadAgents(),
       cost: runner.getCostSummary(),

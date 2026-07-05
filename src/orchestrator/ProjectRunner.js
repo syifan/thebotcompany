@@ -71,7 +71,15 @@ class ProjectRunner {
     this.isComplete = false;
     this.completionSuccess = false;
     this.completionMessage = null;
+    this.isBlocked = false; // Parked on human decisions (PROJECT_BLOCKED)
+    this.blockedDecisions = null; // {summary, decisions:[{id, question, recommendation, context}]}
+    this.pendingUnblockDigest = null; // Digest injected into Athena's next cycle after resume
+    this.consecutiveReplans = 0; // Verify-fails + deadline-misses since last verified milestone (health signal)
+    this.healthWarning = null; // hygeia warn diagnosis, injected once into Athena's next cycle
+    this.healthSnoozeUntilCycle = 0; // Suppress health tripwires until this cycle
+    this.lastHealthCheckCycle = 0;
     this.consecutiveFailures = 0; // Track consecutive agent failures for auto-pause
+    this.lastWaitResult = null; // Outcome of the last waitFor schedule step, consumed by next manager context
     this.currentAgentLog = [];
     this.currentAgentModel = null; this.currentAgentCost = 0; this.currentAgentUsage = null; this.currentAgentKeyId = null; this.currentAgentVisibility = null;
     this._repo = null;
