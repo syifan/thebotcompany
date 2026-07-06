@@ -140,6 +140,7 @@ You MUST include this exact format in your response when scheduling workers:
 The schedule is an **ordered array of steps**. Each step is one of:
 - `{"delay": N}` — wait N minutes before proceeding to the next step
 - `{"waitFor": {"run": <github run id>, "timeoutMin": 720}}` — block until that GitHub Actions run reaches a terminal state (or the timeout expires), polling cheaply without running any agent
+- `{"waitFor": {"job": "<tbc-job name>", "timeoutMin": 720}}` — same, for a formal offline job submitted with `tbc-job` (see Offline Jobs)
 - `{"agent": "name", "task": "...", "visibility": "..."}` — run that agent
 
 Delay-only schedules are required when waiting is the only useful action:
