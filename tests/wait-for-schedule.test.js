@@ -88,6 +88,12 @@ describe('waitFor schedule steps', () => {
       'waitForCondition must never run agents');
   });
 
+  it('consumes wake requests at cycle start so waits are not skipped mid-cycle', () => {
+    const src = fs.readFileSync(phaseMachinePath, 'utf-8');
+    assert.match(src, /runner\.abortCurrentCycle = false;\s*\n\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*runner\.wakeNow = false;/,
+      'a leftover skip/resume wakeNow must be cleared when a new cycle begins, before any delay/waitFor step runs');
+  });
+
   it('skips waitFor steps in manager directive validation', () => {
     const src = fs.readFileSync(phaseMachinePath, 'utf-8');
     assert.match(src, /if \(!step \|\| step\.delay !== undefined \|\| step\.waitFor !== undefined\) continue;/,
