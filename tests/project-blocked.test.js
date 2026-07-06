@@ -90,6 +90,10 @@ describe('PROJECT_BLOCKED directive', () => {
     assert.equal(runner.phase, 'athena');
     assert.match(runner.pendingUnblockDigest, /1\. Q\? \(recommend: accept\)/);
     assert.equal(runner.wakeNow, true);
+    assert.equal(runner.consecutiveReplans, 0,
+      'human intervention resets the replan counter');
+    assert.ok(runner.healthSnoozeUntilCycle > 0,
+      'health tripwires are snoozed after an unblock so hygeia cannot immediately re-park');
   });
 
   it('documents the directive for Athena and reframes HUMAN: issues as non-blocking', () => {

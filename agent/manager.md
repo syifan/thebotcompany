@@ -140,6 +140,7 @@ You MUST include this exact format in your response when scheduling workers:
 The schedule is an **ordered array of steps**. Each step is one of:
 - `{"delay": N}` — wait N minutes before proceeding to the next step
 - `{"waitFor": {"run": <github run id>, "timeoutMin": 720}}` — block until that GitHub Actions run reaches a terminal state (or the timeout expires), polling cheaply without running any agent
+- `{"waitFor": {"job": "<tbc-job name>", "timeoutMin": 720}}` — same, for a formal offline job submitted with `tbc-job` (see Offline Jobs)
 - `{"agent": "name", "task": "...", "visibility": "..."}` — run that agent
 
 Delay-only schedules are required when waiting is the only useful action:
@@ -160,7 +161,23 @@ Use a wait-only schedule when the remaining blocker is only waiting for somethin
 - reviewer decisions or issue/PR state that has not changed
 - any repeated monitor/recheck situation where the known state is unchanged
 
-**Prefer `waitFor` over blind delays when you know the GitHub Actions run id.** A `{"waitFor": {"run": <id>}}` step polls the run without burning any agent cycles and wakes you the moment it turns terminal; your next cycle context includes the outcome. Use `{"delay": N}` only when there is no run id to watch. Do not use either for pending human input — waiting on a human is a project-level block, not a schedule delay (see Escalate to Human).
+**Prefer `waitFor` over blind delays when there is something concrete to watch.** A `{"waitFor": {"run": <github run id>}}` or `{"waitFor": {"job": "<tbc-job name>"}}` step polls without burning any agent cycles and wakes you the moment the target turns terminal; your next cycle context includes the outcome. Use `{"delay": N}` only when there is no run or job to watch. Do not use either for pending human input — waiting on a human is a project-level block, not a schedule delay (see Escalate to Human).
+
+### Offline Jobs
+
+Long-running compute — builds, benchmark sweeps, simulations, corpus generation — must run as a **formal job**, not inside an agent's runtime and never as an informal `nohup ... &`. A formal job gets a tracked record, a log file, timeout enforcement, duplicate prevention, and a card in the monitor UI; an informal background process has none of that — it is invisible to the orchestrator and to the human, gets duplicated by fresh-context agents, and leaves orphans.
+
+```
+tbc-job submit --name gem5-oracle-build --timeout-min 240 --actor leo -- docker build -t gem5-pinned tools/gem5
+tbc-job status gem5-oracle-build
+tbc-job list
+tbc-job logs gem5-oracle-build --lines 60
+tbc-job cancel gem5-oracle-build
+```
+
+- Submitting a name that is already running returns the existing job instead of starting a duplicate — always reuse a stable, descriptive name for the same piece of work.
+- Jobs run detached in the repo directory by default (`--cwd` to override) and survive agent exits and orchestrator restarts.
+- The standard pattern: a worker writes the code/Dockerfile and submits the job in one cycle; the manager then emits `{"waitFor": {"job": "<name>"}}` and acts on the outcome next cycle. Do not schedule workers to babysit a running job.
 
 Do **not** manufacture progress by scheduling workers to recheck, monitor, audit, summarize, refresh docs, or re-verify the same unchanged external state. Those tasks burn cycles without advancing the milestone.
 
