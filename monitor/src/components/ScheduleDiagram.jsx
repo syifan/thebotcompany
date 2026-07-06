@@ -144,7 +144,7 @@ function ScheduleBody({ schedule }) {
                 background: dark ? '#262626' : '#f5f5f5',
                 padding: '3px 10px', borderRadius: 12,
               }}>
-                <Clock style={{ width: 12, height: 12 }} /> wait for run {step.waitFor.run}
+                <Clock style={{ width: 12, height: 12 }} /> wait for {step.waitFor.job ? `job ${step.waitFor.job}` : `run ${step.waitFor.run}`}
               </span>
             </div>
           )
