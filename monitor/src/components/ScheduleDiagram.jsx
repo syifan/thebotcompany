@@ -262,7 +262,7 @@ export function stripAllMetaBlocks(text) {
   return text
     .replace(/^>\s*⏱\s*Started:.*$/m, '')
     .replace(/<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/g, '')
-    .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE|EXAM_PASS|EXAM_FAIL)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
+    .replace(/<!--\s*(MILESTONE|VERIFY_FAIL|PROJECT_COMPLETE|EXAM_PASS|EXAM_FAIL|EXAM_FINDINGS|PROJECT_BLOCKED|HEALTH)\s*-->[\s\S]*?<!--\s*\/\1\s*-->/g, '')
     .replace(/<!--\s*(CLAIM_COMPLETE|VERIFY_PASS|VERIFY_FAIL|EXAM_PASS|EXAM_FAIL)\s*-->/g, '')
     .replace(/^\s*\d+\.\s*\*\*Manager directive blocks:\*\*\s*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
@@ -290,6 +290,68 @@ export function parseExamPass(text) {
   const match = text.match(/<!--\s*EXAM_PASS\s*-->\s*([\s\S]*?)\s*<!--\s*\/EXAM_PASS\s*-->/)
   if (!match) return null
   try { return JSON.parse(match[1]) } catch { return { message: match[1].trim() } }
+}
+
+export function parseHealthBlock(text) {
+  if (!text) return null
+  const match = text.match(/<!--\s*HEALTH\s*-->\s*([\s\S]*?)\s*<!--\s*\/HEALTH\s*-->/)
+  if (!match) return null
+  try {
+    const parsed = JSON.parse(match[1])
+    if (!['healthy', 'warn', 'stop'].includes(parsed?.verdict)) return null
+    return {
+      verdict: parsed.verdict,
+      diagnosis: parsed.diagnosis || '',
+      decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
+    }
+  } catch {
+    return { verdict: 'unparsed', diagnosis: match[1].trim(), decisions: [] }
+  }
+}
+
+export function parseProjectBlocked(text) {
+  if (!text) return null
+  const match = text.match(/<!--\s*PROJECT_BLOCKED\s*-->\s*([\s\S]*?)\s*<!--\s*\/PROJECT_BLOCKED\s*-->/)
+  if (!match) return null
+  try {
+    const parsed = JSON.parse(match[1])
+    return {
+      summary: parsed.summary || '',
+      decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
+    }
+  } catch {
+    return { summary: match[1].trim(), decisions: [] }
+  }
+}
+
+export function parseExamFindings(text) {
+  if (!text) return null
+  const match = text.match(/<!--\s*EXAM_FINDINGS\s*-->\s*([\s\S]*?)\s*<!--\s*\/EXAM_FINDINGS\s*-->/)
+  if (!match) return null
+  try {
+    const parsed = JSON.parse(match[1])
+    return {
+      summary: parsed.summary || '',
+      findings: Array.isArray(parsed.findings) ? parsed.findings : [],
+    }
+  } catch {
+    return { summary: match[1].trim(), findings: [] }
+  }
+}
+
+function DecisionList({ decisions }) {
+  if (!decisions?.length) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+      {decisions.map((decision, i) => (
+        <div key={i} style={{ paddingLeft: 10, borderLeft: '2px solid currentColor', opacity: 0.9 }}>
+          <div style={{ fontWeight: 600 }}>{decision.id || i + 1}. {decision.question}</div>
+          {decision.recommendation && <div>Recommend: {decision.recommendation}</div>}
+          {decision.context && <div style={{ opacity: 0.75 }}>{decision.context}</div>}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function parseDirectives(text) {
@@ -326,9 +388,12 @@ export function MetaBlockBadges({ text, expandable = true }) {
   const milestone = parseMilestoneBlock(text)
   const projectComplete = parseProjectComplete(text)
   const examPass = parseExamPass(text)
+  const health = parseHealthBlock(text)
+  const projectBlocked = parseProjectBlocked(text)
+  const examFindings = parseExamFindings(text)
   const { list: directives, verifyFailFeedback, examFailFeedback } = parseDirectives(text)
 
-  if (!milestone && !projectComplete && !examPass && directives.length === 0) return null
+  if (!milestone && !projectComplete && !examPass && !health && !projectBlocked && !examFindings && directives.length === 0) return null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -371,6 +436,51 @@ export function MetaBlockBadges({ text, expandable = true }) {
           {examFailFeedback && (
             <div style={{ whiteSpace: 'pre-wrap' }}>{examFailFeedback}</div>
           )}
+        </MetaCard>
+      )}
+      {examFindings && (
+        <MetaCard
+          label={`⚖️ Themis Findings${examFindings.findings.length ? ` (${examFindings.findings.length})` : ''}`}
+          color="#f59e0b"
+          expandable={expandable}
+          defaultOpen={false}
+        >
+          {examFindings.summary && <div style={{ whiteSpace: 'pre-wrap' }}>{examFindings.summary}</div>}
+          {examFindings.findings.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+              {examFindings.findings.map((finding, i) => (
+                <div key={i} style={{ paddingLeft: 10, borderLeft: '2px solid currentColor', opacity: 0.9 }}>
+                  <div style={{ fontWeight: 600 }}>{i + 1}. {finding.title}{finding.severity ? ` (${finding.severity})` : ''}</div>
+                  {finding.detail && <div style={{ whiteSpace: 'pre-wrap' }}>{finding.detail}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </MetaCard>
+      )}
+      {health && (
+        <MetaCard
+          label={health.verdict === 'healthy' ? '🩺 Health: Healthy'
+            : health.verdict === 'warn' ? '🩺 Health: Warning'
+            : health.verdict === 'stop' ? '🩺 Health: Stop — Parked on Human'
+            : '🩺 Health Verdict'}
+          color={health.verdict === 'healthy' ? '#10b981' : health.verdict === 'warn' ? '#f59e0b' : '#ef4444'}
+          expandable={expandable}
+          defaultOpen={health.verdict === 'stop'}
+        >
+          {health.diagnosis && <div style={{ whiteSpace: 'pre-wrap' }}>{health.diagnosis}</div>}
+          <DecisionList decisions={health.decisions} />
+        </MetaCard>
+      )}
+      {projectBlocked && (
+        <MetaCard
+          label={`🚧 Project Blocked — ${projectBlocked.decisions.length || 'human'} decision(s) needed`}
+          color="#f59e0b"
+          expandable={expandable}
+          defaultOpen
+        >
+          {projectBlocked.summary && <div style={{ whiteSpace: 'pre-wrap' }}>{projectBlocked.summary}</div>}
+          <DecisionList decisions={projectBlocked.decisions} />
         </MetaCard>
       )}
       {projectComplete && (
