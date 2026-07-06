@@ -243,6 +243,9 @@ export async function runRunnerLoop(runner, deps = {}) {
 
       // Start new cycle — preserve schedule state if resuming from reboot
       runner.abortCurrentCycle = false;
+      // A skip/resume wake request is consumed once a new cycle begins; if it
+      // leaked into the cycle, every delay/waitFor step would exit instantly.
+      runner.wakeNow = false;
       const resuming = !!runner.currentSchedule;
       if (!resuming) {
         runner.cycleCount++;
