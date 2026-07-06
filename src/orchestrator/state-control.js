@@ -201,6 +201,11 @@ export function resumeRunner(runner, deps = {}) {
         isPaused: false,
         pauseReason: null,
         phase: 'athena',
+        // The human just intervened — that resolves the stall the health
+        // tripwires were measuring. Reset them so hygeia doesn't re-park the
+        // project before Athena can intake the human's answers.
+        consecutiveReplans: 0,
+        healthSnoozeUntilCycle: (runner.cycleCount || 0) + 25,
       });
     } else {
       runner.setState({ isPaused: false, pauseReason: null });

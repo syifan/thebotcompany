@@ -25,7 +25,7 @@ function validateManagerDirective(runner, deps, resultText, managerName) {
   const schedule = runner.parseSchedule(text);
   if (!schedule) {
     return {
-      message: 'Malformed SCHEDULE directive. Use the canonical JSON array format exactly: <!-- SCHEDULE --> [ {"agent":"name","task":"..."} ] <!-- /SCHEDULE -->. Valid steps: {"agent":"name","task":"..."}, {"delay": minutes}, {"waitFor": {"run": <github run id>, "timeoutMin": N}}.',
+      message: 'Malformed SCHEDULE directive. Use the canonical JSON array format exactly: <!-- SCHEDULE --> [ {"agent":"name","task":"..."} ] <!-- /SCHEDULE -->. Valid steps: {"agent":"name","task":"..."}, {"delay": minutes}, {"waitFor": {"run": <github run id>}}, {"waitFor": {"job": "<tbc-job name>"}}.',
     };
   }
 
@@ -83,8 +83,11 @@ function consumeWaitResultContext(runner) {
   runner.saveState();
   const outcome = wait.timedOut
     ? `still ${wait.status || 'unknown'} when the ${wait.waitedMin}m wait timed out`
-    : `${wait.status}/${wait.conclusion || '-'} after ${wait.waitedMin}m`;
-  return `> **Last waitFor result:** GitHub Actions run ${wait.runId} → ${outcome}.\n\n`;
+    : `${wait.status}${wait.conclusion ? `/${wait.conclusion}` : ''} after ${wait.waitedMin}m`;
+  const target = wait.jobName
+    ? `Job "${wait.jobName}" (check details with: tbc-job status ${wait.jobName})`
+    : `GitHub Actions run ${wait.runId}`;
+  return `> **Last waitFor result:** ${target} → ${outcome}.\n\n`;
 }
 
 // Themis renders an audit verdict, never a veto: EXAM_PASS (clean) or

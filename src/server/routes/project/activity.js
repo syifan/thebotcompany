@@ -1,4 +1,5 @@
 import { sendJson } from '../../http.js';
+import { jobLogTail, listJobs } from '../../../orchestrator/jobs.js';
 
 export async function handleProjectActivityRoutes(req, res, url, ctx) {
   const { runner, subPath } = ctx;
@@ -29,6 +30,29 @@ export async function handleProjectActivityRoutes(req, res, url, ctx) {
       `).all();
       db.close();
       sendJson(res, 200, { milestones });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message });
+    }
+    return true;
+  }
+
+  if (req.method === 'GET' && subPath === 'jobs') {
+    try {
+      const db = runner.getDb();
+      const jobs = listJobs(db, runner.projectDbPath);
+      db.close();
+      sendJson(res, 200, { jobs });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message });
+    }
+    return true;
+  }
+
+  const jobLogMatch = req.method === 'GET' && subPath.match(/^jobs\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})\/log$/);
+  if (jobLogMatch) {
+    try {
+      const lines = Math.min(parseInt(url.searchParams.get('lines')) || 60, 500);
+      sendJson(res, 200, { log: jobLogTail(runner.projectDbPath, jobLogMatch[1], lines) });
     } catch (error) {
       sendJson(res, 500, { error: error.message });
     }
