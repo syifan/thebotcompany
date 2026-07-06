@@ -1,4 +1,6 @@
 import fs from 'fs';
+import path from 'path';
+import { maybeRunHealthAudit } from './health.js';
 
 function scheduleBlockPresent(text = '') {
   return /<!--\s*SCHEDULE\s*-->[\s\S]*?<!--\s*\/SCHEDULE\s*-->/.test(String(text || ''));
@@ -23,7 +25,7 @@ function validateManagerDirective(runner, deps, resultText, managerName) {
   const schedule = runner.parseSchedule(text);
   if (!schedule) {
     return {
-      message: 'Malformed SCHEDULE directive. Use the canonical JSON array format exactly: <!-- SCHEDULE --> [ {"agent":"name","task":"..."} ] <!-- /SCHEDULE -->.',
+      message: 'Malformed SCHEDULE directive. Use the canonical JSON array format exactly: <!-- SCHEDULE --> [ {"agent":"name","task":"..."} ] <!-- /SCHEDULE -->. Valid steps: {"agent":"name","task":"..."}, {"delay": minutes}, {"waitFor": {"run": <github run id>, "timeoutMin": N}}.',
     };
   }
 
@@ -31,8 +33,8 @@ function validateManagerDirective(runner, deps, resultText, managerName) {
   const invalid = [];
   const issueScoped = [];
   for (const step of schedule._steps || []) {
-    if (!step || step.delay !== undefined) continue;
-    const name = Object.keys(step).find(key => key !== 'delay');
+    if (!step || step.delay !== undefined || step.waitFor !== undefined) continue;
+    const name = Object.keys(step).find(key => key !== 'delay' && key !== 'waitFor');
     if (name && !allowed.has(name.toLowerCase())) invalid.push(name);
     const value = name ? step[name] : null;
     const visibility = typeof value === 'object' ? String(value.visibility || 'full').toLowerCase() : 'full';
@@ -70,6 +72,123 @@ ${task || ''}`;
     result = await runner.runAgent(manager, config, null, correction, visibility);
   }
   return result;
+}
+
+// One-line summary of the last waitFor outcome, injected into the next manager
+// context so the manager learns the result without a discovery cycle. Consumed once.
+function consumeWaitResultContext(runner) {
+  const wait = runner.lastWaitResult;
+  if (!wait) return '';
+  runner.lastWaitResult = null;
+  runner.saveState();
+  const outcome = wait.timedOut
+    ? `still ${wait.status || 'unknown'} when the ${wait.waitedMin}m wait timed out`
+    : `${wait.status}/${wait.conclusion || '-'} after ${wait.waitedMin}m`;
+  return `> **Last waitFor result:** GitHub Actions run ${wait.runId} → ${outcome}.\n\n`;
+}
+
+// Themis renders an audit verdict, never a veto: EXAM_PASS (clean) or
+// EXAM_FINDINGS (advisory findings for the human). Legacy EXAM_FAIL blocks are
+// accepted and treated as findings.
+export function parseExamVerdict(resultText) {
+  const text = String(resultText || '');
+  if (text.includes('<!-- EXAM_PASS -->')) {
+    return { verdict: 'clean', summary: null, findings: [] };
+  }
+  const match = text.match(/<!-- EXAM_FINDINGS -->\s*([\s\S]*?)\s*<!-- \/EXAM_FINDINGS -->/)
+    || text.match(/<!-- EXAM_FAIL -->\s*([\s\S]*?)\s*<!-- \/EXAM_FAIL -->/);
+  if (!match) return null;
+  let data;
+  try {
+    data = JSON.parse(match[1]);
+  } catch {
+    return {
+      verdict: 'findings',
+      summary: 'Themis findings could not be parsed as JSON.',
+      findings: [{ title: 'Unparsed audit output', detail: match[1].slice(0, 2000), severity: null }],
+    };
+  }
+  const rawFindings = Array.isArray(data.findings) ? data.findings
+    : Array.isArray(data.issues) ? data.issues
+    : [];
+  return {
+    verdict: 'findings',
+    summary: data.summary || data.feedback || null,
+    findings: rawFindings
+      .filter(finding => finding && (finding.title || finding.detail || finding.body))
+      .map(finding => ({
+        title: finding.title || 'Finding',
+        detail: finding.detail || finding.body || '',
+        severity: finding.severity || null,
+      })),
+  };
+}
+
+// The audit report lives in the project data dir (outside repo/) so it never
+// pollutes the repository the agents are building.
+export function writeFinalAuditReport(runner, deps, verdict, claim) {
+  const reportsDir = path.join(runner.projectDir, 'reports');
+  fs.mkdirSync(reportsDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const reportPath = path.join(reportsDir, `final-audit-${stamp}.md`);
+  const lines = [
+    '# Final Audit Report',
+    '',
+    `- Date: ${new Date().toISOString()}`,
+    `- Completion claim: ${claim}`,
+    `- Verdict: ${verdict.verdict === 'clean' ? 'clean' : `${verdict.findings.length} finding(s)`}${verdict.inconclusive ? ' (inconclusive — Themis returned no verdict)' : ''}`,
+  ];
+  if (verdict.summary) {
+    lines.push('', '## Summary', '', verdict.summary);
+  }
+  if (verdict.findings.length) {
+    lines.push('', '## Findings', '');
+    verdict.findings.forEach((finding, index) => {
+      lines.push(`### ${index + 1}. ${finding.title}${finding.severity ? ` (${finding.severity})` : ''}`, '', finding.detail, '');
+    });
+  }
+  fs.writeFileSync(reportPath, lines.join('\n').trimEnd() + '\n');
+  deps.log(`📋 Final audit report written to ${reportPath}`, runner.id);
+  return reportPath;
+}
+
+export function parseProjectBlockedDirective(resultText) {
+  const match = String(resultText || '').match(/<!-- PROJECT_BLOCKED -->\s*([\s\S]*?)\s*<!-- \/PROJECT_BLOCKED -->/);
+  if (!match) return null;
+  let payload;
+  try {
+    payload = JSON.parse(match[1]);
+  } catch (e) {
+    return { error: `PROJECT_BLOCKED payload is not valid JSON: ${e.message}` };
+  }
+  const decisions = Array.isArray(payload?.decisions) ? payload.decisions : [];
+  if (!decisions.length) {
+    return { error: 'PROJECT_BLOCKED must include a non-empty "decisions" array.' };
+  }
+  for (const decision of decisions) {
+    if (!decision?.question || !decision?.recommendation) {
+      return { error: 'Every PROJECT_BLOCKED decision needs both "question" and "recommendation" so the human can answer with a one-line yes/no.' };
+    }
+  }
+  return {
+    blocked: {
+      summary: payload.summary || 'Blocked on human decisions',
+      decisions: decisions.map((decision, index) => ({
+        id: decision.id || index + 1,
+        question: String(decision.question),
+        recommendation: String(decision.recommendation),
+        context: decision.context ? String(decision.context) : null,
+      })),
+    },
+  };
+}
+
+export function renderBlockedDigest(blocked) {
+  const lines = blocked.decisions.map(decision =>
+    `${decision.id}. ${decision.question} (recommend: ${decision.recommendation})${decision.context ? ` — ${decision.context}` : ''}`);
+  return `Blocked on ${blocked.decisions.length} human decision(s): ${blocked.summary}\n`
+    + lines.join('\n')
+    + `\nReply in the project chat (or on the linked issues): a bare "yes"/"accept" per item adopts the recommendation; rejecting an item requires a reason (e.g. "1 yes, 2 no: <why>"). Then press Resume.`;
 }
 
 async function validateAthenaMilestoneDirective(runner, resultText) {
@@ -134,12 +253,25 @@ export async function runRunnerLoop(runner, deps = {}) {
 
       // ===== PHASE: ATHENA (strategy) =====
       if (runner.phase === 'athena') {
+        // Health check: mechanical tripwires escalate to the hygeia auditor,
+        // whose stop verdict parks the project on the human.
+        try {
+          await maybeRunHealthAudit(runner, deps, config, managers);
+        } catch (e) {
+          deps.log(`Health audit error (ignored): ${e.message}`, runner.id);
+        }
+        if (runner.isPaused) continue;
+
         const athena = managers.find(m => m.name === 'athena');
         if (athena) {
           // Build situation context for Athena. Athena owns milestone planning; the
           // orchestrator only validates and executes the DB milestone id Athena emits.
           let situation = '';
-          if (runner.examinationFeedback) {
+          if (runner.pendingUnblockDigest) {
+            const digest = runner.pendingUnblockDigest.split('\n').map(line => `> ${line}`).join('\n');
+            situation = `> **Situation: Resumed after human-decision block**\n> The project was parked on these decisions:\n${digest}\n> The human has resumed the project. Check the project chat and human/chat issues for their reply. A bare "yes"/"accept" on an item means adopt the recommendation; a rejection comes with their reason. Apply the answered decisions, and re-emit PROJECT_BLOCKED only for decisions that are genuinely still unanswered.\n\n`;
+            runner.setState({ pendingUnblockDigest: null });
+          } else if (runner.examinationFeedback) {
             situation = `> **Situation: Project Completion Rejected by Themis**\n> ${runner.examinationFeedback}\n\n`;
           } else if (!runner.milestoneDescription) {
             situation = '> **Situation: Project Just Started**\n\n';
@@ -151,13 +283,20 @@ export async function runRunnerLoop(runner, deps = {}) {
             situation = `> **Situation: Implementation Deadline Missed**\n> Ares's team used ${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles without completing the milestone.\n> Previous milestone: ${runner.currentMilestoneId || 'unknown'}\n> Current branch: ${runner.currentMilestoneBranch || 'not set'}\n\n`;
           }
           situation += `> **Milestone planning:** Select an existing DB milestone record or create/refine one yourself with tbc-db milestone-* --actor athena. Output only that existing milestone id in the MILESTONE directive when ready.\n\n`;
+          situation = consumeWaitResultContext(runner) + situation;
+          if (runner.healthWarning) {
+            situation = `> **⚠️ Health audit warning (mandatory response):** ${runner.healthWarning}\n> Either change course now, block the project on the human with PROJECT_BLOCKED, or state explicitly in your response why the next milestone breaks this pattern. Do not continue the flagged pattern silently.\n\n` + situation;
+            runner.setState({ healthWarning: null });
+          }
 
           let result = await runManagerWithDirectiveRetry(runner, deps, athena, config, situation);
           if (result?.success && result?.resultText) {
-            const problem = await validateAthenaMilestoneDirective(runner, result.resultText);
+            const milestoneProblem = await validateAthenaMilestoneDirective(runner, result.resultText);
+            const blockedProblem = parseProjectBlockedDirective(result.resultText)?.error || null;
+            const problem = milestoneProblem || (blockedProblem ? { message: blockedProblem } : null);
             if (problem) {
-              deps.log(`Rejecting Athena milestone response: ${problem.message}`, runner.id);
-              const correction = `> **Orchestrator rejected your previous milestone directive before acting on it.**\n> Problem: ${problem.message}\n> Generate a corrected response now. If you need to hand off a milestone, first create or edit the DB milestone record, then output only its id.\n\n${situation}`;
+              deps.log(`Rejecting Athena directive response: ${problem.message}`, runner.id);
+              const correction = `> **Orchestrator rejected your previous directive before acting on it.**\n> Problem: ${problem.message}\n> Generate a corrected response now. If you need to hand off a milestone, first create or edit the DB milestone record, then output only its id. If you are blocking on human decisions, emit valid PROJECT_BLOCKED JSON with a "decisions" array where every entry has "question" and "recommendation".\n\n${situation}`;
               result = await runner.runAgent(athena, config, null, correction, null);
             }
           }
@@ -284,6 +423,31 @@ export async function runRunnerLoop(runner, deps = {}) {
               }
             }
 
+            // Check for PROJECT_BLOCKED tag — park the project until the human answers
+            const blockedParse = parseProjectBlockedDirective(result.resultText);
+            if (blockedParse?.blocked) {
+              const digest = renderBlockedDigest(blockedParse.blocked);
+              runner.setState({
+                isBlocked: true,
+                blockedDecisions: blockedParse.blocked,
+                pendingUnblockDigest: null,
+                pendingMilestoneId: null,
+                isPaused: true,
+                pauseReason: digest,
+              });
+              deps.log(`🚧 PROJECT BLOCKED on ${blockedParse.blocked.decisions.length} human decision(s) — pausing until resumed`, runner.id);
+              broadcastEvent({
+                type: 'project-blocked',
+                project: runner.id,
+                summary: blockedParse.blocked.summary,
+                decisions: blockedParse.blocked.decisions,
+                message: digest,
+              });
+              continue;
+            } else if (blockedParse?.error) {
+              deps.log(`Ignoring malformed PROJECT_BLOCKED after retry: ${blockedParse.error}`, runner.id);
+            }
+
             // Check for STOP file
             if (fs.existsSync(runner.stopPath)) {
               deps.log(`STOP file detected — pausing project`, runner.id);
@@ -316,7 +480,7 @@ export async function runRunnerLoop(runner, deps = {}) {
           await runner.decideEpochPR('closed', { actor: 'apollo', reason: failureReason });
           await runner.markCurrentMilestoneFailed(failureReason);
           deps.log(`⏰ Implementation deadline missed (${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles)`, runner.id);
-          runner.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena' });
+          runner.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena', consecutiveReplans: (runner.consecutiveReplans || 0) + 1 });
           continue;
         }
 
@@ -349,7 +513,8 @@ export async function runRunnerLoop(runner, deps = {}) {
           const openEpochPr = await runner.getOpenEpochPRForCurrentMilestone();
           // Build context for Ares (remaining includes this cycle)
           const cyclesRemaining = Math.max(0, runner.milestoneCyclesBudget - runner.milestoneCyclesUsed);
-          let aresContext = `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}
+          let aresContext = consumeWaitResultContext(runner);
+          aresContext += `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}
 > **Milestone:** ${runner.milestoneDescription}
 > **Epoch ID:** ${runner.currentEpochId || 'unknown'}
 > **Cycles remaining:** ${cyclesRemaining} of ${runner.milestoneCyclesBudget}
@@ -405,7 +570,7 @@ export async function runRunnerLoop(runner, deps = {}) {
             const failureReason = `Implementation deadline missed after ${runner.milestoneCyclesUsed}/${runner.milestoneCyclesBudget} cycles for ${runner.currentMilestoneId || 'unknown milestone'} (Ares grace review did not claim completion).`;
             await runner.markCurrentMilestoneFailed(failureReason);
             deps.log(`⏰ ${failureReason}`, runner.id);
-            runner.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena', verificationFeedback: failureReason });
+            runner.setState({ currentEpochId: null, currentEpochPrId: null, currentMilestoneBranch: null, aresGraceCycleUsed: false, phase: 'athena', verificationFeedback: failureReason, consecutiveReplans: (runner.consecutiveReplans || 0) + 1 });
             runner.saveState();
             continue;
           }
@@ -447,9 +612,9 @@ export async function runRunnerLoop(runner, deps = {}) {
         const apollo = managers.find(m => m.name === 'apollo');
         if (apollo) {
           const isRollupVerification = !runner.currentEpochPrId;
-          const apolloContext = isRollupVerification
+          const apolloContext = consumeWaitResultContext(runner) + (isRollupVerification
             ? `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}\n> **Milestone to verify:** ${runner.milestoneDescription}\n> **Verification mode:** Parent milestone rollup after a child milestone passed\n> **Active epoch PR:** none (rollup verification)\n> Apollo should decide whether this parent milestone is now fully complete or Athena should plan the next child under it.\n\n`
-            : `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}\n> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`;
+            : `> **Milestone ID:** ${runner.currentMilestoneId || 'unknown'}\n> **Milestone to verify:** ${runner.milestoneDescription}\n> **Milestone branch:** ${runner.currentMilestoneBranch || 'not set'}\n> **Active epoch PR:** ${runner.currentEpochPrId || 'unknown'}\n> Apollo owns the PR decision: merge on pass, close on fail.\n\n`);
 
           const result = await runManagerWithDirectiveRetry(runner, deps, apollo, config, apolloContext);
           cycleTotal++;
@@ -531,6 +696,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 lastMergedMilestoneBranch: runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
+                consecutiveReplans: 0,
                 phase: 'verification',
               });
               broadcastEvent({ type: 'phase', project: runner.id, phase: 'verification', title: parentMilestone?.title || parentMilestoneId });
@@ -552,6 +718,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 lastMergedMilestoneBranch: runner.currentMilestoneBranch || runner.lastMergedMilestoneBranch,
                 verificationFeedback: null,
                 isFixRound: false,
+                consecutiveReplans: 0,
                 phase: 'athena',
               });
             }
@@ -568,6 +735,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 aresGraceCycleUsed: false,
                 verificationFeedback: failureReason,
                 isFixRound: false,
+                consecutiveReplans: (runner.consecutiveReplans || 0) + 1,
                 phase: 'athena',
               });
             } else {
@@ -581,6 +749,7 @@ export async function runRunnerLoop(runner, deps = {}) {
                 aresGraceCycleUsed: false,
                 verificationFeedback: failureReason,
                 isFixRound: false,
+                consecutiveReplans: (runner.consecutiveReplans || 0) + 1,
                 phase: 'athena',
               });
             }
@@ -606,33 +775,39 @@ export async function runRunnerLoop(runner, deps = {}) {
         } else {
         const themis = managers.find(m => m.name === 'themis');
         if (themis) {
-          const themisContext = `> **Final completion claim:** ${runner.pendingCompletionMessage || 'Project claimed complete'}\n> **Evaluate the entire project, not just the human\'s explicit goal.** Audit correctness, completeness, maintainability, artifacts, tests, docs, and obvious risks.\n\n`;
-          const result = await runManagerWithDirectiveRetry(runner, deps, themis, config, themisContext, { visibility: { mode: 'full', issues: [] } });
+          const themisContext = consumeWaitResultContext(runner)
+            + `> **Final completion claim:** ${runner.pendingCompletionMessage || 'Project claimed complete'}\n> **Audit, don't veto.** Judge the claim against the spec's own success definition first, then record everything else as advisory findings for the human. Conclude with EXAM_PASS or EXAM_FINDINGS — either way the project completes and your findings go into the final audit report.\n\n`;
+          let result = await runManagerWithDirectiveRetry(runner, deps, themis, config, themisContext, { visibility: { mode: 'full', issues: [] } });
           cycleTotal++;
           if (!result || !result.success) cycleFailures++;
 
           let schedule = null;
-          let decision = null;
-          let failData = null;
+          let verdict = null;
           if (result && result.resultText) {
             schedule = runner.parseSchedule(result.resultText);
             if (schedule) {
               deps.log(`Schedule: ${JSON.stringify(schedule)}`, runner.id);
             }
+            verdict = parseExamVerdict(result.resultText);
+          }
 
-            if (result.resultText.includes('<!-- EXAM_PASS -->')) {
-              decision = 'pass';
-            }
-            const failMatch = result.resultText.match(/<!-- EXAM_FAIL -->\s*([\s\S]*?)\s*<!-- \/EXAM_FAIL -->/);
-            if (failMatch) {
-              try {
-                failData = JSON.parse(failMatch[1]);
-              } catch {
-                failData = { feedback: 'Themis rejected project completion, but the response could not be parsed.' };
-              }
-              decision = 'fail';
-            } else if (!schedule && decision == null) {
-              decision = 'fail';
+          // No verdict and no further investigation: one correction retry, then
+          // complete anyway with an inconclusive note — examination never loops
+          // the project back to Athena.
+          if (!schedule && !verdict) {
+            deps.log('Themis returned no verdict and no schedule — requesting a corrected response', runner.id);
+            const correction = `> **Orchestrator rejected your previous response before acting on it.**\n> Problem: your response contained neither a SCHEDULE, nor EXAM_PASS, nor EXAM_FINDINGS.\n> Conclude the audit now with <!-- EXAM_PASS --> or <!-- EXAM_FINDINGS -->{"summary":"...","findings":[{"title":"...","detail":"..."}]}<!-- /EXAM_FINDINGS -->.\n\n${themisContext}`;
+            result = await runner.runAgent(themis, config, null, correction, { mode: 'full', issues: [] });
+            cycleTotal++;
+            if (!result || !result.success) cycleFailures++;
+            verdict = result?.resultText ? parseExamVerdict(result.resultText) : null;
+            if (!verdict) {
+              verdict = {
+                verdict: 'findings',
+                summary: 'Audit inconclusive — Themis returned no verdict after a retry.',
+                findings: [],
+                inconclusive: true,
+              };
             }
           }
 
@@ -648,8 +823,13 @@ export async function runRunnerLoop(runner, deps = {}) {
             runner.saveState();
           }
 
-          if (decision === 'pass') {
-            const message = runner.pendingCompletionMessage || 'Project completed';
+          if (verdict) {
+            const claim = runner.pendingCompletionMessage || 'Project completed';
+            const reportPath = writeFinalAuditReport(runner, deps, verdict, claim);
+            const auditNote = verdict.verdict === 'clean'
+              ? 'Final audit: clean.'
+              : `Final audit: ${verdict.findings.length} finding(s)${verdict.inconclusive ? ' (inconclusive)' : ''} — see ${reportPath}`;
+            const message = `${claim} — ${auditNote}`;
             runner.setState({
               phase: 'athena',
               isComplete: true,
@@ -660,48 +840,12 @@ export async function runRunnerLoop(runner, deps = {}) {
               currentSchedule: null,
               completedAgents: [],
               isPaused: true,
-              pauseReason: `Project completed successfully: ${message}`,
+              pauseReason: `Project completed: ${message}`,
             });
-            deps.log(`🏁 PROJECT COMPLETE (validated by Themis): ${message}`, runner.id);
+            deps.log(`🏁 PROJECT COMPLETE (audited by Themis — ${verdict.verdict === 'clean' ? 'clean' : `${verdict.findings.length} finding(s)`}): ${claim}`, runner.id);
             broadcastEvent({ type: 'project-complete', project: runner.id, success: true, message });
-          } else if (decision === 'fail') {
-            let issues = Array.isArray(failData?.issues) ? failData.issues : [];
-            const rawFeedback = (result?.resultText || '').trim();
-            if (issues.length === 0) {
-              issues = [{
-                title: 'Themis rejected project completion',
-                body: rawFeedback || failData?.feedback || failData?.summary || 'Themis did not issue EXAM_PASS, so the completion claim was rejected.',
-              }];
-            }
-            const createdIssueIds = [];
-            for (const issue of issues) {
-              if (!issue?.title) continue;
-              try {
-                const created = await runner.createIssue(issue.title, issue.body || '', 'themis');
-                createdIssueIds.push(created.issueId);
-              } catch (e) {
-                deps.log(`Themis issue creation failed: ${e.message}`, runner.id);
-              }
-            }
-            const feedback = failData?.feedback || failData?.summary || rawFeedback || 'Themis rejected the project completion claim.';
-            runner.setState({
-              phase: 'athena',
-              examinationFeedback: createdIssueIds.length
-                ? `${feedback} New issues: ${createdIssueIds.map(id => `#${id}`).join(', ')}`
-                : feedback,
-              pendingCompletionMessage: null,
-              currentSchedule: null,
-              completedAgents: [],
-              isComplete: false,
-              completionSuccess: false,
-              completionMessage: null,
-              isPaused: false,
-              pauseReason: null,
-            });
-            deps.log(`❌ Themis rejected project completion — returning to Athena`, runner.id);
-            broadcastEvent({ type: 'phase', project: runner.id, phase: 'athena', title: runner.milestoneTitle || 'Replanning after Themis rejection' });
           } else {
-            // No decision yet, stay in examination phase — still save
+            // Investigation continues, stay in examination phase — still save
             runner.saveState();
           }
         }

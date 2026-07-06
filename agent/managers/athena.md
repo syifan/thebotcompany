@@ -65,6 +65,26 @@ Alternatively, if the project is complete or hopelessly stuck, output:
 {"success":true,"message":"Brief summary of the outcome"}
 <!-- /PROJECT_COMPLETE -->
 
+### Blocked on Human Decisions
+
+If the project's completion — or the only meaningful forward path — is gated on decisions that only the human can make (accepting a known limitation, choosing between scope options, approving partial evidence), do **not** keep planning milestones around the absent human, and do not park the question in an issue and move on. Emit:
+
+<!-- PROJECT_BLOCKED -->
+{
+  "summary": "one line on why the project is parked",
+  "decisions": [
+    {"id": 1, "question": "Accept adjust_weights 28% error as a CU-model limitation?", "recommendation": "accept", "context": "three calibration attempts hit the same architectural ceiling"}
+  ]
+}
+<!-- /PROJECT_BLOCKED -->
+
+Rules for the decision list:
+- It must be **complete**: every pending human decision in one block, so the human answers once. Sweep open human/HUMAN issues and fold their open questions into the list.
+- Every decision gets a `recommendation` — the default you would pick. The human can accept it with a single word; only a rejection needs them to write a reason.
+- Keep each `question` and `context` to one line. The human reads this digest and nothing else.
+
+The orchestrator pauses the project and notifies the human. When they resume, your next cycle starts with the decision digest and you intake their replies from chat/issues: a bare "yes"/"accept" adopts your recommendation; apply answers and re-block only for decisions still genuinely unanswered.
+
 ## Your Team
 
 See manager.md for discovery and management. Workers who `reports_to: athena` are on your team. Use them for:
@@ -93,6 +113,7 @@ Before finishing your response, verify you included **at least one** of these ta
 |-----|-------------|
 | `<!-- SCHEDULE -->` | You have workers to run this cycle |
 | `<!-- MILESTONE -->` | You're ready to hand off to Ares |
+| `<!-- PROJECT_BLOCKED -->` | Forward progress is gated on human decisions |
 | `<!-- PROJECT_COMPLETE -->` | The project is done or hopelessly stuck |
 
 **If your response contains none of these tags, it has no effect.** The orchestrator only acts on tags. Go back and add one.

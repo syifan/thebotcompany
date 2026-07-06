@@ -1,4 +1,29 @@
+import path from 'path';
+import fs from 'fs';
+import { execFile } from 'child_process';
 import { extractFocusedRefIds } from './object-refs.js';
+
+export const WAIT_FOR_DEFAULT_TIMEOUT_MIN = 720;
+export const WAIT_FOR_MAX_TIMEOUT_MIN = 1440;
+export const WAIT_FOR_DEFAULT_POLL_MIN = 5;
+export const WAIT_FOR_MIN_POLL_MIN = 3;
+
+export function normalizeWaitForSpec(spec) {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return null;
+  const runId = spec.run;
+  const isValidId = typeof runId === 'number'
+    ? Number.isInteger(runId) && runId > 0
+    : typeof runId === 'string' && /^\d+$/.test(runId.trim());
+  if (!isValidId) return null;
+  const knownKeys = new Set(['run', 'timeoutMin', 'pollMin']);
+  if (Object.keys(spec).some(key => !knownKeys.has(key))) return null;
+  const timeoutMin = Math.min(
+    Math.max(parseFloat(spec.timeoutMin) || WAIT_FOR_DEFAULT_TIMEOUT_MIN, 1),
+    WAIT_FOR_MAX_TIMEOUT_MIN
+  );
+  const pollMin = Math.max(parseFloat(spec.pollMin) || WAIT_FOR_DEFAULT_POLL_MIN, WAIT_FOR_MIN_POLL_MIN);
+  return { run: String(runId).trim(), timeoutMin, pollMin };
+}
 
 export async function autoPauseWait(runner, deps = {}, intervalMs, resumeCondition = null) {
     const retryAt = Date.now() + intervalMs;
@@ -59,6 +84,11 @@ export function parseSchedule(runner, deps = {}, resultText) {
           ? { delay: step.delay }
           : null;
       }
+      if (step.waitFor !== undefined) {
+        if (Object.keys(step).length !== 1) return null;
+        const waitFor = normalizeWaitForSpec(step.waitFor);
+        return waitFor ? { waitFor } : null;
+      }
       if (typeof step.agent !== 'string' || !step.agent.trim()) return null;
       const { agent, ...rest } = step;
       if (!Object.prototype.hasOwnProperty.call(rest, 'task')) return null;
@@ -75,6 +105,76 @@ export function parseSchedule(runner, deps = {}, resultText) {
       return null;
     }
   }
+
+function ghRunStatus(repoDir, runId) {
+  return new Promise((resolve) => {
+    execFile('gh', ['run', 'view', runId, '--json', 'status,conclusion'], {
+      cwd: repoDir,
+      timeout: 60_000,
+    }, (error, stdout) => {
+      if (error) {
+        resolve({ error: error.message });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve({ status: parsed.status || null, conclusion: parsed.conclusion || null });
+      } catch (e) {
+        resolve({ error: `Unparseable gh output: ${e.message}` });
+      }
+    });
+  });
+}
+
+// Token-free wait: poll a GitHub Actions run with the gh CLI until it reaches a
+// terminal state or the timeout expires. Managers see the outcome via
+// runner.lastWaitResult in their next cycle context.
+export async function waitForCondition(runner, deps = {}, spec) {
+  const normalized = normalizeWaitForSpec(spec);
+  if (!normalized) return null;
+  const { run, timeoutMin, pollMin } = normalized;
+  const repoCheckout = path.join(runner.projectDir, 'repo');
+  const repoDir = fs.existsSync(repoCheckout) ? repoCheckout : runner.path;
+  const deadline = Date.now() + timeoutMin * 60000;
+  const startedAt = Date.now();
+  deps.log(`⏳ waitFor: polling run ${run} every ${pollMin}m (timeout ${timeoutMin}m)...`, runner.id);
+
+  let last = { status: null, conclusion: null };
+  while (runner.running && !runner.abortCurrentCycle && !runner.wakeNow) {
+    const check = await ghRunStatus(repoDir, run);
+    if (check.error) {
+      deps.log(`waitFor: gh check failed (${check.error}) — will retry`, runner.id);
+    } else {
+      last = check;
+      if (check.status === 'completed') break;
+    }
+    if (Date.now() >= deadline) break;
+    // Sleep one poll interval in small increments so pause/abort stay responsive
+    const pollMs = Math.min(pollMin * 60000, deadline - Date.now());
+    runner.sleepUntil = Date.now() + pollMs;
+    let slept = 0;
+    while (slept < pollMs && !runner.wakeNow && runner.running && !runner.abortCurrentCycle) {
+      await deps.sleep(5000);
+      slept += 5000;
+      while (runner.isPaused && !runner.wakeNow && runner.running && !runner.abortCurrentCycle) { await deps.sleep(1000); }
+    }
+    runner.sleepUntil = null;
+  }
+  runner.sleepUntil = null;
+
+  const waitedMin = Math.round((Date.now() - startedAt) / 60000);
+  const result = {
+    runId: run,
+    status: last.status,
+    conclusion: last.conclusion,
+    waitedMin,
+    timedOut: last.status !== 'completed',
+  };
+  runner.lastWaitResult = result;
+  runner.saveState();
+  deps.log(`waitFor: run ${run} → ${result.status || 'unknown'}/${result.conclusion || '-'} after ${waitedMin}m${result.timedOut ? ' (timed out)' : ''}`, runner.id);
+  return result;
+}
 
 export async function executeSchedule(runner, deps = {}, schedule, config, managerName = null) {
     if (!schedule || !schedule._steps) return { total: 0, failures: 0 };
@@ -96,9 +196,16 @@ export async function executeSchedule(runner, deps = {}, schedule, config, manag
         if (runner.abortCurrentCycle) break;
         continue;
       }
-      
+
+      // waitFor step: token-free poll of an external condition (e.g. a GitHub Actions run)
+      if (step.waitFor !== undefined) {
+        await waitForCondition(runner, deps, step.waitFor);
+        if (runner.abortCurrentCycle) break;
+        continue;
+      }
+
       // Agent step: { "agentName": taskValue }
-      const name = Object.keys(step).find(k => k !== 'delay');
+      const name = Object.keys(step).find(k => k !== 'delay' && k !== 'waitFor');
       if (!name) continue;
 
       // Skip agents already completed (supports resume after reboot)

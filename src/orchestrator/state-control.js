@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { renderBlockedDigest } from './phase-machine.js';
 
 export async function startRunner(runner, deps = {}) {
     if (runner.running) return;
@@ -86,6 +87,14 @@ export function loadRunnerState(runner, deps = {}) {
         runner.isComplete = state.isComplete || false;
         runner.completionSuccess = state.completionSuccess || false;
         runner.completionMessage = state.completionMessage || null;
+        runner.lastWaitResult = state.lastWaitResult || null;
+        runner.isBlocked = state.isBlocked || false;
+        runner.blockedDecisions = state.blockedDecisions || null;
+        runner.pendingUnblockDigest = state.pendingUnblockDigest || null;
+        runner.consecutiveReplans = state.consecutiveReplans || 0;
+        runner.healthWarning = state.healthWarning || null;
+        runner.healthSnoozeUntilCycle = state.healthSnoozeUntilCycle || 0;
+        runner.lastHealthCheckCycle = state.lastHealthCheckCycle || 0;
         deps.log(`Loaded state: cycle ${runner.cycleCount}, phase: ${runner.phase}, completed: [${runner.completedAgents.join(', ')}]${runner.isPaused ? ', paused' : ''}`, runner.id);
       } else {
         // New project — start paused
@@ -131,6 +140,14 @@ export function saveRunnerState(runner, deps = {}) {
         isComplete: runner.isComplete || false,
         completionSuccess: runner.completionSuccess || false,
         completionMessage: runner.completionMessage || null,
+        lastWaitResult: runner.lastWaitResult || null,
+        isBlocked: runner.isBlocked || false,
+        blockedDecisions: runner.blockedDecisions || null,
+        pendingUnblockDigest: runner.pendingUnblockDigest || null,
+        consecutiveReplans: runner.consecutiveReplans || 0,
+        healthWarning: runner.healthWarning || null,
+        healthSnoozeUntilCycle: runner.healthSnoozeUntilCycle || 0,
+        lastHealthCheckCycle: runner.lastHealthCheckCycle || 0,
         lastUpdated: new Date().toISOString()
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -171,6 +188,19 @@ export function resumeRunner(runner, deps = {}) {
         pendingCompletionMessage: null,
         currentSchedule: null,
         completedAgents: [],
+      });
+    } else if (runner.isBlocked) {
+      deps.log(`Resuming blocked project — Athena will intake the human's decision replies`, runner.id);
+      const digest = runner.blockedDecisions
+        ? renderBlockedDigest(runner.blockedDecisions)
+        : (runner.pauseReason || 'Project was blocked on human decisions.');
+      runner.setState({
+        isBlocked: false,
+        blockedDecisions: null,
+        pendingUnblockDigest: digest,
+        isPaused: false,
+        pauseReason: null,
+        phase: 'athena',
       });
     } else {
       runner.setState({ isPaused: false, pauseReason: null });
