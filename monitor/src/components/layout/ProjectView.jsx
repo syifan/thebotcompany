@@ -16,6 +16,7 @@ import IssuesSidebar from '@/components/project/IssuesSidebar'
 import HumanInterventionCard from '@/components/project/HumanInterventionCard'
 import AgentReportsCard from '@/components/project/AgentReportsCard'
 import MilestoneTreeCard from '@/components/project/MilestoneTreeCard'
+import JobsCard from '@/components/project/JobsCard'
 import ChatCard from '@/components/project/ChatCard'
 import SettingsPanel from '@/components/panels/SettingsPanel'
 import NotificationPanel from '@/components/panels/NotificationPanel'
@@ -1304,6 +1305,8 @@ export default function ProjectView({
                 onMilestoneClick={openMilestoneModal}
                 onPrClick={openPRModal}
               />
+
+              <JobsCard selectedProject={selectedProject} />
 
               <DashboardWidget icon={GitPullRequest} title={`Agent PRs (${prs.length})`}>
                   <div className="space-y-2">

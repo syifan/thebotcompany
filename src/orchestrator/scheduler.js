@@ -2,21 +2,38 @@ import path from 'path';
 import fs from 'fs';
 import { execFile } from 'child_process';
 import { extractFocusedRefIds } from './object-refs.js';
+import { getJob, JOB_NAME_RE } from './jobs.js';
 
 export const WAIT_FOR_DEFAULT_TIMEOUT_MIN = 720;
 export const WAIT_FOR_MAX_TIMEOUT_MIN = 1440;
 export const WAIT_FOR_DEFAULT_POLL_MIN = 5;
 export const WAIT_FOR_MIN_POLL_MIN = 3;
+// Local job polls are free (no API call), so they can be tighter than gh polls.
+export const WAIT_FOR_JOB_MAX_TIMEOUT_MIN = 2880;
+export const WAIT_FOR_JOB_DEFAULT_POLL_MIN = 2;
+export const WAIT_FOR_JOB_MIN_POLL_MIN = 1;
 
 export function normalizeWaitForSpec(spec) {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return null;
+  const knownKeys = new Set(['run', 'job', 'timeoutMin', 'pollMin']);
+  if (Object.keys(spec).some(key => !knownKeys.has(key))) return null;
+  if (spec.run !== undefined && spec.job !== undefined) return null;
+
+  if (spec.job !== undefined) {
+    if (typeof spec.job !== 'string' || !JOB_NAME_RE.test(spec.job.trim())) return null;
+    const timeoutMin = Math.min(
+      Math.max(parseFloat(spec.timeoutMin) || WAIT_FOR_DEFAULT_TIMEOUT_MIN, 1),
+      WAIT_FOR_JOB_MAX_TIMEOUT_MIN
+    );
+    const pollMin = Math.max(parseFloat(spec.pollMin) || WAIT_FOR_JOB_DEFAULT_POLL_MIN, WAIT_FOR_JOB_MIN_POLL_MIN);
+    return { job: spec.job.trim(), timeoutMin, pollMin };
+  }
+
   const runId = spec.run;
   const isValidId = typeof runId === 'number'
     ? Number.isInteger(runId) && runId > 0
     : typeof runId === 'string' && /^\d+$/.test(runId.trim());
   if (!isValidId) return null;
-  const knownKeys = new Set(['run', 'timeoutMin', 'pollMin']);
-  if (Object.keys(spec).some(key => !knownKeys.has(key))) return null;
   const timeoutMin = Math.min(
     Math.max(parseFloat(spec.timeoutMin) || WAIT_FOR_DEFAULT_TIMEOUT_MIN, 1),
     WAIT_FOR_MAX_TIMEOUT_MIN
@@ -126,24 +143,46 @@ function ghRunStatus(repoDir, runId) {
   });
 }
 
-// Token-free wait: poll a GitHub Actions run with the gh CLI until it reaches a
-// terminal state or the timeout expires. Managers see the outcome via
-// runner.lastWaitResult in their next cycle context.
+function localJobStatus(runner, name) {
+  let db;
+  try {
+    db = runner.getDb();
+  } catch (e) {
+    return { error: e.message };
+  }
+  try {
+    const job = getJob(db, runner.projectDbPath, name);
+    if (!job) return { error: `no job named "${name}"` };
+    return { job };
+  } catch (e) {
+    return { error: e.message };
+  } finally {
+    try { db.close(); } catch {}
+  }
+}
+
+// Token-free wait: poll a GitHub Actions run (gh CLI) or a local tbc-job until
+// it reaches a terminal state or the timeout expires. Managers see the outcome
+// via runner.lastWaitResult in their next cycle context.
 export async function waitForCondition(runner, deps = {}, spec) {
   const normalized = normalizeWaitForSpec(spec);
   if (!normalized) return null;
-  const { run, timeoutMin, pollMin } = normalized;
+  const { run, job, timeoutMin, pollMin } = normalized;
   const repoCheckout = path.join(runner.projectDir, 'repo');
   const repoDir = fs.existsSync(repoCheckout) ? repoCheckout : runner.path;
   const deadline = Date.now() + timeoutMin * 60000;
   const startedAt = Date.now();
-  deps.log(`⏳ waitFor: polling run ${run} every ${pollMin}m (timeout ${timeoutMin}m)...`, runner.id);
+  const target = job ? `job "${job}"` : `run ${run}`;
+  deps.log(`⏳ waitFor: polling ${target} every ${pollMin}m (timeout ${timeoutMin}m)...`, runner.id);
 
   let last = { status: null, conclusion: null };
   while (runner.running && !runner.abortCurrentCycle && !runner.wakeNow) {
-    const check = await ghRunStatus(repoDir, run);
+    const check = job ? localJobStatus(runner, job) : await ghRunStatus(repoDir, run);
     if (check.error) {
-      deps.log(`waitFor: gh check failed (${check.error}) — will retry`, runner.id);
+      deps.log(`waitFor: ${target} check failed (${check.error}) — will retry`, runner.id);
+    } else if (check.job) {
+      last = { status: check.job.status, conclusion: check.job.exit_code === null ? null : `exit=${check.job.exit_code}` };
+      if (check.job.status !== 'running') break;
     } else {
       last = check;
       if (check.status === 'completed') break;
@@ -163,16 +202,17 @@ export async function waitForCondition(runner, deps = {}, spec) {
   runner.sleepUntil = null;
 
   const waitedMin = Math.round((Date.now() - startedAt) / 60000);
+  const terminal = job ? (last.status !== null && last.status !== 'running') : last.status === 'completed';
   const result = {
-    runId: run,
+    ...(job ? { jobName: job } : { runId: run }),
     status: last.status,
     conclusion: last.conclusion,
     waitedMin,
-    timedOut: last.status !== 'completed',
+    timedOut: !terminal,
   };
   runner.lastWaitResult = result;
   runner.saveState();
-  deps.log(`waitFor: run ${run} → ${result.status || 'unknown'}/${result.conclusion || '-'} after ${waitedMin}m${result.timedOut ? ' (timed out)' : ''}`, runner.id);
+  deps.log(`waitFor: ${target} → ${result.status || 'unknown'}/${result.conclusion || '-'} after ${waitedMin}m${result.timedOut ? ' (timed out)' : ''}`, runner.id);
   return result;
 }
 
