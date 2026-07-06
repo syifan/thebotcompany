@@ -25,6 +25,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TBC_APP_ROOT = path.resolve(__dirname, '..');
 const TBC_DB_CLI_PATH = path.resolve(TBC_APP_ROOT, 'bin', 'tbc-db.js');
+const TBC_JOB_CLI_PATH = path.resolve(TBC_APP_ROOT, 'bin', 'tbc-job.js');
 
 // ---------------------------------------------------------------------------
 // Parse retry cooldown from error messages
@@ -248,6 +249,60 @@ function trustedTbcDbArgsForCommand(command) {
   return chain?.length === 1 ? chain[0] : null;
 }
 
+function findTopLevelDoubleDash(text) {
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '-' && text[i + 1] === '-'
+      && /\s/.test(text[i - 1] || '')
+      && (i + 2 >= text.length || /\s/.test(text[i + 2]))) return i;
+  }
+  return -1;
+}
+
+// tbc-job runs through the same trusted boundary as tbc-db: the agent sandbox
+// denies the project db and the jobs/ log dir, so a sandboxed invocation fails
+// with EPERM. For `submit`, everything after the top-level ` -- ` separator is
+// the job's own shell command and is passed through verbatim as one argument;
+// the option head must be plain words. Note the submitted command later runs
+// unsandboxed as a detached job — that is the feature (builds, benchmarks),
+// same trust level as CI.
+export function trustedTbcJobArgsForCommand(command) {
+  let text = String(command || '').trim();
+  if (!text) return null;
+
+  // Allow a single harmless `cd ... && ` prelude, like the tbc-db boundary.
+  const prelude = text.match(/^cd\s+(?:\.|\.\.|[A-Za-z0-9_./~+-]+)\s*&&\s*/);
+  if (prelude) text = text.slice(prelude[0].length).trim();
+  if (!/^tbc-job(?:\s|$)/.test(text)) return null;
+
+  if (/^tbc-job\s+submit\b/.test(text)) {
+    // `-- <command...>` consumes the rest of the line verbatim (matching the
+    // CLI's own semantics), so the tail may contain any shell syntax — it is
+    // data for the job, not part of this command. Only the option head must
+    // be plain words.
+    const sep = findTopLevelDoubleDash(text);
+    if (sep === -1) return null;
+    const head = text.slice(0, sep).trim();
+    const tail = text.slice(sep + 2).trim();
+    if (!tail || hasUntrustedShellSyntax(head)) return null;
+    const headWords = splitShellWords(head);
+    if (!headWords || headWords[0] !== 'tbc-job') return null;
+    return [...headWords.slice(1), '--', tail];
+  }
+
+  const cleaned = stripTbcDbDecorators(text);
+  if (hasUntrustedShellSyntax(cleaned)) return null;
+  const words = splitShellWords(cleaned);
+  if (!words || words[0] !== 'tbc-job') return null;
+  return words.slice(1);
+}
+
 
 
 function splitTopLevelCommandSeparators(command) {
@@ -320,7 +375,7 @@ function trustedTbcDbLenientChainForCommand(command) {
   return chain.length ? chain : null;
 }
 
-function executeTrustedTbcDb(args, cwd, timeout, bashEnv = null, runtime = null) {
+function executeTrustedTbcDb(args, cwd, timeout, bashEnv = null, runtime = null, cliPath = TBC_DB_CLI_PATH) {
   return new Promise((resolve) => {
     if (!bashEnv?.TBC_DB) {
       resolve({ output: 'Error: TBC_DB environment variable not set', exitCode: 1, ok: false });
@@ -332,7 +387,7 @@ function executeTrustedTbcDb(args, cwd, timeout, bashEnv = null, runtime = null)
     }
 
     const env = { ...process.env, ...bashEnv };
-    const proc = spawn(process.execPath, [TBC_DB_CLI_PATH, ...args], {
+    const proc = spawn(process.execPath, [cliPath, ...args], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
@@ -828,6 +883,17 @@ function executeBash(input, cwd, remainingMs = 0, bashEnv = null, runtime = null
 
     if (/\btbc-db(?:\s|$)/.test(command)) {
       resolve({ output: 'Error: tbc-db must be run as a simple command so TBC can route it through the trusted project database boundary. Avoid shell loops, variables, command substitutions, and complex pipes around tbc-db.', exitCode: 1, ok: false });
+      return;
+    }
+
+    const trustedTbcJobArgs = trustedTbcJobArgsForCommand(command);
+    if (trustedTbcJobArgs) {
+      executeTrustedTbcDb(trustedTbcJobArgs, cwd, timeout, bashEnv, runtime, TBC_JOB_CLI_PATH).then(resolve);
+      return;
+    }
+
+    if (/\btbc-job(?:\s|$)/.test(command)) {
+      resolve({ output: 'Error: tbc-job must be run as a simple command so TBC can route it through the trusted job boundary, e.g. `tbc-job submit --name <n> --actor <you> -- <command>` or `tbc-job status <n>`. Avoid shell loops, variables, command substitutions, and pipes around tbc-job (the part after `--` may contain anything).', exitCode: 1, ok: false });
       return;
     }
 

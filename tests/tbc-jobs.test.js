@@ -14,6 +14,7 @@ import {
   submitJob,
 } from '../src/orchestrator/jobs.js';
 import { normalizeWaitForSpec, WAIT_FOR_JOB_DEFAULT_POLL_MIN } from '../src/orchestrator/scheduler.js';
+import { trustedTbcJobArgsForCommand } from '../src/agent-runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schedulerPath = path.join(__dirname, '..', 'src', 'orchestrator', 'scheduler.js');
@@ -130,6 +131,48 @@ describe('formal offline jobs', () => {
     assert.deepEqual(running.map(job => job.name), ['b']);
     cancelJob(db, dbPath, 'b');
     db.close();
+  });
+});
+
+describe('trusted tbc-job command routing', () => {
+  it('routes simple status/list/logs/cancel commands', () => {
+    assert.deepEqual(trustedTbcJobArgsForCommand('tbc-job status gem5-oracle-build'), ['status', 'gem5-oracle-build']);
+    assert.deepEqual(trustedTbcJobArgsForCommand('tbc-job list --status running'), ['list', '--status', 'running']);
+    assert.deepEqual(trustedTbcJobArgsForCommand('cd repo && tbc-job logs build --lines 60'), ['logs', 'build', '--lines', '60']);
+  });
+
+  it('passes the submit tail through verbatim as one argument', () => {
+    const args = trustedTbcJobArgsForCommand(
+      'tbc-job submit --name gem5-oracle-build --timeout-min 240 --actor leo -- docker build -t gem5-pinned tools/gem5 && echo done');
+    assert.deepEqual(args, [
+      'submit', '--name', 'gem5-oracle-build', '--timeout-min', '240', '--actor', 'leo',
+      '--', 'docker build -t gem5-pinned tools/gem5 && echo done',
+    ]);
+  });
+
+  it('does not confuse option flags with the -- separator', () => {
+    assert.equal(trustedTbcJobArgsForCommand('tbc-job submit --name x'), null,
+      'submit without a -- tail is rejected');
+    const args = trustedTbcJobArgsForCommand('tbc-job submit --name x -- sh -c "sleep 1"');
+    assert.deepEqual(args, ['submit', '--name', 'x', '--', 'sh -c "sleep 1"']);
+  });
+
+  it('rejects shell syntax around (not inside) the tbc-job invocation', () => {
+    assert.equal(trustedTbcJobArgsForCommand('tbc-job status x && rm -rf /'), null);
+    assert.equal(trustedTbcJobArgsForCommand('X=$(tbc-job status y)'), null);
+    assert.equal(trustedTbcJobArgsForCommand('tbc-job submit --name `evil` -- echo hi'), null);
+    assert.equal(trustedTbcJobArgsForCommand('echo tbc-job'), null);
+    assert.equal(trustedTbcJobArgsForCommand('docker build .'), null);
+  });
+
+  it('dispatches trusted tbc-job invocations outside the sandbox in agent-runner', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'agent-runner.js'), 'utf-8');
+    assert.match(src, /const trustedTbcJobArgs = trustedTbcJobArgsForCommand\(command\);/,
+      'Bash execution should detect tbc-job commands');
+    assert.match(src, /executeTrustedTbcDb\(trustedTbcJobArgs, cwd, timeout, bashEnv, runtime, TBC_JOB_CLI_PATH\)/,
+      'tbc-job should run through the trusted boundary with its own CLI path');
+    assert.match(src, /tbc-job must be run as a simple command/,
+      'non-routable tbc-job usage should get a corrective error, not a sandbox EPERM');
   });
 });
 
