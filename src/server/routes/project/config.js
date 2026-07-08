@@ -88,6 +88,7 @@ export async function handleProjectConfigRoutes(req, res, url, ctx) {
       const { keyId, fallback, token, provider: explicitProvider, customConfig } = await readJson(req);
       const configPath = runner.configPath;
       const existing = fs.existsSync(configPath) ? yaml.load(fs.readFileSync(configPath, 'utf-8')) || {} : {};
+      const previousKeyId = existing.keySelection?.keyId || null;
 
       if (keyId !== undefined) {
         delete existing.setupToken;
@@ -107,11 +108,19 @@ export async function handleProjectConfigRoutes(req, res, url, ctx) {
         }
       }
 
+      // Model overrides are provider-specific; switching to a different key
+      // would leave stale overrides behind (e.g. an Opus override on an
+      // OpenAI key). Reset to tier defaults whenever the key changes.
+      const newKeyId = existing.keySelection?.keyId || null;
+      const modelsCleared = newKeyId !== previousKeyId && !!existing.models;
+      if (modelsCleared) delete existing.models;
+
       fs.writeFileSync(configPath, yaml.dump(existing));
       sendJson(res, 200, {
         success: true,
         hasProjectToken: !!(existing.setupToken || existing.keySelection?.keyId),
         keySelection: existing.keySelection || null,
+        modelsCleared,
       });
     } catch (error) {
       sendJson(res, 400, { error: error.message });

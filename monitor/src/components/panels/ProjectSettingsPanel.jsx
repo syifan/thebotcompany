@@ -64,18 +64,6 @@ export default function ProjectSettingsPanel({
   const effectiveKey = (selectedKey && selectedKey.enabled) ? selectedKey : defaultKey
   const hasModelOverrides = (models = {}) => !!(models.high || models.mid || models.low || models.xlow)
 
-  const clearModelOverrides = async () => {
-    const res = await authFetch(projectApi('/models'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ models: {} })
-    })
-    if (!res.ok) return false
-    const d = await res.json()
-    if (d.config) setSelectedProject(prev => ({ ...prev, config: d.config }))
-    return true
-  }
-
   const handleKeyChange = async (keyId) => {
     setSaving(true)
     try {
@@ -90,11 +78,13 @@ export default function ProjectSettingsPanel({
       if (res.ok) {
         const d = await res.json()
         setKeySelection(d.keySelection || null)
+        if (d.modelsCleared) {
+          setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models: {} } } : prev)
+        }
         if (!keyId) {
-          await clearModelOverrides()
-          setToast('Using global default, model overrides cleared')
+          setToast(d.modelsCleared ? 'Using global default, model overrides cleared' : 'Using global default')
         } else {
-          setToast('Key selection updated')
+          setToast(d.modelsCleared ? 'Key selection updated, model overrides reset to defaults' : 'Key selection updated')
         }
       }
     } catch {}

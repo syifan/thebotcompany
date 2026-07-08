@@ -1,14 +1,19 @@
 /**
- * Tests for POST /api/projects/:id/models — model override validation.
+ * Tests for POST /api/projects/:id/models — model override validation —
+ * and POST /api/projects/:id/token — override reset on key switch.
  *
  * Overrides may be any model ID (arbitrary IDs run via the catalog-fallback
  * path) but unknown IDs produce a warning, malformed effort suffixes are
- * rejected, and the xlow tier persists like the others.
+ * rejected, and the xlow tier persists like the others. Model overrides are
+ * provider-specific, so switching the project's key resets them to defaults.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import yaml from 'js-yaml';
 import { handleProjectConfigRoutes } from '../src/server/routes/project/config.js';
 
@@ -92,5 +97,75 @@ describe('POST models validation', () => {
     const { res, saved } = await postModels({}, { config: { models: { high: 'x' } } });
     assert.equal(res.statusCode, 200);
     assert.equal(saved().models, undefined);
+  });
+});
+
+async function postToken(body, initialConfig) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbc-token-test-'));
+  const configPath = path.join(dir, 'config.yaml');
+  fs.writeFileSync(configPath, yaml.dump(initialConfig));
+  const ctx = {
+    runner: { configPath },
+    projectId: 'test',
+    subPath: 'token',
+    requireWrite: () => true,
+    addKey: (entry) => ({ id: 'new-key-id', ...entry }),
+  };
+  const res = makeRes();
+  const handled = await handleProjectConfigRoutes(makeReq(body), res, new URL('http://x/'), ctx);
+  assert.equal(handled, true);
+  const saved = yaml.load(fs.readFileSync(configPath, 'utf-8'));
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { res, saved };
+}
+
+describe('POST token resets model overrides on key switch', () => {
+  const withOverrides = {
+    keySelection: { keyId: 'anthropic-key', fallback: false },
+    models: { high: 'claude-opus-4-7@high', low: 'claude-sonnet-4-6' },
+  };
+
+  it('switching to a different key clears overrides', async () => {
+    const { res, saved } = await postToken({ keyId: 'openai-key', fallback: false }, withOverrides);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.modelsCleared, true);
+    assert.equal(saved.models, undefined, 'stale overrides must not survive a key switch');
+    assert.equal(saved.keySelection.keyId, 'openai-key');
+  });
+
+  it('re-selecting the same key keeps overrides (fallback toggle)', async () => {
+    const { res, saved } = await postToken({ keyId: 'anthropic-key', fallback: true }, withOverrides);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.modelsCleared, false);
+    assert.deepEqual(saved.models, withOverrides.models);
+  });
+
+  it('clearing the key selection clears overrides', async () => {
+    const { res, saved } = await postToken({ keyId: null }, withOverrides);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.modelsCleared, true);
+    assert.equal(saved.models, undefined);
+    assert.equal(saved.keySelection, undefined);
+  });
+
+  it('setting a new raw token clears overrides', async () => {
+    const { res, saved } = await postToken(
+      { token: 'sk-proj-something', provider: 'openai' },
+      withOverrides
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.modelsCleared, true);
+    assert.equal(saved.models, undefined);
+    assert.equal(saved.keySelection.keyId, 'new-key-id');
+  });
+
+  it('does not clear when no overrides exist', async () => {
+    const { res, saved } = await postToken(
+      { keyId: 'openai-key', fallback: false },
+      { keySelection: { keyId: 'anthropic-key', fallback: false } }
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.modelsCleared, false);
+    assert.equal(saved.models, undefined);
   });
 });
