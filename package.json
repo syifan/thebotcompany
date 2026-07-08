@@ -24,7 +24,7 @@
   "author": "Yifan Sun",
   "license": "MIT",
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.70.2",
+    "@mariozechner/pi-ai": "^0.73.1",
     "better-sqlite3": "^12.11.1",
     "dotenv": "^17.2.4",
     "js-yaml": "^4.1.0",

@@ -20,7 +20,7 @@ import { callCustomModel } from './custom-adapter.js';
 
 /**
  * Parse a TBC model string (e.g. "openai/gpt-5.5", "claude-opus-4-7",
- * "google/gemini-3.1-pro-preview", "minimax/MiniMax-M2.5",
+ * "google/gemini-3.1-pro-preview", "minimax/MiniMax-M2.7",
  * "openai-codex/gpt-5.5") into a { provider, modelId } pair that pi-ai
  * understands.
  */

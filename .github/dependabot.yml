@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # Root package — pi-ai is pre-1.0, so its caret range (^0.x.y) never picks
+  # up new minor versions on its own; these PRs are the only way it moves.
+  # pi-ai gets its own PR (it bundles the model catalog and can rename or
+  # drop models — tests/model-catalog.test.js guards this); everything else
+  # is grouped to cut PR noise.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        exclude-patterns:
+          - "@mariozechner/pi-ai"
+        update-types:
+          - minor
+          - patch
+
+  # Monitor UI workspace
+  - package-ecosystem: npm
+    directory: /monitor
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions used in workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
