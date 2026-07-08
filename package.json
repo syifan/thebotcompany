@@ -1,12 +1,13 @@
 {
   "name": "thebotcompany",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Multi-project AI agent orchestrator",
   "type": "module",
   "main": "src/server.js",
   "bin": {
     "tbc": "./bin/cli.js",
-    "tbc-db": "./bin/tbc-db.js"
+    "tbc-db": "./bin/tbc-db.js",
+    "tbc-job": "./bin/tbc-job.js"
   },
   "scripts": {
     "test": "node --test tests/*.test.js",
