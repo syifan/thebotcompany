@@ -55,7 +55,49 @@ function parseTBCModel(rawModel) {
 }
 
 /**
+ * Build a stand-in Model object for an ID the pi-ai catalog doesn't know yet
+ * (e.g. a model released after the installed pi-ai version). API shape,
+ * base URL, and limits are borrowed from a sibling model of the same
+ * provider; cost is zeroed since pricing is unknown. Marked with
+ * `catalogFallback: true` so callers can warn about untracked pricing.
+ */
+function synthesizeModel(provider, modelId) {
+  let siblings;
+  try {
+    siblings = getModels(provider);
+  } catch {
+    return undefined;
+  }
+  // Borrow the request shape from the provider's most capable model — for a
+  // newly released model that's a closer match than an old small one.
+  let sibling;
+  for (const candidate of siblings || []) {
+    if (!sibling || (candidate.contextWindow || 0) > (sibling.contextWindow || 0)) sibling = candidate;
+  }
+  if (!sibling) return undefined;
+
+  return {
+    id: modelId,
+    name: modelId,
+    api: sibling.api,
+    provider: sibling.provider,
+    baseUrl: sibling.baseUrl,
+    headers: sibling.headers,
+    reasoning: sibling.reasoning,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: sibling.contextWindow,
+    maxTokens: sibling.maxTokens,
+    catalogFallback: true,
+  };
+}
+
+/**
  * Resolve a TBC model string to a pi-ai Model object.
+ *
+ * Unknown model IDs on a known provider resolve to a synthesized fallback
+ * (see synthesizeModel) instead of undefined, so newly released models are
+ * usable before the installed pi-ai catalog includes them.
  *
  * @param {string} rawModel - TBC model string (e.g. "claude-opus-4-7")
  * @returns {{ piModel: object, providerName: string }}
@@ -80,7 +122,7 @@ export function resolveModel(rawModel, providerOverride = null) {
     ? parseTBCModel(rawModel)
     : { provider: providerOverride, modelId: rawModel };
 
-  const piModel = getModel(provider, modelId);
+  const piModel = getModel(provider, modelId) || synthesizeModel(provider, modelId);
   return { piModel, providerName: provider };
 }
 

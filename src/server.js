@@ -29,7 +29,6 @@ import { handleGlobalRoutes } from './server/routes/global.js';
 import { handleKeyRoutes } from './server/routes/keys.js';
 import { handleOAuthRoutes } from './server/routes/oauth.js';
 import { handleSettingsRoutes } from './server/routes/settings.js';
-import { handleModelRoutes } from './server/routes/models.js';
 import { handleGithubRoutes } from './server/routes/github.js';
 import { handleProjectRegistryRoutes } from './server/routes/projects.js';
 import { handleProjectStatusRoutes } from './server/routes/project/status.js';
@@ -421,8 +420,6 @@ const server = http.createServer(async (req, res) => {
   if (await handleKeyRoutes(req, res, url, routeContext)) return;
 
   if (await handleOAuthRoutes(req, res, url, routeContext)) return;
-
-  if (await handleModelRoutes(req, res, url)) return;
 
   if (await handleGlobalRoutes(req, res, url, routeContext)) return;
 

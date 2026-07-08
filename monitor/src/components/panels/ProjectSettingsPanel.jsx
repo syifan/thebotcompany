@@ -3,6 +3,23 @@ import { Button } from '@/components/ui/button'
 import { Info } from 'lucide-react'
 import { Panel, PanelHeader, PanelContent } from '@/components/ui/panel'
 
+// Free-text model ID input that commits on blur/Enter instead of per keystroke.
+function ModelIdInput({ initialValue, placeholder, onCommit }) {
+  const [value, setValue] = useState(initialValue || '')
+  useEffect(() => { setValue(initialValue || '') }, [initialValue])
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => { if ((value.trim() || '') !== (initialValue || '')) onCommit(value.trim()) }}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur() } }}
+      placeholder={placeholder}
+      className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+    />
+  )
+}
+
 export default function ProjectSettingsPanel({
   selectedProject,
   projectSettingsOpen,
@@ -24,6 +41,8 @@ export default function ProjectSettingsPanel({
   const [keys, setKeys] = useState([])
   const [keySelection, setKeySelection] = useState(null)
   const [saving, setSaving] = useState(false)
+  // Tiers switched to free-text "custom model ID" entry in the overrides UI
+  const [customModelTiers, setCustomModelTiers] = useState({})
 
   useEffect(() => {
     if (!selectedProject) return
@@ -242,14 +261,27 @@ export default function ProjectSettingsPanel({
 
           const saveModels = async (models) => {
             try {
-              await authFetch(projectApi('/models'), {
+              const res = await authFetch(projectApi('/models'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ models })
               });
+              const d = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                setToast(d.error || 'Failed to save model overrides');
+              } else if (d.warnings?.length) {
+                setToast(d.warnings.join(' · '));
+              }
               await fetchProjectData();
             } catch {}
           };
+
+          const recommendedModels = availableModels.filter(m => m.recommended);
+          const otherModels = availableModels.filter(m => !m.recommended);
+          // A tier is in free-text mode if toggled there, or if its saved
+          // value isn't one of the catalog options.
+          const isCustomTier = (tier) => customModelTiers[tier] ||
+            (!!currentModels[tier] && !availableModels.some(m => m.id === currentModels[tier]));
 
           return (
           <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5 mt-5">
@@ -288,25 +320,48 @@ export default function ProjectSettingsPanel({
                 {['high', 'mid', 'low', 'xlow'].map(tier => (
                   <div key={tier} className="flex items-center gap-2">
                     <span className={`text-xs font-bold w-10 shrink-0 ${tier === 'high' ? 'text-purple-500' : tier === 'mid' ? 'text-blue-500' : tier === 'xlow' ? 'text-neutral-300 dark:text-neutral-600' : 'text-neutral-400'}`}>{tier.toUpperCase()}</span>
-                    {keyProvider === 'custom' ? (
-                      <input
-                        type="text"
-                        value={currentModels[tier] || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const models = { ...currentModels };
-                          if (val) models[tier] = val; else delete models[tier];
-                          setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
-                          saveModels(models);
-                        }}
-                        placeholder={`Default (${providerTiers[tier]?.model || '—'})`}
-                        className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
-                      />
+                    {(keyProvider === 'custom' || isCustomTier(tier)) ? (
+                      <>
+                        <ModelIdInput
+                          initialValue={currentModels[tier] || ''}
+                          placeholder={keyProvider === 'custom'
+                            ? `Default (${providerTiers[tier]?.model || '—'})`
+                            : 'Model ID, e.g. claude-opus-4-7@high'}
+                          onCommit={(val) => {
+                            const models = { ...currentModels };
+                            if (val) models[tier] = val; else delete models[tier];
+                            setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
+                            saveModels(models);
+                          }}
+                        />
+                        {keyProvider !== 'custom' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomModelTiers(prev => ({ ...prev, [tier]: false }));
+                              if (currentModels[tier] && !availableModels.some(m => m.id === currentModels[tier])) {
+                                const models = { ...currentModels };
+                                delete models[tier];
+                                setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
+                                saveModels(models);
+                              }
+                            }}
+                            className="shrink-0 px-2 py-1.5 text-xs text-neutral-500 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-600 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                            title="Back to model list"
+                          >
+                            List
+                          </button>
+                        )}
+                      </>
                     ) : (
                       <select
                         value={currentModels[tier] || ''}
                         onChange={(e) => {
                           const val = e.target.value;
+                          if (val === '__custom__') {
+                            setCustomModelTiers(prev => ({ ...prev, [tier]: true }));
+                            return;
+                          }
                           const models = { ...currentModels };
                           if (val) models[tier] = val; else delete models[tier];
                           setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
@@ -315,9 +370,21 @@ export default function ProjectSettingsPanel({
                         className="flex-1 min-w-0 px-3 py-1.5 text-sm border rounded-lg bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
                       >
                         <option value="">Default ({providerTiers[tier]?.model || '—'}{providerTiers[tier]?.reasoningEffort ? ` (${providerTiers[tier].reasoningEffort})` : ''})</option>
-                        {availableModels.map(m => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
+                        {recommendedModels.length > 0 && (
+                          <optgroup label="Recommended">
+                            {recommendedModels.map(m => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {otherModels.length > 0 && (
+                          <optgroup label="All models">
+                            {otherModels.map(m => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <option value="__custom__">Custom model ID…</option>
                       </select>
                     )}
                   </div>

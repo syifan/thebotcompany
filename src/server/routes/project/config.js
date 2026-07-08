@@ -1,6 +1,35 @@
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { readJson, sendJson } from '../../http.js';
+import { buildAvailableModels } from './available-models.js';
+import { resolveModel } from '../../../providers/index.js';
+
+const VALID_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
+
+/**
+ * Validate a "model" or "model@effort" override string. Unknown model IDs are
+ * allowed (they run via the catalog-fallback path) but produce a warning;
+ * a malformed effort suffix is a hard error.
+ */
+function checkModelOverride(tier, value, { skipCatalogCheck = false } = {}) {
+  const [modelId, effort] = value.includes('@') ? value.split('@', 2) : [value, null];
+  if (!modelId) {
+    return { error: `${tier}: missing model ID in "${value}"` };
+  }
+  if (effort !== null && !VALID_EFFORTS.has(effort)) {
+    return { error: `${tier}: invalid reasoning effort "${effort}" (expected one of ${[...VALID_EFFORTS].join(', ')})` };
+  }
+  // Custom-provider projects use arbitrary endpoint-specific IDs by design.
+  if (skipCatalogCheck) return {};
+  const { piModel } = resolveModel(modelId);
+  if (!piModel) {
+    return { error: `${tier}: could not resolve a provider for "${modelId}"` };
+  }
+  if (piModel.catalogFallback) {
+    return { warning: `${tier}: "${modelId}" is not in the model catalog — it will run untested, with cost tracked as $0` };
+  }
+  return {};
+}
 
 export async function handleProjectConfigRoutes(req, res, url, ctx) {
   const {
@@ -35,35 +64,7 @@ export async function handleProjectConfigRoutes(req, res, url, ctx) {
       ? buildCustomTierMap(detectedKey.customConfig)
       : (modelTiers[detectedProvider] || {});
 
-    const EFFORT_LEVELS = ['medium', 'high', 'xhigh'];
-    const ALLOWED_MODELS = {
-      anthropic: /^(claude-opus-4-7|claude-sonnet-4-6)$|^claude-haiku-4-5-/,
-      openai: /^(gpt-5\.5|o[34])/,
-      'openai-codex': /^(gpt-5\.5)/,
-      google: /^gemini-[23]/,
-      minimax: /MiniMax/,
-    };
-    const availableModels = {};
-    for (const provider of Object.keys(modelTiers)) {
-      try {
-        const models = getPiModels(provider);
-        const filter = ALLOWED_MODELS[provider];
-        const entries = [];
-        for (const model of models) {
-          if (filter && !filter.test(model.id)) continue;
-          if (model.id.includes('latest')) continue;
-          if (model.reasoning) {
-            for (const effort of EFFORT_LEVELS) entries.push({ id: `${model.id}@${effort}`, name: `${model.name} (${effort})` });
-          } else {
-            entries.push({ id: model.id, name: model.name });
-          }
-        }
-        availableModels[provider] = entries;
-      } catch {
-        availableModels[provider] = [];
-      }
-    }
-    availableModels.custom = [];
+    const availableModels = buildAvailableModels(modelTiers, getPiModels);
 
     sendJson(res, 200, {
       config: safeConfig,
@@ -135,16 +136,30 @@ export async function handleProjectConfigRoutes(req, res, url, ctx) {
     try {
       const { models } = await readJson(req);
       const config = runner.loadConfig();
-      if (models && (models.high || models.mid || models.low)) {
+      const TIERS = ['high', 'mid', 'low', 'xlow'];
+      const warnings = [];
+      if (models && TIERS.some(tier => models[tier])) {
+        const keyPool = getKeyPoolSafe();
+        const selectedKey = config.keySelection?.keyId
+          ? keyPool.keys.find(key => key.id === config.keySelection.keyId)
+          : null;
+        const skipCatalogCheck = selectedKey?.provider === 'custom';
         config.models = {};
-        if (models.high) config.models.high = models.high;
-        if (models.mid) config.models.mid = models.mid;
-        if (models.low) config.models.low = models.low;
+        for (const tier of TIERS) {
+          if (!models[tier]) continue;
+          const result = checkModelOverride(tier, models[tier], { skipCatalogCheck });
+          if (result.error) {
+            sendJson(res, 400, { error: result.error });
+            return true;
+          }
+          if (result.warning) warnings.push(result.warning);
+          config.models[tier] = models[tier];
+        }
       } else {
         delete config.models;
       }
       runner.saveConfig(yaml.dump(config, { lineWidth: -1 }));
-      sendJson(res, 200, { success: true, models: config.models || null });
+      sendJson(res, 200, { success: true, models: config.models || null, warnings });
     } catch (error) {
       sendJson(res, 400, { error: error.message });
     }
