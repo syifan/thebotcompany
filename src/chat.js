@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import Database from 'better-sqlite3';
-import { streamSimple } from '@mariozechner/pi-ai';
+import { streamSimple } from '@earendil-works/pi-ai/compat';
 import {
   resolveModel,
   formatTools,

@@ -12,7 +12,7 @@ import path from 'path';
 import {
   getOAuthProvider,
   getOAuthProviders,
-} from '@mariozechner/pi-ai/oauth';
+} from '@earendil-works/pi-ai/oauth';
 
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
 
