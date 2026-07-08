@@ -44,9 +44,9 @@ describe('buildAvailableModels', () => {
     assert.ok(entries.some(e => e.id === 'acme-new'), 'new catalog models appear automatically');
   });
 
-  it('expands reasoning models into effort variants', () => {
+  it('lists reasoning models as a bare entry plus effort variants', () => {
     const bigIds = entries.filter(e => e.id.startsWith('acme-big')).map(e => e.id);
-    assert.deepEqual(bigIds.sort(), ['acme-big@high', 'acme-big@medium', 'acme-big@xhigh']);
+    assert.deepEqual(bigIds.sort(), ['acme-big', 'acme-big@high', 'acme-big@medium', 'acme-big@xhigh']);
   });
 
   it('flags tier-default models as recommended (including prefixed tier entries) and sorts them first', () => {

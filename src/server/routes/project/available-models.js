@@ -46,12 +46,14 @@ export function buildAvailableModels(modelTiers, getPiModels) {
       if ((model.contextWindow || 0) < CONTEXT_WINDOW_FLOOR) continue;
 
       const recommended = tierModelIds.has(model.id);
+      // Bare entry first (provider-default reasoning effort), then explicit
+      // effort variants for reasoning models. The bare entry also keeps
+      // tier-default strings like "claude-haiku-4-5-..." selectable.
+      entries.push({ id: model.id, name: model.name, recommended });
       if (model.reasoning) {
         for (const effort of EFFORT_LEVELS) {
           entries.push({ id: `${model.id}@${effort}`, name: `${model.name} (${effort})`, recommended });
         }
-      } else {
-        entries.push({ id: model.id, name: model.name, recommended });
       }
     }
 

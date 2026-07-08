@@ -299,7 +299,9 @@ export default function ProjectSettingsPanel({
                     } else {
                       const defaults = {};
                       for (const tier of ['high', 'mid', 'low', 'xlow']) {
-                        if (providerTiers[tier]) defaults[tier] = providerTiers[tier].model;
+                        if (!providerTiers[tier]) continue;
+                        const { model, reasoningEffort } = providerTiers[tier];
+                        defaults[tier] = reasoningEffort ? `${model}@${reasoningEffort}` : model;
                       }
                       setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models: defaults } } : prev);
                       saveModels(defaults).then(() => setToast('Model overrides enabled'));
