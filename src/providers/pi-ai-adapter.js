@@ -1,5 +1,5 @@
 /**
- * PI-AI Adapter — wraps @mariozechner/pi-ai to provide TBC's normalized
+ * PI-AI Adapter — wraps @earendil-works/pi-ai to provide TBC's normalized
  * provider interface.  Replaces the per-provider classes (anthropic.js,
  * openai.js, gemini.js, minimax.js, openai-codex.js, base.js).
  */
@@ -11,7 +11,7 @@ import {
   complete,
   completeSimple,
   Type,
-} from '@mariozechner/pi-ai';
+} from '@earendil-works/pi-ai/compat';
 import { callCustomModel } from './custom-adapter.js';
 
 // ---------------------------------------------------------------------------

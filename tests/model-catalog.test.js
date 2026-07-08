@@ -3,7 +3,7 @@
  *
  * Verifies that every model referenced in MODEL_TIERS resolves against the
  * pi-ai model catalog with usable pricing data. This is the guardrail for
- * @mariozechner/pi-ai upgrades: a release that renames or removes a model we
+ * @earendil-works/pi-ai upgrades: a release that renames or removes a model we
  * depend on fails here instead of at runtime, and a tier default that points
  * at a deprecated model is caught the next time the catalog drops it.
  */

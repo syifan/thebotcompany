@@ -12,7 +12,7 @@ updates:
     groups:
       minor-and-patch:
         exclude-patterns:
-          - "@mariozechner/pi-ai"
+          - "@earendil-works/pi-ai"
         update-types:
           - minor
           - patch
