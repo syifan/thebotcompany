@@ -179,7 +179,7 @@ test.describe('Project pinned to disabled key', () => {
   test('clears model overrides when switching from fixed key to global default', async ({ page }) => {
     await setupMocks(page)
 
-    let savedModelsBody = null
+    let tokenBody = null
 
     await page.route('**/api/keys', route =>
       route.fulfill({ json: { keys: [ENABLED_KEY], allowCustomProvider: false } })
@@ -208,23 +208,11 @@ test.describe('Project pinned to disabled key', () => {
         }
       })
     )
+    // The backend clears provider-specific model overrides itself when the
+    // key selection changes, and reports it via modelsCleared.
     await page.route(`${projBase}/token`, async route => {
-      await route.request().postDataJSON()
-      await route.fulfill({ json: { keySelection: null } })
-    })
-    await page.route(`${projBase}/models`, async route => {
-      savedModelsBody = await route.request().postDataJSON()
-      await route.fulfill({
-        json: {
-          config: {
-            cycleIntervalMs: 0,
-            agentTimeoutMs: 600000,
-            model: 'mid',
-            budgetPer24h: 100,
-            models: {},
-          }
-        }
-      })
+      tokenBody = await route.request().postDataJSON()
+      await route.fulfill({ json: { success: true, keySelection: null, modelsCleared: true } })
     })
 
     await page.goto(`/github.com/${PROJECT_ID}`)
@@ -240,7 +228,8 @@ test.describe('Project pinned to disabled key', () => {
     await expect(select).toBeVisible({ timeout: 5000 })
     await select.selectOption('')
 
-    await expect.poll(() => savedModelsBody).not.toBeNull()
-    expect(savedModelsBody).toEqual({ models: {} })
+    await expect.poll(() => tokenBody).not.toBeNull()
+    expect(tokenBody).toEqual({ keyId: null, fallback: false })
+    await expect(page.getByText('model overrides cleared').first()).toBeVisible({ timeout: 5000 })
   })
 })

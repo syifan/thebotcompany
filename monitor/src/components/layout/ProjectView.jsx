@@ -362,7 +362,6 @@ export default function ProjectView({
 
   // Agent settings modal
   const [agentSettingsModal, setAgentSettingsModal] = useState({ open: false, agent: null, model: '', saving: false, error: null })
-  const [availableModels, setAvailableModels] = useState([])
 
   // Per-project notification settings
   const [projectNotifs, setProjectNotifs] = useState(() => {
@@ -545,14 +544,6 @@ export default function ProjectView({
     if (!selectedProject) return
     fetchProjectData()
   }, [selectedProject?.id, prFilter, fetchProjectData])
-
-  // Fetch models on mount
-  useEffect(() => {
-    fetch('/api/models').then(r => r.json()).then(data => {
-      if (data.data) setAvailableModels(data.data)
-    }).catch(() => {})
-  }, [])
-
 
   // Poll for live agent log
   useEffect(() => {

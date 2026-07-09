@@ -30,7 +30,29 @@ for (const [provider, tiers] of Object.entries(MODEL_TIERS)) {
   }
 }
 
-test('resolveModel returns undefined piModel for unknown models', () => {
+test('resolveModel synthesizes a fallback for unknown models on a known provider', () => {
   const { piModel } = resolveModel('definitely-not-a-real-model-id', 'anthropic');
+  assert.ok(piModel, 'unknown model on a known provider should synthesize a fallback');
+  assert.strictEqual(piModel.catalogFallback, true);
+  assert.strictEqual(piModel.id, 'definitely-not-a-real-model-id');
+  assert.strictEqual(piModel.provider, 'anthropic');
+  // Request shape borrowed from a real sibling model
+  assert.ok(piModel.api, 'fallback must carry the provider API type');
+  assert.ok(piModel.baseUrl, 'fallback must carry the provider base URL');
+  assert.ok(piModel.maxTokens > 0);
+  // Pricing is unknown → cost tracked as zero, never NaN
+  assert.deepStrictEqual(piModel.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+});
+
+test('known models never get the catalogFallback flag', () => {
+  const { piModel } = resolveModel('claude-opus-4-7', 'anthropic');
+  assert.ok(piModel);
+  assert.strictEqual(piModel.catalogFallback, undefined);
+});
+
+test('resolveModel returns undefined piModel for unknown providers', () => {
+  // parseTBCModel routes unprefixed unknown IDs to anthropic, so force an
+  // explicit provider that pi-ai does not know.
+  const { piModel } = resolveModel('some-model', 'no-such-provider');
   assert.strictEqual(piModel, undefined);
 });
