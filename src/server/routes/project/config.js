@@ -1,5 +1,5 @@
 import fs from 'fs';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { readJson, sendJson } from '../../http.js';
 import { buildAvailableModels } from './available-models.js';
 import { resolveModel } from '../../../providers/index.js';
