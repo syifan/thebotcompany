@@ -19,7 +19,7 @@ import { callCustomModel } from './custom-adapter.js';
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a TBC model string (e.g. "openai/gpt-5.5", "claude-opus-4-7",
+ * Parse a TBC model string (e.g. "openai/gpt-5.5", "claude-opus-4-8",
  * "google/gemini-3.1-pro-preview", "minimax/MiniMax-M2.7",
  * "openai-codex/gpt-5.5") into a { provider, modelId } pair that pi-ai
  * understands.
@@ -99,7 +99,7 @@ function synthesizeModel(provider, modelId) {
  * (see synthesizeModel) instead of undefined, so newly released models are
  * usable before the installed pi-ai catalog includes them.
  *
- * @param {string} rawModel - TBC model string (e.g. "claude-opus-4-7")
+ * @param {string} rawModel - TBC model string (e.g. "claude-opus-4-8")
  * @returns {{ piModel: object, providerName: string }}
  */
 export function resolveModel(rawModel, providerOverride = null) {

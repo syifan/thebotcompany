@@ -1272,7 +1272,7 @@ async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = 
  *
  * @param {Object} opts
  * @param {string} opts.prompt       - The full system prompt / skill content
- * @param {string} opts.model        - Model name (e.g. 'claude-opus-4-7', 'openai/gpt-5.5')
+ * @param {string} opts.model        - Model name (e.g. 'claude-opus-4-8', 'openai/gpt-5.5')
  * @param {string} opts.token        - Auth token (OAuth, API key, or OpenAI key)
  * @param {string} opts.cwd          - Working directory for tool execution
  * @param {number} opts.timeoutMs    - Max runtime in milliseconds (0 = unlimited)
@@ -1286,7 +1286,7 @@ async function executeTool(toolName, toolInput, cwd, remainingMs = 0, bashEnv = 
 export async function runAgentWithAPI(opts) {
   const {
     prompt,
-    model: rawModel = 'claude-opus-4-7',
+    model: rawModel = 'claude-opus-4-8',
     token: initialToken,
     keyType = 'api',
     provider: initialProvider = null,

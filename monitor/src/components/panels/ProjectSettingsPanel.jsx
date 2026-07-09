@@ -318,7 +318,7 @@ export default function ProjectSettingsPanel({
                           initialValue={currentModels[tier] || ''}
                           placeholder={keyProvider === 'custom'
                             ? `Default (${providerTiers[tier]?.model || '—'})`
-                            : 'Model ID, e.g. claude-opus-4-7@high'}
+                            : 'Model ID, e.g. claude-opus-4-8@high'}
                           onCommit={(val) => {
                             const models = { ...currentModels };
                             if (val) models[tier] = val; else delete models[tier];

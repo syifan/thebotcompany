@@ -10,9 +10,9 @@
 
 export const MODEL_TIERS = {
   anthropic: {
-    high:  { model: 'claude-opus-4-7', reasoningEffort: 'high' },
-    mid:   { model: 'claude-sonnet-4-6', reasoningEffort: 'high' },
-    low:   { model: 'claude-sonnet-4-6' },
+    high:  { model: 'claude-opus-4-8', reasoningEffort: 'high' },
+    mid:   { model: 'claude-sonnet-5', reasoningEffort: 'high' },
+    low:   { model: 'claude-sonnet-5' },
     xlow:  { model: 'claude-haiku-4-5-20251001' },
   },
   openai: {

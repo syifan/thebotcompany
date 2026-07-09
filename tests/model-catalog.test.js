@@ -45,7 +45,7 @@ test('resolveModel synthesizes a fallback for unknown models on a known provider
 });
 
 test('known models never get the catalogFallback flag', () => {
-  const { piModel } = resolveModel('claude-opus-4-7', 'anthropic');
+  const { piModel } = resolveModel('claude-opus-4-8', 'anthropic');
   assert.ok(piModel);
   assert.strictEqual(piModel.catalogFallback, undefined);
 });
