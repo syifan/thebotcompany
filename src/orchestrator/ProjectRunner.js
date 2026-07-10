@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getAgentDetailsForRunner, loadAgentsForRunner } from './agent-loading.js';
 import { decideProjectEpochPr, getOpenEpochPrForBranch, getProjectComments, getProjectCostSummary, getProjectPr, getProjectPrs, openProjectDb, writeRunnerReport } from './project-db.js';
 import { computeSleepInterval, getBudgetStatus } from './budget.js';

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { readJson, sendJson } from '../http.js';
 import { createGithubAuthEnv } from '../../github-token.js';
 

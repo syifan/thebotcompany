@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { readJson, sendJson } from '../../http.js';
 
 export async function handleProjectStatusRoutes(req, res, url, ctx) {

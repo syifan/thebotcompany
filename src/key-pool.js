@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { normalizeCustomConfig } from './providers/custom-config.js';
 
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
