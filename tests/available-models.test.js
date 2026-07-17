@@ -19,6 +19,8 @@ function fakeCatalog(provider) {
   assert.equal(provider, 'acme');
   return [
     { id: 'acme-big', name: 'Acme Big', reasoning: true, contextWindow: 200000 },
+    { id: 'acme-deep', name: 'Acme Deep', reasoning: true, contextWindow: 200000,
+      thinkingLevelMap: { off: 'none', xhigh: 'xhigh', max: 'max' } },
     { id: 'acme-small', name: 'Acme Small', reasoning: false, contextWindow: 128000 },
     { id: 'acme-new', name: 'Acme New', reasoning: false, contextWindow: 1000000 },
     { id: 'acme-big-latest', name: 'Acme Big (latest)', reasoning: true, contextWindow: 200000 },
@@ -44,9 +46,21 @@ describe('buildAvailableModels', () => {
     assert.ok(entries.some(e => e.id === 'acme-new'), 'new catalog models appear automatically');
   });
 
-  it('lists reasoning models as a bare entry plus effort variants', () => {
+  it('lists reasoning models as a bare entry plus the effort variants the model supports', () => {
+    // No thinkingLevelMap → pi-ai supports minimal..high but not xhigh/max,
+    // which require an explicit declaration.
     const bigIds = entries.filter(e => e.id.startsWith('acme-big')).map(e => e.id);
-    assert.deepEqual(bigIds.sort(), ['acme-big', 'acme-big@high', 'acme-big@medium', 'acme-big@xhigh']);
+    assert.deepEqual(bigIds.sort(), [
+      'acme-big', 'acme-big@high', 'acme-big@low', 'acme-big@medium', 'acme-big@minimal',
+    ]);
+  });
+
+  it('emits @xhigh/@max variants only for models whose thinkingLevelMap declares them', () => {
+    const ids = entries.map(e => e.id);
+    assert.ok(ids.includes('acme-deep@xhigh'), 'declared xhigh yields an @xhigh variant');
+    assert.ok(ids.includes('acme-deep@max'), 'declared max yields an @max variant');
+    assert.ok(!ids.includes('acme-big@xhigh'), 'undeclared xhigh yields no variant');
+    assert.ok(!ids.includes('acme-big@max'), 'undeclared max yields no variant');
   });
 
   it('flags tier-default models as recommended (including prefixed tier entries) and sorts them first', () => {

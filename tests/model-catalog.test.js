@@ -11,10 +11,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { MODEL_TIERS } from '../src/model-tiers.js';
-import { resolveModel } from '../src/providers/index.js';
+import { resolveModel, getSupportedThinkingLevels } from '../src/providers/index.js';
 
 for (const [provider, tiers] of Object.entries(MODEL_TIERS)) {
-  for (const [tier, { model }] of Object.entries(tiers)) {
+  for (const [tier, { model, reasoningEffort }] of Object.entries(tiers)) {
     test(`MODEL_TIERS ${provider}/${tier} (${model}) resolves in the pi-ai catalog`, () => {
       const { piModel, providerName } = resolveModel(model, provider);
 
@@ -22,10 +22,19 @@ for (const [provider, tiers] of Object.entries(MODEL_TIERS)) {
       assert.strictEqual(providerName, provider);
       assert.strictEqual(piModel.provider, provider);
 
-      // Pricing must be present so calculateCost() produces real numbers.
+      // Pricing must be present so cost accounting produces real numbers.
       assert.ok(piModel.cost, `${model} has no cost data in pi-ai catalog`);
       assert.strictEqual(typeof piModel.cost.input, 'number');
       assert.strictEqual(typeof piModel.cost.output, 'number');
+
+      // A tier default must run at the effort it declares — pi-ai silently
+      // clamps unsupported levels, so a mismatch here is a lying label.
+      if (reasoningEffort) {
+        assert.ok(
+          getSupportedThinkingLevels(piModel).includes(reasoningEffort),
+          `${model} does not support reasoning effort "${reasoningEffort}"`
+        );
+      }
     });
   }
 }

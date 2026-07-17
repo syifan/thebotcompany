@@ -268,10 +268,17 @@ export default function ProjectSettingsPanel({
 
           const recommendedModels = availableModels.filter(m => m.recommended);
           const otherModels = availableModels.filter(m => !m.recommended);
+          // Saved overrides may carry a provider prefix (tier defaults like
+          // "openai-codex/gpt-5.6-sol@xhigh") while catalog options use bare
+          // IDs — compare and render the bare form.
+          const bareTierValue = (tier) => {
+            const val = currentModels[tier] || '';
+            return val.startsWith(`${keyProvider}/`) ? val.slice(keyProvider.length + 1) : val;
+          };
           // A tier is in free-text mode if toggled there, or if its saved
           // value isn't one of the catalog options.
           const isCustomTier = (tier) => customModelTiers[tier] ||
-            (!!currentModels[tier] && !availableModels.some(m => m.id === currentModels[tier]));
+            (!!currentModels[tier] && !availableModels.some(m => m.id === bareTierValue(tier)));
 
           return (
           <div className="border-t border-neutral-200 dark:border-neutral-700 pt-5 mt-5">
@@ -331,7 +338,7 @@ export default function ProjectSettingsPanel({
                             type="button"
                             onClick={() => {
                               setCustomModelTiers(prev => ({ ...prev, [tier]: false }));
-                              if (currentModels[tier] && !availableModels.some(m => m.id === currentModels[tier])) {
+                              if (currentModels[tier] && !availableModels.some(m => m.id === bareTierValue(tier))) {
                                 const models = { ...currentModels };
                                 delete models[tier];
                                 setSelectedProject(prev => prev ? { ...prev, config: { ...prev.config, models } } : prev);
@@ -347,7 +354,7 @@ export default function ProjectSettingsPanel({
                       </>
                     ) : (
                       <select
-                        value={currentModels[tier] || ''}
+                        value={bareTierValue(tier)}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === '__custom__') {
