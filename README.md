@@ -20,7 +20,7 @@ Human-free software development with self-organizing AI agent teams.
 
 ## Prerequisites
 
-- **Node.js** ≥ 20
+- **Node.js** ≥ 22.19
 - **[GitHub CLI](https://cli.github.com/)** (`gh`) — installed and authenticated
 - An API key from any supported provider (Anthropic, OpenAI, Google, etc.)
 
