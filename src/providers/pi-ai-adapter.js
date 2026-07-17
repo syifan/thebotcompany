@@ -8,20 +8,28 @@ import {
   getModel,
   getModels,
   getProviders,
+  getSupportedThinkingLevels,
   complete,
   completeSimple,
   Type,
 } from '@earendil-works/pi-ai/compat';
 import { callCustomModel } from './custom-adapter.js';
 
+/**
+ * Every reasoning-effort level pi-ai understands, in ascending order. Single
+ * source of truth for TBC's effort validation and UI lists; whether a given
+ * model supports a level is answered per-model by getSupportedThinkingLevels.
+ */
+export const THINKING_LEVELS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
 // ---------------------------------------------------------------------------
 // Model resolution — map TBC model strings to pi-ai Model objects
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a TBC model string (e.g. "openai/gpt-5.5", "claude-opus-4-8",
+ * Parse a TBC model string (e.g. "openai/gpt-5.6-sol", "claude-opus-4-8",
  * "google/gemini-3.1-pro-preview", "minimax/MiniMax-M2.7",
- * "openai-codex/gpt-5.5") into a { provider, modelId } pair that pi-ai
+ * "openai-codex/gpt-5.6-sol") into a { provider, modelId } pair that pi-ai
  * understands.
  */
 function parseTBCModel(rawModel) {
@@ -84,6 +92,10 @@ function synthesizeModel(provider, modelId) {
     baseUrl: sibling.baseUrl,
     headers: sibling.headers,
     reasoning: sibling.reasoning,
+    // Without a thinkingLevelMap pi-ai treats xhigh/max as unsupported and
+    // silently clamps them to high — borrow the sibling's map so a newer
+    // model keeps the effort range of its family.
+    thinkingLevelMap: sibling.thinkingLevelMap,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: sibling.contextWindow,
@@ -156,9 +168,9 @@ function buildOptions({ token, isOAuth, reasoningEffort, signal, provider }) {
     opts.signal = signal;
   }
 
-  // Map TBC reasoning effort to pi-ai's unified reasoning levels
+  // Map TBC reasoning effort to pi-ai's unified reasoning levels (THINKING_LEVELS)
   if (reasoningEffort) {
-    opts.reasoning = reasoningEffort; // pi-ai accepts: 'minimal'|'low'|'medium'|'high'|'xhigh'
+    opts.reasoning = reasoningEffort;
   }
 
   // pi-ai handles OAuth tokens natively for all providers:
@@ -201,8 +213,12 @@ export async function callModel(piModel, systemPrompt, messages, tools, opts = {
   if (assistantMsg.stopReason === 'error' || assistantMsg.stopReason === 'aborted') {
     const errMsg = assistantMsg.errorMessage || `API call failed (stopReason: ${assistantMsg.stopReason})`;
     const err = new Error(errMsg);
-    // Try to extract HTTP status from the error message for retry logic
-    const statusMatch = errMsg.match(/status(?:\s+code)?:?\s*(\d{3})/i);
+    // Try to extract HTTP status from the error message for retry logic.
+    // pi-ai formats vary: "status: 429", "429 status code (no body)",
+    // "OpenAI API error (429): ...".
+    const statusMatch = errMsg.match(/status(?:\s+code)?:?\s*(\d{3})/i)
+      || errMsg.match(/\b(\d{3})\s+status\b/i)
+      || errMsg.match(/\((\d{3})\)/);
     if (statusMatch) err.status = parseInt(statusMatch[1], 10);
     throw err;
   }
@@ -246,6 +262,7 @@ function normalizeResponse(assistantMsg) {
       inputTokens: assistantMsg.usage?.input || 0,
       outputTokens: assistantMsg.usage?.output || 0,
       cacheReadTokens: assistantMsg.usage?.cacheRead || 0,
+      cacheWriteTokens: assistantMsg.usage?.cacheWrite || 0,
     },
     cost: assistantMsg.usage?.cost?.total || 0,
     // Keep the raw pi-ai message for building conversation history
@@ -293,24 +310,7 @@ export function buildUserMessage(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Cost calculation
-// ---------------------------------------------------------------------------
-
-/**
- * Calculate cost from accumulated TBC usage stats using a pi-ai Model.
- */
-export function calculateCost(usage, piModel) {
-  if (!piModel?.cost) return 0;
-  const cost = piModel.cost;
-  return (
-    (usage.inputTokens * cost.input) +
-    (usage.outputTokens * cost.output) +
-    ((usage.cacheReadTokens || 0) * cost.cacheRead)
-  ) / 1_000_000;
-}
-
-// ---------------------------------------------------------------------------
 // Re-exports for discoverability
 // ---------------------------------------------------------------------------
 
-export { getProviders, getModels, getModel };
+export { getProviders, getModels, getModel, getSupportedThinkingLevels };

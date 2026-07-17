@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
-import { getModels as getPiModels } from './providers/index.js';
+import { getModels as getPiModels, getModel as getPiModel } from './providers/index.js';
 import { MODEL_TIERS } from './model-tiers.js';
 import { buildCustomTierMap, resolveProviderRuntime } from './providers/custom-config.js';
 import { startOAuthLogin, submitManualCode, checkOAuthStatus, getAccessToken as getOAuthAccessToken, clearCredentials as clearOAuthCredentials, listOAuthProviders, loadCredentials as loadOAuthCredentials } from './oauth.js';
@@ -99,9 +99,16 @@ function resolveModelTier(tierOrModel, provider, projectModels) {
   if (projectModels && projectModels[tier]) {
     const override = projectModels[tier];
     const overrideModel = override.includes('@') ? override.split('@', 2)[0] : override;
+    // Compatible when the name infers the active provider, or when the active
+    // provider's own catalog knows the bare ID — openai-codex serves bare
+    // "gpt-*" IDs that would otherwise infer "openai" and be discarded.
     const overrideProvider = inferProviderFromModel(overrideModel);
-    if (!overrideProvider || overrideProvider === provider) {
-      // Support "model@effort" format (e.g. "gpt-5.5@xhigh")
+    let compatible = !overrideProvider || overrideProvider === provider;
+    if (!compatible && provider !== 'custom') {
+      try { compatible = !!getPiModel(provider, overrideModel); } catch { /* keep incompatible */ }
+    }
+    if (compatible) {
+      // Support "model@effort" format (e.g. "gpt-5.6-sol@xhigh")
       if (override.includes('@')) {
         const [model, reasoningEffort] = override.split('@', 2);
         return { model, reasoningEffort };

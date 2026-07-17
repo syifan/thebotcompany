@@ -12,8 +12,9 @@ export {
   buildAssistantMessage,
   buildToolResultMessages,
   buildUserMessage,
-  calculateCost,
   getProviders,
   getModels,
   getModel,
+  getSupportedThinkingLevels,
+  THINKING_LEVELS,
 } from './pi-ai-adapter.js';

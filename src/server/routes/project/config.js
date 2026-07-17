@@ -2,17 +2,22 @@ import fs from 'fs';
 import * as yaml from 'js-yaml';
 import { readJson, sendJson } from '../../http.js';
 import { buildAvailableModels } from './available-models.js';
-import { resolveModel } from '../../../providers/index.js';
+import { resolveModel, getSupportedThinkingLevels, THINKING_LEVELS } from '../../../providers/index.js';
 
-const VALID_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
+const VALID_EFFORTS = new Set(THINKING_LEVELS);
 
 /**
  * Validate a "model" or "model@effort" override string. Unknown model IDs are
  * allowed (they run via the catalog-fallback path) but produce a warning;
- * a malformed effort suffix is a hard error.
+ * a malformed effort suffix is a hard error, and an effort the model's
+ * catalog entry doesn't support warns (pi-ai clamps it at runtime).
  */
 function checkModelOverride(tier, value, { skipCatalogCheck = false } = {}) {
-  const [modelId, effort] = value.includes('@') ? value.split('@', 2) : [value, null];
+  const parts = value.split('@');
+  if (parts.length > 2) {
+    return { error: `${tier}: malformed model override "${value}" (expected "model" or "model@effort")` };
+  }
+  const [modelId, effort = null] = parts;
   if (!modelId) {
     return { error: `${tier}: missing model ID in "${value}"` };
   }
@@ -27,6 +32,9 @@ function checkModelOverride(tier, value, { skipCatalogCheck = false } = {}) {
   }
   if (piModel.catalogFallback) {
     return { warning: `${tier}: "${modelId}" is not in the model catalog — it will run untested, with cost tracked as $0` };
+  }
+  if (effort !== null && !getSupportedThinkingLevels(piModel).includes(effort)) {
+    return { warning: `${tier}: "${modelId}" does not support reasoning effort "${effort}" — it will run at the nearest supported level` };
   }
   return {};
 }

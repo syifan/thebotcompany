@@ -8,10 +8,10 @@
  * New models arrive automatically with each pi-ai upgrade.
  */
 
+import { getSupportedThinkingLevels } from '../../../providers/index.js';
+
 // Models below this context window are too old/small for TBC's agent loops.
 const CONTEXT_WINDOW_FLOOR = 32_000;
-
-const EFFORT_LEVELS = ['medium', 'high', 'xhigh'];
 
 /** Strip a "provider/" prefix from a tier model string (e.g. "minimax/MiniMax-M2.7"). */
 function bareModelId(model, provider) {
@@ -51,7 +51,10 @@ export function buildAvailableModels(modelTiers, getPiModels) {
       // tier-default strings like "claude-haiku-4-5-..." selectable.
       entries.push({ id: model.id, name: model.name, recommended });
       if (model.reasoning) {
-        for (const effort of EFFORT_LEVELS) {
+        // Only the levels this model actually honors — pi-ai silently clamps
+        // anything else, so offering it would mislabel the runtime effort.
+        for (const effort of getSupportedThinkingLevels(model)) {
+          if (effort === 'off') continue;
           entries.push({ id: `${model.id}@${effort}`, name: `${model.name} (${effort})`, recommended });
         }
       }

@@ -74,6 +74,28 @@ describe('POST models validation', () => {
     assert.equal(saved().models.high, 'claude-brand-new-model');
   });
 
+  it('accepts the max reasoning effort for max-capable models', async () => {
+    const { res, saved } = await postModels({ high: 'gpt-5.6-sol@max' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.warnings, []);
+    assert.equal(saved().models.high, 'gpt-5.6-sol@max');
+  });
+
+  it('warns when the model does not support the requested effort', async () => {
+    const { res, saved } = await postModels({ high: 'claude-haiku-4-5-20251001@max' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.warnings.length, 1);
+    assert.match(res.body.warnings[0], /does not support reasoning effort/);
+    assert.equal(saved().models.high, 'claude-haiku-4-5-20251001@max', 'clamped-but-valid override still saves');
+  });
+
+  it('rejects overrides with more than one @ separator', async () => {
+    const { res, saved } = await postModels({ high: 'gpt-5.6-sol@max@turbo' });
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.error, /malformed model override/);
+    assert.equal(saved(), null, 'nothing saved on validation failure');
+  });
+
   it('rejects malformed reasoning effort suffixes', async () => {
     const { res, saved } = await postModels({ high: 'claude-opus-4-7@turbo' });
     assert.equal(res.statusCode, 400);
