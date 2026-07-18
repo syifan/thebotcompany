@@ -23,6 +23,9 @@
   ],
   "author": "Yifan Sun",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.80.10",
     "better-sqlite3": "^12.11.1",

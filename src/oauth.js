@@ -9,12 +9,14 @@
 
 import fs from 'fs';
 import path from 'path';
-import {
-  getOAuthProvider,
-  getOAuthProviders,
-} from '@earendil-works/pi-ai/oauth';
+import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 
 const TBC_HOME = process.env.TBC_HOME || path.join(process.env.HOME, '.thebotcompany');
+const OAUTH_PROVIDERS = builtinProviders().filter(provider => provider.auth.oauth);
+
+function getOAuthProvider(providerId) {
+  return OAUTH_PROVIDERS.find(provider => provider.id === providerId) || null;
+}
 
 // ---------------------------------------------------------------------------
 // Credential persistence
@@ -82,6 +84,7 @@ export async function startOAuthLogin(providerId, projectId = null) {
   if (!provider) {
     throw new Error(`Unknown OAuth provider: ${providerId}`);
   }
+  const oauth = provider.auth.oauth;
 
   const flowKey = projectId ? `${providerId}:${projectId}` : providerId;
 
@@ -95,31 +98,37 @@ export async function startOAuthLogin(providerId, projectId = null) {
   let authUrl = null;
   let resolveManualCode = null;
   let rejectManualCode = null;
+  let resolveAuthReady = null;
+  const abortController = new AbortController();
 
   const manualCodePromise = new Promise((resolve, reject) => {
     resolveManualCode = resolve;
     rejectManualCode = reject;
   });
 
-  const loginPromise = provider.login({
-    onAuth: (info) => {
-      authUrl = typeof info === 'string' ? info : info.url;
-    },
-    onPrompt: async (prompt) => {
-      // This is the fallback prompt — wait for manual code via API
-      return manualCodePromise;
-    },
-    onProgress: () => {},
-    onManualCodeInput: () => manualCodePromise,
+  const authReadyPromise = new Promise(resolve => {
+    resolveAuthReady = resolve;
   });
 
-  // Wait a tick for onAuth to be called
-  await new Promise(r => setTimeout(r, 200));
+  const loginPromise = oauth.login({
+    signal: abortController.signal,
+    notify: (event) => {
+      if (event.type === 'auth_url') {
+        authUrl = event.url;
+        resolveAuthReady();
+      } else if (event.type === 'device_code') {
+        authUrl = event.verificationUri;
+        resolveAuthReady();
+      }
+    },
+    prompt: () => manualCodePromise,
+  });
 
   const flow = {
     loginPromise,
     resolveManualCode,
     cancel: () => {
+      abortController.abort();
       rejectManualCode?.(new Error('Flow cancelled'));
       _activeFlows.delete(flowKey);
     },
@@ -131,10 +140,18 @@ export async function startOAuthLogin(providerId, projectId = null) {
     .then(credentials => {
       saveCredentials(providerId, credentials, projectId);
       _activeFlows.delete(flowKey);
+      resolveAuthReady();
     })
     .catch(() => {
       _activeFlows.delete(flowKey);
+      resolveAuthReady();
     });
+
+  // OAuth provider loading and device-code requests can take longer than one tick.
+  await Promise.race([
+    authReadyPromise,
+    new Promise(resolve => setTimeout(resolve, 5000)),
+  ]);
 
   // Timeout after 5 minutes
   setTimeout(() => {
@@ -210,7 +227,10 @@ export async function getAccessToken(providerId, projectId = null) {
       const provider = getOAuthProvider(providerId);
       if (!provider) continue;
       try {
-        const refreshed = await provider.refreshToken(creds);
+        const refreshed = await provider.auth.oauth.refresh({
+          type: 'oauth',
+          ...creds,
+        });
         saveCredentials(providerId, refreshed, scope);
         return refreshed.access;
       } catch {
@@ -229,9 +249,9 @@ export async function getAccessToken(providerId, projectId = null) {
 // ---------------------------------------------------------------------------
 
 export function listOAuthProviders() {
-  return getOAuthProviders().map(p => ({
+  return OAUTH_PROVIDERS.map(p => ({
     id: p.id,
-    name: p.name,
-    usesCallbackServer: p.usesCallbackServer || false,
+    name: p.auth.oauth.name || p.name,
+    usesCallbackServer: false,
   }));
 }

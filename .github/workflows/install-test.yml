@@ -3,6 +3,15 @@ name: Clean Install Test
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/install-test.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'bin/**'
+      - 'src/**'
+      - 'agent/**'
+      - 'monitor/**'
   workflow_dispatch:
 
 jobs:
@@ -10,7 +19,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        node: [20, 22]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -19,10 +27,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 22
 
-      - name: Install from source
-        run: npm install -g .
+      - name: Build package tarball
+        run: npm pack
+
+      - name: Install packed artifact
+        run: npm install -g ./thebotcompany-*.tgz
 
       - name: Verify tbc CLI exists
         run: tbc --help
@@ -35,6 +46,10 @@ jobs:
           test -d ~/.thebotcompany
           test -f ~/.thebotcompany/projects.yaml
           echo "Config directory OK"
+
+      - name: Configure test server
+        run: |
+          printf 'TBC_PASSWORD=ci-test\nTBC_PORT=3100\n' > ~/.thebotcompany/.env
 
       - name: Verify tbc status (server not running)
         run: |
