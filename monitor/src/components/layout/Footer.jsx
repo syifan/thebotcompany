@@ -1,5 +1,5 @@
 import React from 'react'
-import { Github } from 'lucide-react'
+import { GitBranch } from 'lucide-react'
 
 export default function Footer() {
   return (
@@ -13,7 +13,7 @@ export default function Footer() {
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
         >
-          <Github className="w-4 h-4" />
+          <GitBranch className="w-4 h-4" />
           GitHub
         </a>
       </div>

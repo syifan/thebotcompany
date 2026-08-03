@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import SegmentedControl from '@/components/ui/segmented-control'
 import StatusPill from '@/components/ui/status-pill'
-import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, ArrowLeft, Github, Bell, ChevronDown, Lock, Unlock, Stethoscope, FileText } from 'lucide-react'
+import { Users, Sparkles, Settings, ScrollText, RefreshCw, Pause, Play, RotateCcw, Save, GitPullRequest, GitBranch, ArrowLeft, Bell, ChevronDown, Lock, Unlock, Stethoscope, FileText } from 'lucide-react'
 import { PanelSlot, closeAllPanels } from '@/components/ui/panel'
 
 import Footer from '@/components/layout/Footer'
@@ -1094,7 +1094,7 @@ export default function ProjectView({
                   className="p-1.5 rounded bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 text-neutral-600 dark:text-neutral-300 inline-flex items-center"
                   title="GitHub Repository — open the source repo"
                 >
-                  <Github className="w-4 h-4" />
+                  <GitBranch className="w-4 h-4" />
                 </a>
               )}
               <a
