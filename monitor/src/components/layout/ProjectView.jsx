@@ -218,71 +218,57 @@ export default function ProjectView({
   }, [navigateProjectPath, shouldClearCurrentPanelPath])
 
   const setBootstrapModalWithUrl = useCallback((updater) => {
-    setBootstrapModal(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      if (prev.open && !next.open && shouldClearCurrentPanelPath('bootstrap')) navigateProjectPath()
-      return next
-    })
-  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+    const next = typeof updater === 'function' ? updater(bootstrapModal) : updater
+    if (bootstrapModal.open && !next.open && shouldClearCurrentPanelPath('bootstrap')) navigateProjectPath()
+    setBootstrapModal(next)
+  }, [bootstrapModal, navigateProjectPath, shouldClearCurrentPanelPath])
 
   const setIssueModalWithUrl = useCallback((updater) => {
-    setIssueModal(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      if (prev.open && !next.open) {
-        abortIssueRequest()
-        if (shouldClearCurrentPanelPath('issue')) navigateProjectPath()
-        return { ...next, requestedId: null, loading: false }
-      }
-      return next
-    })
-  }, [abortIssueRequest, navigateProjectPath, shouldClearCurrentPanelPath])
+    let next = typeof updater === 'function' ? updater(issueModal) : updater
+    if (issueModal.open && !next.open) {
+      abortIssueRequest()
+      if (shouldClearCurrentPanelPath('issue')) navigateProjectPath()
+      next = { ...next, requestedId: null, loading: false }
+    }
+    setIssueModal(next)
+  }, [abortIssueRequest, issueModal, navigateProjectPath, shouldClearCurrentPanelPath])
 
   const setPrModalWithUrl = useCallback((updater) => {
-    setPrModal(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      if (prev.open && !next.open) {
-        abortPrRequest()
-        if (shouldClearCurrentPanelPath('pr')) navigateProjectPath()
-        return { ...next, requestedNumber: null, loading: false, error: null }
-      }
-      return next
-    })
-  }, [abortPrRequest, navigateProjectPath, shouldClearCurrentPanelPath])
+    let next = typeof updater === 'function' ? updater(prModal) : updater
+    if (prModal.open && !next.open) {
+      abortPrRequest()
+      if (shouldClearCurrentPanelPath('pr')) navigateProjectPath()
+      next = { ...next, requestedNumber: null, loading: false, error: null }
+    }
+    setPrModal(next)
+  }, [abortPrRequest, navigateProjectPath, prModal, shouldClearCurrentPanelPath])
 
   const setAgentModalWithUrl = useCallback((updater) => {
-    setAgentModal(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      if (prev.open && !next.open && shouldClearCurrentPanelPath('agent')) navigateProjectPath()
-      return next
-    })
-  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+    const next = typeof updater === 'function' ? updater(agentModal) : updater
+    if (agentModal.open && !next.open && shouldClearCurrentPanelPath('agent')) navigateProjectPath()
+    setAgentModal(next)
+  }, [agentModal, navigateProjectPath, shouldClearCurrentPanelPath])
 
   const setMilestoneModalWithUrl = useCallback((updater) => {
-    setMilestoneModal(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      if (prev.open && !next.open) {
-        if (shouldClearCurrentPanelPath('milestone')) navigateProjectPath()
-        return { ...next, requestedId: null }
-      }
-      return next
-    })
-  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+    let next = typeof updater === 'function' ? updater(milestoneModal) : updater
+    if (milestoneModal.open && !next.open) {
+      if (shouldClearCurrentPanelPath('milestone')) navigateProjectPath()
+      next = { ...next, requestedId: null }
+    }
+    setMilestoneModal(next)
+  }, [milestoneModal, navigateProjectPath, shouldClearCurrentPanelPath])
 
   const setAgentModalTab = useCallback((nextTab) => {
-    setAgentModal(prev => {
-      if (!prev.open || !prev.agent || prev.tab === nextTab) return prev
-      navigateProjectPath(['agent', prev.agent, nextTab === 'skill' ? null : nextTab])
-      return { ...prev, tab: nextTab }
-    })
-  }, [navigateProjectPath])
+    if (!agentModal.open || !agentModal.agent || agentModal.tab === nextTab) return
+    navigateProjectPath(['agent', agentModal.agent, nextTab === 'skill' ? null : nextTab])
+    setAgentModal({ ...agentModal, tab: nextTab })
+  }, [agentModal, navigateProjectPath])
 
   const setProjectSettingsOpenWithUrl = useCallback((value) => {
-    setProjectSettingsOpen(prev => {
-      const next = typeof value === 'function' ? value(prev) : value
-      if (prev && !next && shouldClearCurrentPanelPath('project-settings')) navigateProjectPath()
-      return next
-    })
-  }, [navigateProjectPath, shouldClearCurrentPanelPath])
+    const next = typeof value === 'function' ? value(projectSettingsOpen) : value
+    if (projectSettingsOpen && !next && shouldClearCurrentPanelPath('project-settings')) navigateProjectPath()
+    setProjectSettingsOpen(next)
+  }, [navigateProjectPath, projectSettingsOpen, shouldClearCurrentPanelPath])
 
   const closeSidebarPanels = useCallback(() => {
     abortIssueRequest()
@@ -290,13 +276,25 @@ export default function ProjectView({
     setSettingsOpen(false)
     setProjectSettingsOpen(false)
     setSpecPanelOpen(false)
-    setBootstrapModal(prev => ({ ...prev, open: false }))
+    setBootstrapModal(prev => (prev.open ? { ...prev, open: false } : prev))
     setReportsPanelOpen(false)
     setChatPanelOpen(false)
-    setIssueModal(prev => ({ ...prev, open: false, loading: false, requestedId: null }))
-    setPrModal(prev => ({ ...prev, open: false, loading: false, error: null, requestedNumber: null }))
-    setMilestoneModal(prev => ({ ...prev, open: false, milestone: null, requestedId: null }))
-    setAgentModal(prev => ({ ...prev, open: false }))
+    setIssueModal(prev => (
+      prev.open || prev.loading || prev.requestedId !== null
+        ? { ...prev, open: false, loading: false, requestedId: null }
+        : prev
+    ))
+    setPrModal(prev => (
+      prev.open || prev.loading || prev.error !== null || prev.requestedNumber !== null
+        ? { ...prev, open: false, loading: false, error: null, requestedNumber: null }
+        : prev
+    ))
+    setMilestoneModal(prev => (
+      prev.open || prev.milestone !== null || prev.requestedId !== null
+        ? { ...prev, open: false, milestone: null, requestedId: null }
+        : prev
+    ))
+    setAgentModal(prev => (prev.open ? { ...prev, open: false } : prev))
   }, [abortIssueRequest, abortPrRequest])
 
   const openSettingsPanel = useCallback(() => {
@@ -932,8 +930,8 @@ export default function ProjectView({
     }
 
     if (panel === 'bootstrap') {
-      // Guard with live URL check: navigateProjectPath() inside setBootstrapModalWithUrl
-      // updates window.location synchronously but React Router state (currentPath) lags
+      // Guard with live URL check: setBootstrapModalWithUrl updates the browser URL
+      // synchronously but React Router state (currentPath) lags
       // one render. Without this guard, the effect re-opens the modal on that stale render.
       if (!bootstrapModal.open && shouldClearCurrentPanelPath('bootstrap')) openBootstrapModal()
       return
