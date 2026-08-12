@@ -27,7 +27,7 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.83.0",
+    "@earendil-works/pi-ai": "^0.84.1",
     "better-sqlite3": "^13.0.2",
     "dotenv": "^17.2.4",
     "js-yaml": "^5.2.1",
